@@ -2,6 +2,7 @@
 	import Sidebar from '../components/Sidebar.svelte';
 	import BiosView from '../components/BiosView.svelte';
 	import RomsView from '../components/RomsView.svelte';
+	import FileBrowserView from '../components/FileBrowserView.svelte';
 	import { getConnection, isConnected } from '$lib/stores/connection.svelte.js';
 	import { hasWebUSB } from '$lib/adb/connection.js';
 
@@ -36,6 +37,8 @@
 		<BiosView adb={getConnection()!.adb} />
 	{:else if activeView === 'roms'}
 		<RomsView adb={getConnection()!.adb} />
+	{:else if activeView === 'files'}
+		<FileBrowserView adb={getConnection()!.adb} />
 	{:else}
 		<!-- Default connected state -->
 		<div class="flex items-center justify-center h-full">
