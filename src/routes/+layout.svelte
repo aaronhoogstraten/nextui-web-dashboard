@@ -9,4 +9,6 @@
 	<link rel="icon" href={favicon} />
 </svelte:head>
 
-{@render children()}
+<div class="h-screen flex overflow-hidden">
+	{@render children()}
+</div>
