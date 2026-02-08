@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import type { Adb } from '@yume-chan/adb';
 	import { listDirectory, pullFile, pushFile, isDirectory } from '$lib/adb/file-ops.js';
 	import { DEVICE_PATHS, type DirectoryEntry } from '$lib/adb/types.js';
@@ -161,9 +162,9 @@
 		return new Date(ms).toLocaleString();
 	}
 
-	// Load initial directory on mount
+	// Load initial directory on mount (untrack to prevent reactive loop)
 	$effect(() => {
-		navigate(DEVICE_PATHS.base);
+		untrack(() => navigate(DEVICE_PATHS.base));
 	});
 </script>
 

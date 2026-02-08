@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import type { Adb } from '@yume-chan/adb';
 	import { ROM_SYSTEMS, getRomDevicePath, isValidRomExtension, type RomSystem } from '$lib/roms/index.js';
 	import { listDirectory, pushFile } from '$lib/adb/file-ops.js';
@@ -90,9 +91,9 @@
 		input.click();
 	}
 
-	// Refresh on mount
+	// Refresh on mount (untrack to prevent reactive loop)
 	$effect(() => {
-		refreshAll();
+		untrack(() => refreshAll());
 	});
 </script>
 

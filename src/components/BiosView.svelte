@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import type { Adb } from '@yume-chan/adb';
 	import { BIOS_SYSTEMS, getBiosDevicePath, type BiosFileDefinition } from '$lib/bios/index.js';
 	import { validateBiosFile } from '$lib/bios/validation.js';
@@ -139,9 +140,9 @@
 		input.click();
 	}
 
-	// Check on mount
+	// Check on mount (untrack to prevent reactive loop)
 	$effect(() => {
-		checkAllSystems();
+		untrack(() => checkAllSystems());
 	});
 </script>
 

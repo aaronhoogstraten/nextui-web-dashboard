@@ -3,6 +3,7 @@ import { LinuxFileType } from '@yume-chan/adb';
 import type { MaybeConsumable } from '@yume-chan/stream-extra';
 import type { DirectoryEntry, StorageInfo } from './types.js';
 import { DEVICE_PATHS } from './types.js';
+import { adbLog } from '$lib/stores/log.svelte.js';
 
 /**
  * Push a file to the device.
@@ -18,6 +19,7 @@ export async function pushFile(
 	content: Uint8Array,
 	permission = 0o644
 ): Promise<void> {
+	adbLog.info(`sync.write → ${remotePath} (${content.byteLength} bytes, perm=${permission.toString(8)})`);
 	const sync = await adb.sync();
 	try {
 		const stream = new ReadableStream<MaybeConsumable<Uint8Array>>({
@@ -33,6 +35,10 @@ export async function pushFile(
 			file: stream as never,
 			permission
 		});
+		adbLog.info(`sync.write ✓ ${remotePath}`);
+	} catch (e) {
+		adbLog.error(`sync.write ✗ ${remotePath}: ${e}`);
+		throw e;
 	} finally {
 		await sync.dispose();
 	}
@@ -46,6 +52,7 @@ export async function pushFile(
  * @returns File content as Uint8Array
  */
 export async function pullFile(adb: Adb, remotePath: string): Promise<Uint8Array> {
+	adbLog.info(`sync.read → ${remotePath}`);
 	const sync = await adb.sync();
 	try {
 		const stream = sync.read(remotePath);
@@ -68,7 +75,11 @@ export async function pullFile(adb: Adb, remotePath: string): Promise<Uint8Array
 			offset += chunk.byteLength;
 		}
 
+		adbLog.info(`sync.read ✓ ${remotePath} (${totalLength} bytes)`);
 		return result;
+	} catch (e) {
+		adbLog.error(`sync.read ✗ ${remotePath}: ${e}`);
+		throw e;
 	} finally {
 		await sync.dispose();
 	}
@@ -82,6 +93,7 @@ export async function pullFile(adb: Adb, remotePath: string): Promise<Uint8Array
  * @returns Array of directory entries
  */
 export async function listDirectory(adb: Adb, remotePath: string): Promise<DirectoryEntry[]> {
+	adbLog.debug(`sync.opendir → ${remotePath}`);
 	const sync = await adb.sync();
 	try {
 		const entries: DirectoryEntry[] = [];
@@ -97,7 +109,11 @@ export async function listDirectory(adb: Adb, remotePath: string): Promise<Direc
 				mtime: entry.mtime
 			});
 		}
+		adbLog.debug(`sync.opendir ✓ ${remotePath} (${entries.length} entries)`);
 		return entries;
+	} catch (e) {
+		adbLog.error(`sync.opendir ✗ ${remotePath}: ${e}`);
+		throw e;
 	} finally {
 		await sync.dispose();
 	}
@@ -112,15 +128,19 @@ export async function listDirectory(adb: Adb, remotePath: string): Promise<Direc
  * @returns true if the path exists
  */
 export async function pathExists(adb: Adb, remotePath: string): Promise<boolean> {
+	adbLog.debug(`sync.lstat → ${remotePath} (pathExists)`);
 	try {
 		const sync = await adb.sync();
 		try {
 			const st = await sync.lstat(remotePath);
-			return st.mode !== 0;
+			const exists = st.mode !== 0;
+			adbLog.debug(`sync.lstat ✓ ${remotePath} → ${exists ? 'exists' : 'not found'}`);
+			return exists;
 		} finally {
 			await sync.dispose();
 		}
-	} catch {
+	} catch (e) {
+		adbLog.debug(`sync.lstat ✗ ${remotePath}: ${e}`);
 		return false;
 	}
 }
@@ -130,15 +150,19 @@ export async function pathExists(adb: Adb, remotePath: string): Promise<boolean>
  * Uses lstat (works on NextUI devices) instead of stat.
  */
 export async function isDirectory(adb: Adb, remotePath: string): Promise<boolean> {
+	adbLog.debug(`sync.lstat → ${remotePath} (isDirectory)`);
 	try {
 		const sync = await adb.sync();
 		try {
 			const st = await sync.lstat(remotePath);
-			return (st.mode & 0o170000) === 0o040000; // S_IFDIR
+			const isDir = (st.mode & 0o170000) === 0o040000; // S_IFDIR
+			adbLog.debug(`sync.lstat ✓ ${remotePath} → isDir=${isDir}`);
+			return isDir;
 		} finally {
 			await sync.dispose();
 		}
-	} catch {
+	} catch (e) {
+		adbLog.debug(`sync.lstat ✗ ${remotePath}: ${e}`);
 		return false;
 	}
 }
@@ -161,7 +185,15 @@ export async function isDirectory(adb: Adb, remotePath: string): Promise<boolean
  * @returns Command stdout
  */
 export async function shell(adb: Adb, command: string): Promise<string> {
-	return await adb.createSocketAndWait(`shell:${command}`);
+	adbLog.info(`shell → ${command}`);
+	try {
+		const result = await adb.createSocketAndWait(`shell:${command}`);
+		adbLog.info(`shell ✓ ${command} (${result.length} chars)`);
+		return result;
+	} catch (e) {
+		adbLog.error(`shell ✗ ${command}: ${e}`);
+		throw e;
+	}
 }
 
 /**
