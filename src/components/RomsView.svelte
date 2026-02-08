@@ -35,7 +35,6 @@
 			s.error = '';
 			try {
 				const entries = await listDirectory(adb, s.devicePath);
-				// Count files only (not directories), exclude hidden files
 				s.romCount = entries.filter((e) => e.isFile && !e.name.startsWith('.')).length;
 			} catch {
 				s.romCount = 0;
@@ -50,7 +49,6 @@
 		const input = document.createElement('input');
 		input.type = 'file';
 		input.multiple = true;
-		// Build accept string from supported formats
 		input.accept = state.system.supportedFormats.join(',');
 
 		input.onchange = async () => {
@@ -64,7 +62,7 @@
 				for (const file of files) {
 					const ext = '.' + file.name.split('.').pop()?.toLowerCase();
 					if (!isValidRomExtension(ext, state.system)) {
-						continue; // skip invalid extensions
+						continue;
 					}
 
 					const data = new Uint8Array(await file.arrayBuffer());
@@ -73,7 +71,6 @@
 					uploaded++;
 				}
 
-				// Refresh count
 				state.loading = true;
 				try {
 					const entries = await listDirectory(adb, state.devicePath);
@@ -101,11 +98,11 @@
 
 <div class="p-6">
 	<div class="flex items-center justify-between mb-6">
-		<h2 class="text-2xl font-bold">ROM Systems</h2>
+		<h2 class="text-2xl font-bold text-text">ROM Systems</h2>
 		<button
 			onclick={refreshAll}
 			disabled={refreshing}
-			class="text-sm bg-gray-200 hover:bg-gray-300 disabled:opacity-50 px-3 py-1.5 rounded"
+			class="text-sm bg-surface hover:bg-surface-hover text-text disabled:opacity-50 px-3 py-1.5 rounded"
 		>
 			{refreshing ? 'Refreshing...' : 'Refresh'}
 		</button>
@@ -113,42 +110,42 @@
 
 	<div class="space-y-2">
 		{#each systems as s}
-			<div class="border rounded-lg overflow-hidden">
+			<div class="border border-border rounded-lg overflow-hidden">
 				<!-- System Header -->
 				<button
 					onclick={() => (s.expanded = !s.expanded)}
-					class="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 text-left"
+					class="w-full flex items-center justify-between p-3 bg-surface hover:bg-surface-hover text-left"
 				>
 					<div>
-						<span class="font-semibold">{s.system.systemName}</span>
-						<span class="text-sm text-gray-500 ml-2">({s.system.systemCode})</span>
+						<span class="font-semibold text-text">{s.system.systemName}</span>
+						<span class="text-sm text-text-muted ml-2">({s.system.systemCode})</span>
 					</div>
 					<div class="flex items-center gap-3">
 						{#if s.loading}
-							<span class="text-sm text-gray-400">Counting...</span>
+							<span class="text-sm text-text-muted">Counting...</span>
 						{:else if s.romCount !== null}
-							<span class="text-sm {s.romCount > 0 ? 'text-green-600' : 'text-gray-400'}">
+							<span class="text-sm {s.romCount > 0 ? 'text-green-500' : 'text-text-muted'}">
 								{s.romCount} ROM{s.romCount !== 1 ? 's' : ''}
 							</span>
 						{/if}
-						<span class="text-gray-400">{s.expanded ? '\u25B2' : '\u25BC'}</span>
+						<span class="text-text-muted">{s.expanded ? '\u25B2' : '\u25BC'}</span>
 					</div>
 				</button>
 
 				<!-- Details (expanded) -->
 				{#if s.expanded}
 					<div class="p-3 space-y-2">
-						<div class="text-xs text-gray-500 font-mono">{s.devicePath}</div>
-						<div class="text-xs text-gray-500">
+						<div class="text-xs text-text-muted font-mono">{s.devicePath}</div>
+						<div class="text-xs text-text-muted">
 							Formats: {s.system.supportedFormats.join(', ')}
 						</div>
 						{#if s.error}
-							<div class="text-xs text-yellow-600">{s.error}</div>
+							<div class="text-xs text-yellow-500">{s.error}</div>
 						{/if}
 						<button
 							onclick={() => uploadRoms(s)}
 							disabled={uploadingTo !== null}
-							class="text-sm bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700 disabled:opacity-50"
+							class="text-sm bg-accent text-white px-3 py-1.5 rounded hover:bg-accent-hover disabled:opacity-50"
 						>
 							{uploadingTo === s.system.systemCode ? 'Uploading...' : 'Upload ROMs'}
 						</button>

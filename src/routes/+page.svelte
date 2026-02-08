@@ -16,17 +16,17 @@
 
 <Sidebar {activeView} onNavigate={handleNavigate} />
 
-<main class="flex-1 overflow-y-auto bg-white">
+<main class="flex-1 overflow-y-auto bg-bg text-text">
 	{#if !isConnected()}
 		<!-- Welcome / Connect prompt -->
 		<div class="flex items-center justify-center h-full">
 			<div class="text-center max-w-md">
 				<h2 class="text-3xl font-bold mb-4">NextUI Web Dashboard</h2>
-				<p class="text-gray-500 mb-6">
+				<p class="text-text-muted mb-6">
 					Connect your NextUI device via USB to get started. Use the Connect button in the sidebar.
 				</p>
 				{#if !webUsbSupported}
-					<div class="bg-yellow-50 border border-yellow-200 rounded p-4 text-sm text-yellow-800">
+					<div class="bg-surface border border-border rounded p-4 text-sm text-yellow-500">
 						WebUSB is not available in this browser. Please use Chrome or Edge.
 					</div>
 				{/if}
@@ -39,7 +39,7 @@
 	{:else}
 		<!-- Default connected state -->
 		<div class="flex items-center justify-center h-full">
-			<div class="text-center text-gray-400">
+			<div class="text-center text-text-muted">
 				<p class="text-lg">Device connected</p>
 				<p class="text-sm mt-1">Select a tool from the sidebar</p>
 			</div>

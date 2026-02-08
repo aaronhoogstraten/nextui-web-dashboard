@@ -74,17 +74,17 @@
 	function statusColor(status: FileStatus): string {
 		switch (status) {
 			case 'valid':
-				return 'text-green-600';
+				return 'text-green-500';
 			case 'present':
-				return 'text-blue-600';
+				return 'text-blue-500';
 			case 'missing':
-				return 'text-red-600';
+				return 'text-red-500';
 			case 'invalid':
-				return 'text-yellow-600';
+				return 'text-yellow-500';
 			case 'checking':
-				return 'text-gray-400';
+				return 'text-text-muted';
 			default:
-				return 'text-gray-400';
+				return 'text-text-muted';
 		}
 	}
 
@@ -101,12 +101,11 @@
 			case 'checking':
 				return 'Checking...';
 			default:
-				return '—';
+				return '\u2014';
 		}
 	}
 
 	async function uploadBiosFile(file: BiosFileState) {
-		// Create a hidden file input and trigger it
 		const input = document.createElement('input');
 		input.type = 'file';
 		input.accept = file.definition.fileName;
@@ -120,7 +119,6 @@
 			try {
 				const data = new Uint8Array(await selected.arrayBuffer());
 
-				// Validate hash before uploading
 				const result = await validateBiosFile(data, file.definition);
 				if (!result.valid) {
 					file.status = 'invalid';
@@ -128,7 +126,6 @@
 					return;
 				}
 
-				// Push to device
 				await pushFile(adb, file.devicePath, data);
 				file.status = 'valid';
 				file.detail = 'Uploaded, hash OK';
@@ -150,11 +147,11 @@
 
 <div class="p-6">
 	<div class="flex items-center justify-between mb-6">
-		<h2 class="text-2xl font-bold">BIOS Files</h2>
+		<h2 class="text-2xl font-bold text-text">BIOS Files</h2>
 		<button
 			onclick={checkAllSystems}
 			disabled={checking}
-			class="text-sm bg-gray-200 hover:bg-gray-300 disabled:opacity-50 px-3 py-1.5 rounded"
+			class="text-sm bg-surface hover:bg-surface-hover text-text disabled:opacity-50 px-3 py-1.5 rounded"
 		>
 			{checking ? 'Checking...' : 'Refresh'}
 		</button>
@@ -162,24 +159,23 @@
 
 	<div class="space-y-3">
 		{#each systems as system}
-			<div class="border rounded-lg overflow-hidden">
+			<div class="border border-border rounded-lg overflow-hidden">
 				<!-- System Header -->
 				<button
 					onclick={() => (system.expanded = !system.expanded)}
-					class="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 text-left"
+					class="w-full flex items-center justify-between p-3 bg-surface hover:bg-surface-hover text-left"
 				>
 					<div>
-						<span class="font-semibold">{system.systemName}</span>
-						<span class="text-sm text-gray-500 ml-2">({system.systemCode})</span>
+						<span class="font-semibold text-text">{system.systemName}</span>
+						<span class="text-sm text-text-muted ml-2">({system.systemCode})</span>
 					</div>
 					<div class="flex items-center gap-3">
-						<!-- Summary badges -->
 						{#each system.files as file}
 							<span class="text-xs px-1.5 py-0.5 rounded {statusColor(file.status)}">
 								{file.definition.fileName}: {statusLabel(file.status)}
 							</span>
 						{/each}
-						<span class="text-gray-400">{system.expanded ? '\u25B2' : '\u25BC'}</span>
+						<span class="text-text-muted">{system.expanded ? '\u25B2' : '\u25BC'}</span>
 					</div>
 				</button>
 
@@ -187,10 +183,10 @@
 				{#if system.expanded}
 					<div class="p-3 space-y-2">
 						{#each system.files as file}
-							<div class="flex items-center justify-between py-2 px-3 bg-white rounded border">
+							<div class="flex items-center justify-between py-2 px-3 bg-bg rounded border border-border">
 								<div class="flex-1 min-w-0">
-									<div class="font-mono text-sm">{file.definition.fileName}</div>
-									<div class="text-xs text-gray-500 truncate">{file.devicePath}</div>
+									<div class="font-mono text-sm text-text">{file.definition.fileName}</div>
+									<div class="text-xs text-text-muted truncate">{file.devicePath}</div>
 									{#if file.detail}
 										<div class="text-xs {statusColor(file.status)} mt-0.5">{file.detail}</div>
 									{/if}
@@ -203,7 +199,7 @@
 										<button
 											onclick={() => uploadBiosFile(file)}
 											disabled={uploadingFile !== null}
-											class="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 disabled:opacity-50"
+											class="text-xs bg-accent text-white px-2 py-1 rounded hover:bg-accent-hover disabled:opacity-50"
 										>
 											{uploadingFile === `${file.definition.systemCode}/${file.definition.fileName}` ? 'Uploading...' : 'Upload'}
 										</button>
