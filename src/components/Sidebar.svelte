@@ -6,7 +6,8 @@
 		isBusy,
 		isConnected,
 		connect,
-		disconnect
+		disconnect,
+		getNextUIVersion
 	} from '$lib/stores/connection.svelte.js';
 	import { hasWebUSB, getBrowserRecommendation } from '$lib/adb/connection.js';
 	import { toggleTheme, isDark } from '$lib/stores/theme.svelte.js';
@@ -16,7 +17,10 @@
 		label: string;
 	}
 
-	let { activeView = 'welcome', onNavigate }: { activeView: string; onNavigate: (view: string) => void } = $props();
+	let {
+		activeView = 'welcome',
+		onNavigate
+	}: { activeView: string; onNavigate: (view: string) => void } = $props();
 
 	const webUsbSupported = hasWebUSB();
 
@@ -44,9 +48,12 @@
 	<div class="p-4 border-b border-border">
 		<div class="text-xs text-text-muted mb-2">Device</div>
 		{#if isConnected()}
-			<div class="text-sm text-green-400 mb-2 truncate" title={getStatus()}>
+			<div class="text-sm text-green-400 truncate" title={getStatus()}>
 				{getConnection()?.device.product ?? getConnection()?.device.serial ?? 'Connected'}
 			</div>
+			{#if getNextUIVersion()}
+				<div class="text-xs text-text-muted mb-2">{getNextUIVersion()}</div>
+			{/if}
 			<button
 				onclick={disconnect}
 				disabled={isBusy()}
@@ -82,10 +89,10 @@
 				disabled={!isConnected()}
 				class="w-full text-left px-3 py-2 rounded text-sm mb-0.5 transition-colors
 					{activeView === item.id
-						? 'bg-surface-hover text-text'
-						: isConnected()
-							? 'text-text-muted hover:bg-surface hover:text-text'
-							: 'text-text-muted opacity-50 cursor-not-allowed'}"
+					? 'bg-surface-hover text-text'
+					: isConnected()
+						? 'text-text-muted hover:bg-surface hover:text-text'
+						: 'text-text-muted opacity-50 cursor-not-allowed'}"
 			>
 				{item.label}
 			</button>

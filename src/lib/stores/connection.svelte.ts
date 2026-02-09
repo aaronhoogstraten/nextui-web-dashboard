@@ -1,5 +1,7 @@
 import { connectWebUSB, disconnect as adbDisconnect } from '$lib/adb/connection.js';
 import type { AdbConnection } from '$lib/adb/types.js';
+import { DEVICE_PATHS } from '$lib/adb/types.js';
+import { verifyNextUIInstallation, pullFile } from '$lib/adb/file-ops.js';
 import { adbLog } from '$lib/stores/log.svelte.js';
 
 /** Shared reactive connection state — use $state.raw to prevent deep proxy on Adb internals */
@@ -7,6 +9,7 @@ let connection: AdbConnection | null = $state.raw(null);
 let status: string = $state('Disconnected');
 let error: string = $state('');
 let busy: boolean = $state(false);
+let nextuiVersion: string = $state('');
 
 export function getConnection() {
 	return connection;
@@ -28,6 +31,10 @@ export function isConnected() {
 	return connection !== null;
 }
 
+export function getNextUIVersion() {
+	return nextuiVersion;
+}
+
 export async function connect() {
 	error = '';
 	busy = true;
@@ -35,9 +42,39 @@ export async function connect() {
 	adbLog.info('WebUSB connect requested');
 
 	try {
-		connection = await connectWebUSB();
-		status = `Connected: ${connection.device.product ?? connection.device.serial}`;
-		adbLog.info(`Connected to ${connection.device.product ?? connection.device.serial} (serial=${connection.device.serial})`);
+		const conn = await connectWebUSB();
+		const deviceName = conn.device.product ?? conn.device.serial;
+		adbLog.info(`Connected to ${deviceName} (serial=${conn.device.serial})`);
+
+		// Verify this is a NextUI device
+		status = 'Verifying NextUI...';
+		const verify = await verifyNextUIInstallation(conn.adb);
+		if (!verify.ok) {
+			adbLog.error(`Not a NextUI device: ${verify.error}`);
+			try {
+				await adbDisconnect(conn);
+			} catch {
+				// ignore disconnect errors
+			}
+			error = `Not a NextUI device: ${verify.error}`;
+			status = 'Connection failed';
+			connection = null;
+			return;
+		}
+
+		// Read NextUI version
+		try {
+			const versionData = await pullFile(conn.adb, DEVICE_PATHS.versionFile);
+			nextuiVersion = new TextDecoder().decode(versionData).trim();
+			adbLog.info(`NextUI version: ${nextuiVersion}`);
+		} catch {
+			nextuiVersion = 'Unknown';
+			adbLog.warn('Could not read NextUI version file');
+		}
+
+		connection = conn;
+		status = `Connected: ${deviceName}`;
+		adbLog.info('NextUI installation verified');
 	} catch (e) {
 		const msg = e instanceof Error ? e.message : String(e);
 		error = msg;
@@ -62,5 +99,6 @@ export async function disconnect() {
 	connection = null;
 	status = 'Disconnected';
 	error = '';
+	nextuiVersion = '';
 	busy = false;
 }
