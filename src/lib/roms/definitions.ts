@@ -93,6 +93,14 @@ export function getRomSystem(systemCode: string): RomSystem | undefined {
 }
 
 /**
+ * Get the .media directory path for a ROM system.
+ * Pattern: /mnt/SDCARD/Roms/{DisplayName} ({SystemCode})/.media
+ */
+export function getRomMediaPath(system: RomSystem): string {
+	return `${getRomDevicePath(system)}/.media`;
+}
+
+/**
  * Check if a file extension is valid for a given system.
  * @param extension - File extension with dot (e.g. ".nes")
  * @param system - ROM system to check against
