@@ -3,6 +3,7 @@
 	import BiosView from '../components/BiosView.svelte';
 	import RomsView from '../components/RomsView.svelte';
 	import FileBrowserView from '../components/FileBrowserView.svelte';
+	import OverlaysView from '../components/OverlaysView.svelte';
 	import ConsoleLog from '../components/ConsoleLog.svelte';
 	import { getConnection, isConnected } from '$lib/stores/connection.svelte.js';
 	import { hasWebUSB } from '$lib/adb/connection.js';
@@ -39,6 +40,8 @@
 			<BiosView adb={getConnection()!.adb} />
 		{:else if activeView === 'roms'}
 			<RomsView adb={getConnection()!.adb} />
+		{:else if activeView === 'overlays'}
+			<OverlaysView adb={getConnection()!.adb} />
 		{:else if activeView === 'files'}
 			<FileBrowserView adb={getConnection()!.adb} />
 		{:else}

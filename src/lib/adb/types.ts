@@ -49,5 +49,6 @@ export const DEVICE_PATHS = {
 	logs: `${NEXTUI_BASE_PATH}/.userdata/logs`,
 	system: `${NEXTUI_BASE_PATH}/.system`,
 	versionFile: `${NEXTUI_BASE_PATH}/.system/version.txt`,
+	overlays: `${NEXTUI_BASE_PATH}/Overlays`,
 	minuiZip: `${NEXTUI_BASE_PATH}/MinUI.zip`
 } as const;
