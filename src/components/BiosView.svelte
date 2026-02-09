@@ -3,6 +3,7 @@
 	import type { Adb } from '@yume-chan/adb';
 	import { BIOS_SYSTEMS, getBiosDevicePath, type BiosFileDefinition } from '$lib/bios/index.js';
 	import { validateBiosFile } from '$lib/bios/validation.js';
+	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { pathExists, pullFile, pushFile, listDirectory } from '$lib/adb/file-ops.js';
 
 	let { adb }: { adb: Adb } = $props();
@@ -19,14 +20,18 @@
 	interface SystemState {
 		systemName: string;
 		systemCode: string;
+		anyOneOf: boolean;
+		isCustom: boolean;
 		files: BiosFileState[];
 		expanded: boolean;
 	}
 
 	let systems: SystemState[] = $state(
-		BIOS_SYSTEMS.map((sys) => ({
+		BIOS_SYSTEMS.filter((sys) => sys.files.length > 0).map((sys) => ({
 			systemName: sys.systemName,
 			systemCode: sys.systemCode,
+			anyOneOf: sys.anyOneOf ?? false,
+			isCustom: false,
 			files: sys.files.map((f) => ({
 				definition: f,
 				devicePath: getBiosDevicePath(f),
@@ -38,10 +43,16 @@
 	);
 
 	let checking = $state(false);
+	let hideComplete = $state(false);
 	let uploadingFile: string | null = $state(null);
 
 	async function checkAllSystems() {
 		checking = true;
+
+		// Remove previously discovered custom systems (they'll be re-discovered)
+		systems = systems.filter((s) => !s.isCustom);
+
+		// Check predefined systems
 		for (const system of systems) {
 			for (const file of system.files) {
 				file.status = 'checking';
@@ -69,7 +80,89 @@
 				}
 			}
 		}
+
+		// Discover custom BIOS systems from device
+		const knownCodes = new Set(
+			BIOS_SYSTEMS.flatMap((s) => {
+				// Collect all system codes referenced by files (e.g. "GBA" and "MGBA" for GBA system)
+				const codes = s.files.map((f) => f.systemCode);
+				// Also include the system-level code (may contain " / " separator like "GBA / MGBA")
+				codes.push(...s.systemCode.split(/\s*\/\s*/));
+				return codes;
+			})
+		);
+		try {
+			const biosDirs = await listDirectory(adb, DEVICE_PATHS.bios);
+			for (const dir of biosDirs) {
+				if (!dir.isDirectory || dir.name.startsWith('.')) continue;
+				if (knownCodes.has(dir.name)) continue;
+
+				const biosPath = `${DEVICE_PATHS.bios}/${dir.name}`;
+				const customFiles: BiosFileState[] = [];
+				try {
+					const entries = await listDirectory(adb, biosPath);
+					for (const entry of entries) {
+						if (entry.isFile && !entry.name.startsWith('.')) {
+							customFiles.push({
+								definition: {
+									fileName: entry.name,
+									systemCode: dir.name,
+									sha1: '',
+									md5: ''
+								},
+								devicePath: `${biosPath}/${entry.name}`,
+								status: 'present',
+								detail: 'Custom file (no validation)'
+							});
+						}
+					}
+				} catch {
+					// Directory unreadable
+				}
+
+				if (customFiles.length > 0) {
+					systems.push({
+						systemName: dir.name,
+						systemCode: dir.name,
+						anyOneOf: false,
+						isCustom: true,
+						files: customFiles,
+						expanded: false
+					});
+				}
+			}
+		} catch {
+			// Bios directory unreadable — skip discovery
+		}
+
 		checking = false;
+	}
+
+	/** Check if a system's BIOS requirements are satisfied */
+	function isSystemSatisfied(system: SystemState): boolean {
+		if (system.isCustom) return true;
+		if (system.anyOneOf) {
+			return system.files.some((f) => f.status === 'valid');
+		}
+		return system.files.every((f) => f.status === 'valid');
+	}
+
+	/**
+	 * For anyOneOf systems, get the effective display color for a file.
+	 * If the system is satisfied, missing alternatives show as muted instead of red.
+	 */
+	function effectiveStatusColor(file: BiosFileState, system: SystemState): string {
+		if (system.anyOneOf && file.status === 'missing' && isSystemSatisfied(system)) {
+			return 'text-text-muted';
+		}
+		return statusColor(file.status);
+	}
+
+	function effectiveStatusLabel(file: BiosFileState, system: SystemState): string {
+		if (system.anyOneOf && file.status === 'missing' && isSystemSatisfied(system)) {
+			return 'Not needed';
+		}
+		return statusLabel(file.status);
 	}
 
 	function statusColor(status: FileStatus): string {
@@ -106,10 +199,10 @@
 		}
 	}
 
-	async function uploadBiosFile(file: BiosFileState) {
+	async function uploadBiosFile(file: BiosFileState, isCustom: boolean) {
 		const input = document.createElement('input');
 		input.type = 'file';
-		input.accept = file.definition.fileName;
+		if (!isCustom) input.accept = file.definition.fileName;
 
 		input.onchange = async () => {
 			const selected = input.files?.[0];
@@ -120,16 +213,18 @@
 			try {
 				const data = new Uint8Array(await selected.arrayBuffer());
 
-				const result = await validateBiosFile(data, file.definition);
-				if (!result.valid) {
-					file.status = 'invalid';
-					file.detail = `Selected file hash doesn't match expected. Got: ${result.actualSha1.substring(0, 16)}...`;
-					return;
+				if (!isCustom) {
+					const result = await validateBiosFile(data, file.definition);
+					if (!result.valid) {
+						file.status = 'invalid';
+						file.detail = `Selected file hash doesn't match expected. Got: ${result.actualSha1.substring(0, 16)}...`;
+						return;
+					}
 				}
 
 				await pushFile(adb, file.devicePath, data);
-				file.status = 'valid';
-				file.detail = 'Uploaded, hash OK';
+				file.status = isCustom ? 'present' : 'valid';
+				file.detail = isCustom ? 'Uploaded' : 'Uploaded, hash OK';
 			} catch (e) {
 				file.detail = `Upload failed: ${e instanceof Error ? e.message : String(e)}`;
 			} finally {
@@ -140,6 +235,10 @@
 		input.click();
 	}
 
+	let filteredSystems = $derived(
+		hideComplete ? systems.filter((s) => !isSystemSatisfied(s)) : systems
+	);
+
 	// Check on mount (untrack to prevent reactive loop)
 	$effect(() => {
 		untrack(() => checkAllSystems());
@@ -149,17 +248,23 @@
 <div class="p-6">
 	<div class="flex items-center justify-between mb-6">
 		<h2 class="text-2xl font-bold text-text">BIOS Files</h2>
-		<button
-			onclick={checkAllSystems}
-			disabled={checking}
-			class="text-sm bg-surface hover:bg-surface-hover text-text disabled:opacity-50 px-3 py-1.5 rounded"
-		>
-			{checking ? 'Checking...' : 'Refresh'}
-		</button>
+		<div class="flex items-center gap-4">
+			<label class="flex items-center gap-2 text-sm text-text-muted cursor-pointer">
+				<input type="checkbox" bind:checked={hideComplete} class="accent-accent" />
+				Show missing only
+			</label>
+			<button
+				onclick={checkAllSystems}
+				disabled={checking}
+				class="text-sm bg-surface hover:bg-surface-hover text-text disabled:opacity-50 px-3 py-1.5 rounded"
+			>
+				{checking ? 'Checking...' : 'Refresh'}
+			</button>
+		</div>
 	</div>
 
 	<div class="space-y-3">
-		{#each systems as system}
+		{#each filteredSystems as system}
 			<div class="border border-border rounded-lg overflow-hidden">
 				<!-- System Header -->
 				<button
@@ -169,13 +274,25 @@
 					<div>
 						<span class="font-semibold text-text">{system.systemName}</span>
 						<span class="text-sm text-text-muted ml-2">({system.systemCode})</span>
+						{#if system.isCustom}
+							<span class="text-xs text-text-muted ml-1 italic">Custom</span>
+						{/if}
 					</div>
 					<div class="flex items-center gap-3">
-						{#each system.files as file}
-							<span class="text-xs px-1.5 py-0.5 rounded {statusColor(file.status)}">
-								{file.definition.fileName}: {statusLabel(file.status)}
+						{#if system.isCustom}
+							<span class="text-xs text-blue-500">
+								{system.files.length} file{system.files.length !== 1 ? 's' : ''}
 							</span>
-						{/each}
+						{:else}
+							{#if system.anyOneOf}
+								<span class="text-xs text-text-muted">(any one needed)</span>
+							{/if}
+							{#each system.files as file}
+								<span class="text-xs px-1.5 py-0.5 rounded {effectiveStatusColor(file, system)}">
+									{file.definition.fileName}: {effectiveStatusLabel(file, system)}
+								</span>
+							{/each}
+						{/if}
 						<span class="text-text-muted">{system.expanded ? '\u25B2' : '\u25BC'}</span>
 					</div>
 				</button>
@@ -183,27 +300,49 @@
 				<!-- File Details (expanded) -->
 				{#if system.expanded}
 					<div class="p-3 space-y-2">
+						{#if system.isCustom}
+							<div class="text-xs text-text-muted italic mb-1">Custom system — no validation</div>
+						{:else if system.anyOneOf}
+							<div class="text-xs text-text-muted italic mb-1">
+								Only one of these files is required.
+							</div>
+						{/if}
 						{#each system.files as file}
-							<div class="flex items-center justify-between py-2 px-3 bg-bg rounded border border-border">
+							<div
+								class="flex items-center justify-between py-2 px-3 bg-bg rounded border border-border"
+							>
 								<div class="flex-1 min-w-0">
 									<div class="font-mono text-sm text-text">{file.definition.fileName}</div>
 									<div class="text-xs text-text-muted truncate">{file.devicePath}</div>
 									{#if file.detail}
-										<div class="text-xs {statusColor(file.status)} mt-0.5">{file.detail}</div>
+										<div
+											class="text-xs {system.isCustom
+												? 'text-blue-500'
+												: effectiveStatusColor(file, system)} mt-0.5"
+										>
+											{file.detail}
+										</div>
 									{/if}
 								</div>
 								<div class="flex items-center gap-2 ml-4">
-									<span class="text-sm font-medium {statusColor(file.status)}">
-										{statusLabel(file.status)}
-									</span>
-									{#if file.status === 'missing' || file.status === 'invalid' || file.status === 'unknown'}
-										<button
-											onclick={() => uploadBiosFile(file)}
-											disabled={uploadingFile !== null}
-											class="text-xs bg-accent text-white px-2 py-1 rounded hover:bg-accent-hover disabled:opacity-50"
-										>
-											{uploadingFile === `${file.definition.systemCode}/${file.definition.fileName}` ? 'Uploading...' : 'Upload'}
-										</button>
+									{#if system.isCustom}
+										<span class="text-sm font-medium text-blue-500">Present</span>
+									{:else}
+										<span class="text-sm font-medium {effectiveStatusColor(file, system)}">
+											{effectiveStatusLabel(file, system)}
+										</span>
+										{#if file.status === 'missing' || file.status === 'invalid' || file.status === 'unknown'}
+											<button
+												onclick={() => uploadBiosFile(file, system.isCustom)}
+												disabled={uploadingFile !== null}
+												class="text-xs bg-accent text-white px-2 py-1 rounded hover:bg-accent-hover disabled:opacity-50"
+											>
+												{uploadingFile ===
+												`${file.definition.systemCode}/${file.definition.fileName}`
+													? 'Uploading...'
+													: 'Upload'}
+											</button>
+										{/if}
 									{/if}
 								</div>
 							</div>

@@ -6,8 +6,10 @@
 		getRomDevicePath,
 		getRomMediaPath,
 		isValidRomExtension,
+		parseRomDirectoryName,
 		type RomSystem
 	} from '$lib/roms/index.js';
+	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { listDirectory, pathExists, pullFile, pushFile, shell } from '$lib/adb/file-ops.js';
 	import ImagePreview from './ImagePreview.svelte';
 
@@ -52,6 +54,7 @@
 	);
 
 	let refreshing = $state(false);
+	let hideEmpty = $state(true);
 	let uploadingTo: string | null = $state(null);
 	let uploadingMediaFor: string | null = $state(null);
 	let previewSrc: string | null = $state(null);
@@ -59,6 +62,14 @@
 
 	async function refreshAll() {
 		refreshing = true;
+
+		// Remove previously discovered custom systems (they'll be re-discovered)
+		for (const s of systems) {
+			if (s.system.isCustom) cleanupThumbnails(s);
+		}
+		systems = systems.filter((s) => !s.system.isCustom);
+
+		// Check predefined systems
 		for (const s of systems) {
 			s.loading = true;
 			s.error = '';
@@ -78,6 +89,47 @@
 				s.mediaCount = 0;
 			}
 		}
+
+		// Discover custom systems from device
+		const knownCodes = new Set(ROM_SYSTEMS.map((s) => s.systemCode));
+		try {
+			const romDirs = await listDirectory(adb, DEVICE_PATHS.roms);
+			for (const dir of romDirs) {
+				if (!dir.isDirectory || dir.name.startsWith('.')) continue;
+				const parsed = parseRomDirectoryName(dir.name);
+				if (!parsed || knownCodes.has(parsed.systemCode)) continue;
+
+				const devicePath = `${DEVICE_PATHS.roms}/${dir.name}`;
+				let romCount = 0;
+				try {
+					const entries = await listDirectory(adb, devicePath);
+					romCount = entries.filter((e) => e.isFile && !e.name.startsWith('.')).length;
+				} catch {
+					// ignore
+				}
+
+				systems.push({
+					system: {
+						systemName: parsed.systemName,
+						systemCode: parsed.systemCode,
+						supportedFormats: [],
+						isCustom: true
+					},
+					devicePath,
+					romCount,
+					mediaCount: 0,
+					loading: false,
+					expanded: false,
+					error: '',
+					roms: [],
+					romsLoaded: false,
+					loadingRoms: false
+				});
+			}
+		} catch {
+			// Roms directory unreadable — skip discovery
+		}
+
 		refreshing = false;
 	}
 
@@ -192,7 +244,7 @@
 		const input = document.createElement('input');
 		input.type = 'file';
 		input.multiple = true;
-		input.accept = state.system.supportedFormats.join(',');
+		input.accept = state.system.isCustom ? '' : state.system.supportedFormats.join(',');
 
 		input.onchange = async () => {
 			const files = input.files;
@@ -303,6 +355,12 @@
 		}
 	}
 
+	let filteredSystems = $derived(
+		hideEmpty
+			? systems.filter((s) => s.romCount === null || s.romCount > 0)
+			: systems
+	);
+
 	// Refresh on mount (untrack to prevent reactive loop)
 	$effect(() => {
 		untrack(() => refreshAll());
@@ -312,17 +370,23 @@
 <div class="p-6">
 	<div class="flex items-center justify-between mb-6">
 		<h2 class="text-2xl font-bold text-text">ROM Systems</h2>
-		<button
-			onclick={refreshAll}
-			disabled={refreshing}
-			class="text-sm bg-surface hover:bg-surface-hover text-text disabled:opacity-50 px-3 py-1.5 rounded"
-		>
-			{refreshing ? 'Refreshing...' : 'Refresh'}
-		</button>
+		<div class="flex items-center gap-4">
+			<label class="flex items-center gap-2 text-sm text-text-muted cursor-pointer">
+				<input type="checkbox" bind:checked={hideEmpty} class="accent-accent" />
+				Show systems with files only
+			</label>
+			<button
+				onclick={refreshAll}
+				disabled={refreshing}
+				class="text-sm bg-surface hover:bg-surface-hover text-text disabled:opacity-50 px-3 py-1.5 rounded"
+			>
+				{refreshing ? 'Refreshing...' : 'Refresh'}
+			</button>
+		</div>
 	</div>
 
 	<div class="space-y-2">
-		{#each systems as s}
+		{#each filteredSystems as s}
 			<div class="border border-border rounded-lg overflow-hidden">
 				<!-- System Header -->
 				<button
@@ -332,6 +396,9 @@
 					<div>
 						<span class="font-semibold text-text">{s.system.systemName}</span>
 						<span class="text-sm text-text-muted ml-2">({s.system.systemCode})</span>
+						{#if s.system.isCustom}
+							<span class="text-xs text-text-muted ml-1 italic">Custom</span>
+						{/if}
 					</div>
 					<div class="flex items-center gap-3">
 						{#if s.loading}
@@ -356,9 +423,13 @@
 						<div class="flex items-center justify-between">
 							<div>
 								<div class="text-xs text-text-muted font-mono">{s.devicePath}</div>
-								<div class="text-xs text-text-muted">
-									Formats: {s.system.supportedFormats.join(', ')}
-								</div>
+								{#if s.system.isCustom}
+									<div class="text-xs text-text-muted italic">All file types</div>
+								{:else}
+									<div class="text-xs text-text-muted">
+										Formats: {s.system.supportedFormats.join(', ')}
+									</div>
+								{/if}
 							</div>
 							<button
 								onclick={() => uploadRoms(s)}

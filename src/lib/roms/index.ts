@@ -4,5 +4,6 @@ export {
 	getRomDevicePath,
 	getRomMediaPath,
 	getRomSystem,
-	isValidRomExtension
+	isValidRomExtension,
+	parseRomDirectoryName
 } from './definitions.js';
