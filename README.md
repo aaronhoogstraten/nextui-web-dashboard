@@ -1,42 +1,28 @@
-# sv
+# NextUI Web Dashboard
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+A browser-based management tool for [NextUI](https://github.com/LoveRetro/NextUI) devices. Connects directly to your device over USB using WebUSB and ADB -- no drivers or desktop software required.
 
-## Creating a project
+Requires a Chromium-based browser (Chrome, Edge, etc.).
 
-If you're seeing this, you've probably already done this step. Congrats!
+## Features
 
-```sh
-# create a new project
-npx sv create my-app
-```
+- **BIOS Management** -- View required BIOS files per system, check presence and integrity via SHA-256, upload missing files. Supports dynamically discovered custom systems.
+- **ROM Management** -- Browse ROMs per system, upload new ROMs with format validation, view file counts. Custom system folders are detected automatically.
+- **Overlay Management** -- Preview, upload, and remove screen overlays. Browse and install community overlays from the [nextui-community-overlays](https://github.com/LoveRetro/nextui-community-overlays) repository.
+- **File Browser** -- Navigate the device filesystem, upload and download files, and edit text-based config files directly on the device.
+- **Download Logs** -- Collect all log files from the device and download them as a zip archive.
+- **Device Verification** -- Validates that the connected device is running NextUI (not a different MinUI fork) before allowing access.
 
-To recreate this project with the same configuration:
-
-```sh
-# recreate this project
-npx sv create --template minimal --types ts --add eslint prettier --install npm .
-```
-
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+## Development
 
 ```sh
+npm install
 npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
 ```
 
-## Building
+## Tech Stack
 
-To create a production version of your app:
-
-```sh
-npm run build
-```
-
-You can preview the production build with `npm run preview`.
-
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+- SvelteKit / Svelte 5
+- Tailwind CSS v4
+- ya-webadb (WebUSB ADB implementation)
+- JSZip
