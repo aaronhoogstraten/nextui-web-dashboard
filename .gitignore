@@ -24,5 +24,11 @@ vite.config.ts.timestamp-*
 
 # Reference files (large, tracked separately)
 /reference
-.vscode/settings.json
-.claude/settings.local.json
+/references
+
+# IDE / editor
+.vscode/
+.idea/
+
+# Claude Code
+.claude/
