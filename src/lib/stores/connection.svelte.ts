@@ -1,7 +1,6 @@
 import { connectWebUSB, disconnect as adbDisconnect } from '$lib/adb/connection.js';
 import type { AdbConnection } from '$lib/adb/types.js';
-import { DEVICE_PATHS } from '$lib/adb/types.js';
-import { verifyNextUIInstallation, pullFile } from '$lib/adb/file-ops.js';
+import { verifyNextUIInstallation } from '$lib/adb/file-ops.js';
 import { adbLog } from '$lib/stores/log.svelte.js';
 
 /** Shared reactive connection state — use $state.raw to prevent deep proxy on Adb internals */
@@ -62,15 +61,9 @@ export async function connect() {
 			return;
 		}
 
-		// Read NextUI version
-		try {
-			const versionData = await pullFile(conn.adb, DEVICE_PATHS.versionFile);
-			nextuiVersion = new TextDecoder().decode(versionData).trim();
-			adbLog.info(`NextUI version: ${nextuiVersion}`);
-		} catch {
-			nextuiVersion = 'Unknown';
-			adbLog.warn('Could not read NextUI version file');
-		}
+		// Use version from MinUI.zip verification
+		nextuiVersion = verify.version || 'Unknown';
+		adbLog.info(`NextUI version: ${nextuiVersion}`);
 
 		connection = conn;
 		status = `Connected: ${deviceName}`;

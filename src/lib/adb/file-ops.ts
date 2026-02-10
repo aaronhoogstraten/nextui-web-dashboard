@@ -1,6 +1,7 @@
 import type { Adb } from '@yume-chan/adb';
 import { LinuxFileType } from '@yume-chan/adb';
 import type { MaybeConsumable } from '@yume-chan/stream-extra';
+import JSZip from 'jszip';
 import type { DirectoryEntry, StorageInfo } from './types.js';
 import { DEVICE_PATHS } from './types.js';
 import { adbLog } from '$lib/stores/log.svelte.js';
@@ -238,7 +239,7 @@ export async function getStorageInfo(adb: Adb): Promise<StorageInfo | null> {
  */
 export async function verifyNextUIInstallation(
 	adb: Adb
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; version?: string }> {
 	// Check base path by listing /mnt and looking for SDCARD
 	if (!(await pathExists(adb, DEVICE_PATHS.base))) {
 		return { ok: false, error: `NextUI installation not found at ${DEVICE_PATHS.base}` };
@@ -261,6 +262,43 @@ export async function verifyNextUIInstallation(
 			ok: false,
 			error: 'NextUI version file not found. Please ensure NextUI is properly installed.'
 		};
+	}
+
+	// Verify MinUI.zip contains .system/system.txt to distinguish NextUI from other MinUI forks
+	if (hasMinUI) {
+		try {
+			adbLog.info('Verifying MinUI.zip contains .system/system.txt...');
+			const zipData = await pullFile(adb, DEVICE_PATHS.minuiZip);
+			const zip = await JSZip.loadAsync(zipData);
+			const systemTxt = zip.file('.system/system.txt');
+			if (!systemTxt) {
+				return {
+					ok: false,
+					error: 'This device appears to be running a non-NextUI fork of MinUI. The dashboard only supports NextUI.'
+				};
+			}
+			const version = (await systemTxt.async('string')).trim();
+			adbLog.info(`MinUI.zip verified: .system/system.txt found (version: ${version})`);
+			return { ok: true, version };
+		} catch (e) {
+			adbLog.error(`Failed to verify MinUI.zip contents: ${e}`);
+			return {
+				ok: false,
+				error: `Failed to verify MinUI.zip: ${e instanceof Error ? e.message : String(e)}`
+			};
+		}
+	}
+
+	// No MinUI.zip but version.txt exists — read version from it
+	if (hasVersionFile) {
+		try {
+			const versionData = await pullFile(adb, DEVICE_PATHS.versionFile);
+			const version = new TextDecoder().decode(versionData).trim();
+			adbLog.info(`Version from version.txt: ${version}`);
+			return { ok: true, version };
+		} catch (e) {
+			adbLog.warn(`Could not read version.txt: ${e}`);
+		}
 	}
 
 	return { ok: true };
