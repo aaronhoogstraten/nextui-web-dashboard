@@ -66,7 +66,16 @@
 		return sortAsc ? ' \u25B2' : ' \u25BC';
 	}
 
-	async function navigate(path: string) {
+	async function navigate(path: string, skipDirtyCheck = false) {
+		if (!skipDirtyCheck && editorPath && editorContent !== editorOriginal) {
+			if (!confirm('Discard unsaved changes?')) return;
+		}
+		if (editorPath && !skipDirtyCheck) {
+			editorPath = null;
+			editorContent = '';
+			editorOriginal = '';
+			editorError = '';
+		}
 		loading = true;
 		error = '';
 		try {
@@ -162,9 +171,73 @@
 		return new Date(ms).toLocaleString();
 	}
 
+	// --- Text Editor ---
+	const TEXT_EXTENSIONS = new Set(['.txt', '.cfg', '.conf', '.ini', '.json', '.sh', '.xml', '.yml', '.log', '.csv']);
+
+	function isTextFile(name: string): boolean {
+		const dot = name.lastIndexOf('.');
+		if (dot < 0) return false;
+		return TEXT_EXTENSIONS.has(name.substring(dot).toLowerCase());
+	}
+
+	let editorPath: string | null = $state(null);
+	let editorContent: string = $state('');
+	let editorOriginal: string = $state('');
+	let editorLoading = $state(false);
+	let editorSaving = $state(false);
+	let editorError: string = $state('');
+
+	let editorDirty = $derived(editorContent !== editorOriginal);
+
+	function editorFileName(): string {
+		if (!editorPath) return '';
+		return editorPath.substring(editorPath.lastIndexOf('/') + 1);
+	}
+
+	async function openEditor(remotePath: string) {
+		if (editorDirty && !confirm('Discard unsaved changes?')) return;
+		editorPath = remotePath;
+		editorLoading = true;
+		editorError = '';
+		try {
+			const data = await pullFile(adb, remotePath);
+			const text = new TextDecoder().decode(data);
+			editorContent = text;
+			editorOriginal = text;
+		} catch (e) {
+			editorError = `Failed to open: ${e instanceof Error ? e.message : String(e)}`;
+		} finally {
+			editorLoading = false;
+		}
+	}
+
+	async function saveEditor() {
+		if (!editorPath) return;
+		editorSaving = true;
+		editorError = '';
+		try {
+			const data = new TextEncoder().encode(editorContent);
+			await pushFile(adb, editorPath, data);
+			editorOriginal = editorContent;
+			editorError = 'Saved';
+		} catch (e) {
+			editorError = `Save failed: ${e instanceof Error ? e.message : String(e)}`;
+		} finally {
+			editorSaving = false;
+		}
+	}
+
+	function closeEditor() {
+		if (editorDirty && !confirm('Discard unsaved changes?')) return;
+		editorPath = null;
+		editorContent = '';
+		editorOriginal = '';
+		editorError = '';
+	}
+
 	// Load initial directory on mount (untrack to prevent reactive loop)
 	$effect(() => {
-		untrack(() => navigate(DEVICE_PATHS.base));
+		untrack(() => navigate(DEVICE_PATHS.base, true));
 	});
 </script>
 
@@ -214,82 +287,145 @@
 		<div class="text-xs text-yellow-500 mb-3">{error}</div>
 	{/if}
 
-	<!-- Table -->
-	<div class="flex-1 overflow-auto border border-border rounded-lg">
-		<table class="w-full text-sm">
-			<thead class="bg-surface sticky top-0">
-				<tr class="text-left">
-					<th class="py-2 px-3 font-medium text-text-muted">
-						<button onclick={() => navigateUp()} disabled={currentPath === '/'} class="mr-2 text-text hover:text-accent disabled:opacity-30" title="Go up">
-							..
-						</button>
-						<button onclick={() => toggleSort('name')} class="text-text-muted hover:text-text">
-							Name{sortIndicator('name')}
-						</button>
-					</th>
-					<th class="py-2 px-3 font-medium text-text-muted w-28 text-right">
-						<button onclick={() => toggleSort('size')} class="text-text-muted hover:text-text">
-							Size{sortIndicator('size')}
-						</button>
-					</th>
-					<th class="py-2 px-3 font-medium text-text-muted w-48">
-						<button onclick={() => toggleSort('mtime')} class="text-text-muted hover:text-text">
-							Modified{sortIndicator('mtime')}
-						</button>
-					</th>
-					<th class="py-2 px-3 font-medium text-text-muted w-24"></th>
-				</tr>
-			</thead>
-			<tbody>
-				{#if loading}
-					<tr>
-						<td colspan="4" class="py-8 text-center text-text-muted">Loading...</td>
+	<!-- Table + Editor split view -->
+	<div class="flex-1 flex gap-0 overflow-hidden">
+		<!-- File listing -->
+		<div class="flex-1 overflow-auto border border-border rounded-lg min-w-0">
+			<table class="w-full text-sm">
+				<thead class="bg-surface sticky top-0">
+					<tr class="text-left">
+						<th class="py-2 px-3 font-medium text-text-muted">
+							<button onclick={() => navigateUp()} disabled={currentPath === '/'} class="mr-2 text-text hover:text-accent disabled:opacity-30" title="Go up">
+								..
+							</button>
+							<button onclick={() => toggleSort('name')} class="text-text-muted hover:text-text">
+								Name{sortIndicator('name')}
+							</button>
+						</th>
+						<th class="py-2 px-3 font-medium text-text-muted w-28 text-right">
+							<button onclick={() => toggleSort('size')} class="text-text-muted hover:text-text">
+								Size{sortIndicator('size')}
+							</button>
+						</th>
+						<th class="py-2 px-3 font-medium text-text-muted w-48">
+							<button onclick={() => toggleSort('mtime')} class="text-text-muted hover:text-text">
+								Modified{sortIndicator('mtime')}
+							</button>
+						</th>
+						<th class="py-2 px-3 font-medium text-text-muted w-32"></th>
 					</tr>
-				{:else if sortedEntries.length === 0}
-					<tr>
-						<td colspan="4" class="py-8 text-center text-text-muted">Empty directory</td>
-					</tr>
-				{:else}
-					{#each sortedEntries as entry}
-						<tr class="border-t border-border hover:bg-surface-hover transition-colors">
-							<td class="py-1.5 px-3">
-								{#if entry.isDirectory}
-									<button
-										onclick={() => handleEntryClick(entry)}
-										class="text-accent hover:underline flex items-center gap-1.5"
-									>
-										<span class="text-text-muted">&#128193;</span>
-										{entry.name}
-									</button>
-								{:else}
-									<span class="flex items-center gap-1.5 text-text">
-										<span class="text-text-muted">&#128196;</span>
-										{entry.name}
-									</span>
-								{/if}
-							</td>
-							<td class="py-1.5 px-3 text-right text-text-muted tabular-nums">
-								{entry.isDirectory ? '\u2014' : formatSize(entry.size)}
-							</td>
-							<td class="py-1.5 px-3 text-text-muted tabular-nums">
-								{formatDate(entry.mtime)}
-							</td>
-							<td class="py-1.5 px-3">
-								{#if entry.isFile}
-									<button
-										onclick={() => downloadFile(entry)}
-										disabled={downloadingFile !== null}
-										class="text-xs text-accent hover:underline disabled:opacity-50"
-									>
-										{downloadingFile === entry.name ? 'Downloading...' : 'Download'}
-									</button>
-								{/if}
-							</td>
+				</thead>
+				<tbody>
+					{#if loading}
+						<tr>
+							<td colspan="4" class="py-8 text-center text-text-muted">Loading...</td>
 						</tr>
-					{/each}
+					{:else if sortedEntries.length === 0}
+						<tr>
+							<td colspan="4" class="py-8 text-center text-text-muted">Empty directory</td>
+						</tr>
+					{:else}
+						{#each sortedEntries as entry}
+							<tr class="border-t border-border hover:bg-surface-hover transition-colors">
+								<td class="py-1.5 px-3">
+									{#if entry.isDirectory}
+										<button
+											onclick={() => handleEntryClick(entry)}
+											class="text-accent hover:underline flex items-center gap-1.5"
+										>
+											<span class="text-text-muted">&#128193;</span>
+											{entry.name}
+										</button>
+									{:else}
+										<span class="flex items-center gap-1.5 text-text">
+											<span class="text-text-muted">&#128196;</span>
+											{entry.name}
+										</span>
+									{/if}
+								</td>
+								<td class="py-1.5 px-3 text-right text-text-muted tabular-nums">
+									{entry.isDirectory ? '\u2014' : formatSize(entry.size)}
+								</td>
+								<td class="py-1.5 px-3 text-text-muted tabular-nums">
+									{formatDate(entry.mtime)}
+								</td>
+								<td class="py-1.5 px-3">
+									{#if entry.isFile}
+										<div class="flex items-center gap-2">
+											{#if isTextFile(entry.name)}
+												<button
+													onclick={() => openEditor(currentPath === '/' ? '/' + entry.name : currentPath + '/' + entry.name)}
+													class="text-xs text-accent hover:underline"
+												>
+													Edit
+												</button>
+											{/if}
+											<button
+												onclick={() => downloadFile(entry)}
+												disabled={downloadingFile !== null}
+												class="text-xs text-accent hover:underline disabled:opacity-50"
+											>
+												{downloadingFile === entry.name ? '...' : 'Download'}
+											</button>
+										</div>
+									{/if}
+								</td>
+							</tr>
+						{/each}
+					{/if}
+				</tbody>
+			</table>
+		</div>
+
+		<!-- Editor panel -->
+		{#if editorPath}
+			<div class="w-1/2 border border-border rounded-lg ml-2 flex flex-col min-w-0">
+				<!-- Editor header -->
+				<div class="flex items-center justify-between p-2 bg-surface border-b border-border shrink-0">
+					<div class="flex items-center gap-2 min-w-0">
+						<span class="text-sm font-mono text-text truncate" title={editorPath}>
+							{editorFileName()}{editorDirty ? ' *' : ''}
+						</span>
+					</div>
+					<div class="flex items-center gap-2 shrink-0">
+						<button
+							onclick={saveEditor}
+							disabled={!editorDirty || editorSaving}
+							class="text-xs bg-accent text-white px-2 py-1 rounded hover:bg-accent-hover disabled:opacity-50"
+						>
+							{editorSaving ? 'Saving...' : 'Save'}
+						</button>
+						<button
+							onclick={closeEditor}
+							class="text-xs text-text-muted hover:text-text px-1"
+							title="Close editor"
+						>
+							&#10005;
+						</button>
+					</div>
+				</div>
+
+				<!-- Editor content -->
+				{#if editorLoading}
+					<div class="flex-1 flex items-center justify-center text-text-muted text-sm">
+						Loading...
+					</div>
+				{:else}
+					<textarea
+						bind:value={editorContent}
+						class="flex-1 w-full p-3 bg-bg text-text font-mono text-sm resize-none border-none outline-none"
+						spellcheck="false"
+					></textarea>
 				{/if}
-			</tbody>
-		</table>
+
+				<!-- Editor footer -->
+				{#if editorError}
+					<div class="px-2 py-1 text-xs border-t border-border shrink-0 {editorError === 'Saved' ? 'text-green-500' : 'text-red-400'}">
+						{editorError}
+					</div>
+				{/if}
+			</div>
+		{/if}
 	</div>
 
 	<!-- Footer info -->
