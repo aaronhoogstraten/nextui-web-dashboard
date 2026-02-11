@@ -28,6 +28,7 @@
 		{ id: 'bios', label: 'BIOS' },
 		{ id: 'roms', label: 'ROMs' },
 		{ id: 'overlays', label: 'Overlays' },
+		{ id: 'collections', label: 'Collections' },
 		{ id: 'screenshots', label: 'Screenshots' },
 		{ id: 'files', label: 'File Browser' },
 		{ id: 'logs', label: 'Download Logs' }
