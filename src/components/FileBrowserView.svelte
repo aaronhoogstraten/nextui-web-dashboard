@@ -3,6 +3,7 @@
 	import type { Adb } from '@yume-chan/adb';
 	import { listDirectory, pullFile, pushFile, isDirectory } from '$lib/adb/file-ops.js';
 	import { DEVICE_PATHS, type DirectoryEntry } from '$lib/adb/types.js';
+	import ImagePreview from './ImagePreview.svelte';
 
 	let { adb }: { adb: Adb } = $props();
 
@@ -235,6 +236,46 @@
 		editorError = '';
 	}
 
+	// --- Image Preview ---
+	const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp', '.svg']);
+
+	function isImageFile(name: string): boolean {
+		const dot = name.lastIndexOf('.');
+		if (dot < 0) return false;
+		return IMAGE_EXTENSIONS.has(name.substring(dot).toLowerCase());
+	}
+
+	let previewSrc: string | null = $state(null);
+	let previewAlt: string = $state('');
+	let previewLoading: string | null = $state(null);
+
+	async function previewImage(entry: DirectoryEntry) {
+		previewLoading = entry.name;
+		try {
+			const remotePath = currentPath === '/' ? '/' + entry.name : currentPath + '/' + entry.name;
+			const data = await pullFile(adb, remotePath);
+			const ext = entry.name.substring(entry.name.lastIndexOf('.')).toLowerCase();
+			const mimeMap: Record<string, string> = {
+				'.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+				'.bmp': 'image/bmp', '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml'
+			};
+			const blob = new Blob([data as unknown as BlobPart], { type: mimeMap[ext] || 'image/png' });
+			if (previewSrc) URL.revokeObjectURL(previewSrc);
+			previewSrc = URL.createObjectURL(blob);
+			previewAlt = entry.name;
+		} catch (e) {
+			error = `Preview failed: ${e instanceof Error ? e.message : String(e)}`;
+		} finally {
+			previewLoading = null;
+		}
+	}
+
+	function closePreview() {
+		if (previewSrc) URL.revokeObjectURL(previewSrc);
+		previewSrc = null;
+		previewAlt = '';
+	}
+
 	// Load initial directory on mount (untrack to prevent reactive loop)
 	$effect(() => {
 		untrack(() => navigate(DEVICE_PATHS.base, true));
@@ -295,9 +336,6 @@
 				<thead class="bg-surface sticky top-0">
 					<tr class="text-left">
 						<th class="py-2 px-3 font-medium text-text-muted">
-							<button onclick={() => navigateUp()} disabled={currentPath === '/'} class="mr-2 text-text hover:text-accent disabled:opacity-30" title="Go up">
-								..
-							</button>
 							<button onclick={() => toggleSort('name')} class="text-text-muted hover:text-text">
 								Name{sortIndicator('name')}
 							</button>
@@ -321,10 +359,28 @@
 							<td colspan="4" class="py-8 text-center text-text-muted">Loading...</td>
 						</tr>
 					{:else if sortedEntries.length === 0}
+						{#if currentPath !== '/'}
+							<tr class="border-t border-border hover:bg-surface-hover transition-colors">
+								<td colspan="4" class="py-1.5 px-3">
+									<button onclick={navigateUp} class="text-accent hover:underline flex items-center gap-1.5">
+										<span class="text-text-muted">&#8617;</span> ..
+									</button>
+								</td>
+							</tr>
+						{/if}
 						<tr>
 							<td colspan="4" class="py-8 text-center text-text-muted">Empty directory</td>
 						</tr>
 					{:else}
+						{#if currentPath !== '/'}
+							<tr class="border-t border-border hover:bg-surface-hover transition-colors">
+								<td colspan="4" class="py-1.5 px-3">
+									<button onclick={navigateUp} class="text-accent hover:underline flex items-center gap-1.5">
+										<span class="text-text-muted">&#8617;</span> ..
+									</button>
+								</td>
+							</tr>
+						{/if}
 						{#each sortedEntries as entry}
 							<tr class="border-t border-border hover:bg-surface-hover transition-colors">
 								<td class="py-1.5 px-3">
@@ -358,6 +414,15 @@
 													class="text-xs text-accent hover:underline"
 												>
 													Edit
+												</button>
+											{/if}
+											{#if isImageFile(entry.name)}
+												<button
+													onclick={() => previewImage(entry)}
+													disabled={previewLoading !== null}
+													class="text-xs text-accent hover:underline disabled:opacity-50"
+												>
+													{previewLoading === entry.name ? '...' : 'Preview'}
 												</button>
 											{/if}
 											<button
@@ -434,3 +499,7 @@
 		<span class="font-mono">{currentPath}</span>
 	</div>
 </div>
+
+{#if previewSrc}
+	<ImagePreview src={previewSrc} alt={previewAlt} onClose={closePreview} />
+{/if}
