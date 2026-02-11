@@ -4,7 +4,7 @@
 	import { BIOS_SYSTEMS, getBiosDevicePath, type BiosFileDefinition } from '$lib/bios/index.js';
 	import { validateBiosFile } from '$lib/bios/validation.js';
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
-	import { pathExists, pullFile, pushFile, listDirectory } from '$lib/adb/file-ops.js';
+	import { pathExists, pullFile, pushFile, listDirectory, shell } from '$lib/adb/file-ops.js';
 
 	let { adb }: { adb: Adb } = $props();
 
@@ -45,6 +45,7 @@
 	let checking = $state(false);
 	let hideComplete = $state(false);
 	let uploadingFile: string | null = $state(null);
+	let removingFile: string | null = $state(null);
 
 	async function checkAllSystems() {
 		checking = true;
@@ -235,6 +236,30 @@
 		input.click();
 	}
 
+	async function removeBiosFile(file: BiosFileState, system: SystemState) {
+		if (!confirm(`Delete "${file.definition.fileName}" from ${system.systemName}?`)) return;
+		const key = `${file.definition.systemCode}/${file.definition.fileName}`;
+		removingFile = key;
+		try {
+			await shell(adb, `rm "${file.devicePath}"`);
+			if (system.isCustom) {
+				// Remove from the custom system's file list
+				system.files = system.files.filter((f) => f !== file);
+				// If no files left, remove the whole custom system
+				if (system.files.length === 0) {
+					systems = systems.filter((s) => s !== system);
+				}
+			} else {
+				file.status = 'missing';
+				file.detail = 'Removed';
+			}
+		} catch (e) {
+			file.detail = `Remove failed: ${e instanceof Error ? e.message : String(e)}`;
+		} finally {
+			removingFile = null;
+		}
+	}
+
 	let filteredSystems = $derived(
 		hideComplete ? systems.filter((s) => !isSystemSatisfied(s)) : systems
 	);
@@ -327,6 +352,14 @@
 								<div class="flex items-center gap-2 ml-4">
 									{#if system.isCustom}
 										<span class="text-sm font-medium text-blue-500">Present</span>
+										<button
+											onclick={() => removeBiosFile(file, system)}
+											disabled={removingFile !== null || uploadingFile !== null}
+											class="text-xs px-2 py-1 rounded text-red-400 hover:bg-surface disabled:opacity-50"
+											title={`Delete ${file.definition.fileName}`}
+										>
+											{removingFile === `${file.definition.systemCode}/${file.definition.fileName}` ? 'Deleting...' : 'Delete'}
+										</button>
 									{:else}
 										<span class="text-sm font-medium {effectiveStatusColor(file, system)}">
 											{effectiveStatusLabel(file, system)}
@@ -334,13 +367,23 @@
 										{#if file.status === 'missing' || file.status === 'invalid' || file.status === 'unknown'}
 											<button
 												onclick={() => uploadBiosFile(file, system.isCustom)}
-												disabled={uploadingFile !== null}
+												disabled={uploadingFile !== null || removingFile !== null}
 												class="text-xs bg-accent text-white px-2 py-1 rounded hover:bg-accent-hover disabled:opacity-50"
 											>
 												{uploadingFile ===
 												`${file.definition.systemCode}/${file.definition.fileName}`
 													? 'Uploading...'
 													: 'Upload'}
+											</button>
+									{/if}
+									{#if file.status !== 'missing' && file.status !== 'unknown' && file.status !== 'checking'}
+											<button
+												onclick={() => removeBiosFile(file, system)}
+												disabled={removingFile !== null || uploadingFile !== null}
+												class="text-xs px-2 py-1 rounded text-red-400 hover:bg-surface disabled:opacity-50"
+												title={`Delete ${file.definition.fileName}`}
+											>
+												{removingFile === `${file.definition.systemCode}/${file.definition.fileName}` ? 'Deleting...' : 'Delete'}
 											</button>
 										{/if}
 									{/if}

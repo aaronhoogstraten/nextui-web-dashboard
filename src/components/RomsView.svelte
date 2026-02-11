@@ -36,26 +36,43 @@
 		roms: RomEntry[];
 		romsLoaded: boolean;
 		loadingRoms: boolean;
+		bgUrl: string | null;
+		bglistUrl: string | null;
+		iconUrl: string | null;
+		iconFileName: string;
+	}
+
+	function dirName(path: string): string {
+		return path.substring(path.lastIndexOf('/') + 1);
 	}
 
 	let systems: SystemState[] = $state(
-		ROM_SYSTEMS.map((sys) => ({
-			system: sys,
-			devicePath: getRomDevicePath(sys),
-			romCount: null,
-			mediaCount: 0,
-			loading: false,
-			expanded: false,
-			error: '',
-			roms: [],
-			romsLoaded: false,
-			loadingRoms: false
-		}))
+		ROM_SYSTEMS.map((sys) => {
+			const devicePath = getRomDevicePath(sys);
+			return {
+				system: sys,
+				devicePath,
+				romCount: null,
+				mediaCount: 0,
+				loading: false,
+				expanded: false,
+				error: '',
+				roms: [],
+				romsLoaded: false,
+				loadingRoms: false,
+				bgUrl: null,
+				bglistUrl: null,
+				iconUrl: null,
+				iconFileName: `${dirName(devicePath)}.png`
+			};
+		})
 	);
 
 	let refreshing = $state(false);
 	let hideEmpty = $state(true);
 	let uploadingTo: string | null = $state(null);
+	let uploadingBg: string | null = $state(null);
+	let removingBg: string | null = $state(null);
 	let uploadingMediaFor: string | null = $state(null);
 	let previewSrc: string | null = $state(null);
 	let previewAlt: string = $state('');
@@ -123,7 +140,11 @@
 					error: '',
 					roms: [],
 					romsLoaded: false,
-					loadingRoms: false
+					loadingRoms: false,
+					bgUrl: null,
+					bglistUrl: null,
+					iconUrl: null,
+					iconFileName: `${dirName(devicePath)}.png`
 				});
 			}
 		} catch {
@@ -151,13 +172,34 @@
 
 			// Get media files
 			let mediaNames = new Set<string>();
+			const mediaPath = getRomMediaPath(state.system);
 			try {
-				const mediaPath = getRomMediaPath(state.system);
 				const mediaEntries = await listDirectory(adb, mediaPath);
 				mediaNames = new Set(mediaEntries.filter((e) => e.isFile).map((e) => e.name));
 			} catch {
 				// .media directory may not exist — that's fine
 			}
+
+			// Load special media images if present
+			if (state.bgUrl) { URL.revokeObjectURL(state.bgUrl); state.bgUrl = null; }
+			if (state.bglistUrl) { URL.revokeObjectURL(state.bglistUrl); state.bglistUrl = null; }
+			if (state.iconUrl) { URL.revokeObjectURL(state.iconUrl); state.iconUrl = null; }
+			for (const fileName of ['bg.png', 'bglist.png']) {
+				if (mediaNames.has(fileName)) {
+					try {
+						const data = await pullFile(adb, `${mediaPath}/${fileName}`);
+						const url = URL.createObjectURL(new Blob([data as unknown as BlobPart], { type: 'image/png' }));
+						if (fileName === 'bg.png') state.bgUrl = url;
+						else state.bglistUrl = url;
+					} catch { /* skip */ }
+				}
+			}
+			// System icon lives in Roms/.media/ (parent directory)
+			try {
+				const iconPath = `${DEVICE_PATHS.roms}/.media/${state.iconFileName}`;
+				const data = await pullFile(adb, iconPath);
+				state.iconUrl = URL.createObjectURL(new Blob([data as unknown as BlobPart], { type: 'image/png' }));
+			} catch { /* icon doesn't exist — skip */ }
 
 			// Build ROM entries with media matching
 			state.roms = romFiles.map((f) => {
@@ -210,6 +252,81 @@
 				URL.revokeObjectURL(rom.thumbnailUrl);
 				rom.thumbnailUrl = null;
 			}
+		}
+		if (state.bgUrl) { URL.revokeObjectURL(state.bgUrl); state.bgUrl = null; }
+		if (state.bglistUrl) { URL.revokeObjectURL(state.bglistUrl); state.bglistUrl = null; }
+		if (state.iconUrl) { URL.revokeObjectURL(state.iconUrl); state.iconUrl = null; }
+	}
+
+	function setSpecialMedia(state: SystemState, filename: string, url: string | null) {
+		if (filename === 'bg.png') {
+			if (state.bgUrl) URL.revokeObjectURL(state.bgUrl);
+			state.bgUrl = url;
+		} else if (filename === 'bglist.png') {
+			if (state.bglistUrl) URL.revokeObjectURL(state.bglistUrl);
+			state.bglistUrl = url;
+		} else if (filename === state.iconFileName) {
+			if (state.iconUrl) URL.revokeObjectURL(state.iconUrl);
+			state.iconUrl = url;
+		}
+	}
+
+	function getSpecialMediaPath(state: SystemState, filename: string): string {
+		if (filename === state.iconFileName) {
+			return `${DEVICE_PATHS.roms}/.media/${filename}`;
+		}
+		return `${getRomMediaPath(state.system)}/${filename}`;
+	}
+
+	function getSpecialMediaDir(state: SystemState, filename: string): string {
+		if (filename === state.iconFileName) {
+			return `${DEVICE_PATHS.roms}/.media`;
+		}
+		return getRomMediaPath(state.system);
+	}
+
+	async function uploadSpecialMedia(state: SystemState, filename: string) {
+		const input = document.createElement('input');
+		input.type = 'file';
+		input.accept = '.png';
+
+		input.onchange = async () => {
+			const file = input.files?.[0];
+			if (!file) return;
+
+			uploadingBg = `${state.system.systemCode}/${filename}`;
+			try {
+				const dir = getSpecialMediaDir(state, filename);
+				const dirExists = await pathExists(adb, dir);
+				if (!dirExists) {
+					await shell(adb, `mkdir -p "${dir}"`);
+				}
+
+				const data = new Uint8Array(await file.arrayBuffer());
+				await pushFile(adb, getSpecialMediaPath(state, filename), data);
+				const url = URL.createObjectURL(new Blob([data as unknown as BlobPart], { type: 'image/png' }));
+				setSpecialMedia(state, filename, url);
+			} catch (e) {
+				state.error = `Upload failed: ${e instanceof Error ? e.message : String(e)}`;
+			} finally {
+				uploadingBg = null;
+			}
+		};
+
+		input.click();
+	}
+
+	async function removeSpecialMedia(state: SystemState, filename: string) {
+		if (!confirm(`Delete ${filename} from ${state.system.systemName}?`)) return;
+
+		removingBg = `${state.system.systemCode}/${filename}`;
+		try {
+			await shell(adb, `rm "${getSpecialMediaPath(state, filename)}"`);
+			setSpecialMedia(state, filename, null);
+		} catch (e) {
+			state.error = `Delete failed: ${e instanceof Error ? e.message : String(e)}`;
+		} finally {
+			removingBg = null;
 		}
 	}
 
@@ -333,7 +450,37 @@
 		input.click();
 	}
 
+	let removingRom: string | null = $state(null);
 	let removingMediaFor: string | null = $state(null);
+
+	async function removeRom(state: SystemState, rom: RomEntry) {
+		if (!confirm(`Delete "${rom.name}"${rom.hasMedia ? ' and its box art' : ''}?`)) return;
+		removingRom = rom.name;
+		try {
+			// Remove the ROM file
+			await shell(adb, `rm "${state.devicePath}/${rom.name}"`);
+
+			// Also remove media art if present
+			if (rom.hasMedia) {
+				const mediaPath = getRomMediaPath(state.system);
+				await shell(adb, `rm "${mediaPath}/${rom.mediaFileName}"`);
+			}
+
+			// Clean up thumbnail
+			if (rom.thumbnailUrl) {
+				URL.revokeObjectURL(rom.thumbnailUrl);
+			}
+
+			// Remove from list
+			state.roms = state.roms.filter((r) => r.name !== rom.name);
+			state.romCount = state.roms.length;
+			state.mediaCount = state.roms.filter((r) => r.hasMedia).length;
+		} catch (e) {
+			state.error = `Delete failed: ${e instanceof Error ? e.message : String(e)}`;
+		} finally {
+			removingRom = null;
+		}
+	}
 
 	async function removeMedia(state: SystemState, rom: RomEntry) {
 		removingMediaFor = rom.name;
@@ -444,6 +591,53 @@
 							<div class="text-xs text-yellow-500">{s.error}</div>
 						{/if}
 
+						<!-- Special media images -->
+						{#if s.romsLoaded}
+							<div class="flex gap-3">
+								{#each [{ name: s.iconFileName, label: 'Icon', url: s.iconUrl }, { name: 'bg.png', label: 'bg.png', url: s.bgUrl }, { name: 'bglist.png', label: 'bglist.png', url: s.bglistUrl }] as media (media.name)}
+									<div class="w-40 border border-border rounded-lg overflow-hidden bg-bg shrink-0">
+										<!-- Preview area -->
+										{#if media.url}
+											<!-- svelte-ignore a11y_click_events_have_key_events -->
+											<!-- svelte-ignore a11y_no_static_element_interactions -->
+											<div
+												onclick={() => { previewSrc = media.url; previewAlt = `${s.system.systemName} — ${media.label}`; }}
+												class="h-28 bg-surface cursor-pointer grid place-items-center p-1"
+											>
+												<img src={media.url} alt={media.label} class="max-w-full max-h-full object-contain" />
+											</div>
+										{:else}
+											<div class="h-28 bg-surface grid place-items-center">
+												<span class="text-text-muted text-xs">No {media.label}</span>
+											</div>
+										{/if}
+										<!-- Buttons -->
+										<div class="flex items-center justify-between px-1.5 py-1">
+											<span class="text-xs text-text-muted truncate">{media.label}</span>
+											<div class="flex items-center shrink-0">
+												<button
+													onclick={() => uploadSpecialMedia(s, media.name)}
+													disabled={uploadingBg !== null || removingBg !== null}
+													class="text-xs {media.url ? 'text-text-muted hover:bg-surface' : 'text-accent'} px-1 py-0.5 rounded disabled:opacity-50"
+												>
+													{uploadingBg === `${s.system.systemCode}/${media.name}` ? '...' : media.url ? 'Replace' : 'Add'}
+												</button>
+												{#if media.url}
+													<button
+														onclick={() => removeSpecialMedia(s, media.name)}
+														disabled={removingBg !== null || uploadingBg !== null}
+														class="text-xs text-red-400 hover:bg-surface px-1 py-0.5 rounded disabled:opacity-50"
+													>
+														{removingBg === `${s.system.systemCode}/${media.name}` ? '...' : 'Delete'}
+													</button>
+												{/if}
+											</div>
+										</div>
+									</div>
+								{/each}
+							</div>
+						{/if}
+
 						<!-- ROM List -->
 						{#if s.loadingRoms}
 							<div class="text-sm text-text-muted py-4 text-center">Loading ROMs...</div>
@@ -485,11 +679,11 @@
 											{formatSize(rom.size)}
 										</div>
 
-										<!-- Media buttons -->
+										<!-- Action buttons -->
 										<div class="flex items-center gap-1 shrink-0">
 											<button
 												onclick={() => uploadMedia(s, rom)}
-												disabled={uploadingMediaFor !== null || removingMediaFor !== null}
+												disabled={uploadingMediaFor !== null || removingMediaFor !== null || removingRom !== null}
 												class="text-xs px-2 py-1 rounded
 													{rom.hasMedia
 														? 'text-text-muted hover:bg-surface'
@@ -500,7 +694,7 @@
 												{#if uploadingMediaFor === rom.name}
 													Uploading...
 												{:else if rom.hasMedia}
-													Replace
+													Replace art
 												{:else}
 													Add art
 												{/if}
@@ -508,13 +702,21 @@
 											{#if rom.hasMedia}
 												<button
 													onclick={() => removeMedia(s, rom)}
-													disabled={removingMediaFor !== null || uploadingMediaFor !== null}
-													class="text-xs px-2 py-1 rounded text-red-400 hover:bg-surface disabled:opacity-50"
+													disabled={removingMediaFor !== null || uploadingMediaFor !== null || removingRom !== null}
+													class="text-xs px-2 py-1 rounded text-text-muted hover:bg-surface disabled:opacity-50"
 													title={`Remove ${rom.mediaFileName}`}
 												>
-													{removingMediaFor === rom.name ? 'Removing...' : 'Remove'}
+													{removingMediaFor === rom.name ? 'Removing...' : 'Remove art'}
 												</button>
 											{/if}
+											<button
+												onclick={() => removeRom(s, rom)}
+												disabled={removingRom !== null || removingMediaFor !== null || uploadingMediaFor !== null}
+												class="text-xs px-2 py-1 rounded text-red-400 hover:bg-surface disabled:opacity-50"
+												title={`Delete ${rom.name}`}
+											>
+												{removingRom === rom.name ? 'Deleting...' : 'Delete'}
+											</button>
 										</div>
 									</div>
 								{/each}

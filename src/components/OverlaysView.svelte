@@ -459,7 +459,7 @@
 														class="text-xs text-red-400 hover:text-red-300 disabled:opacity-50"
 														title="Remove overlay"
 													>
-														{removingFile === `${sys.systemCode}/${file.name}` ? '...' : 'Remove'}
+														{removingFile === `${sys.systemCode}/${file.name}` ? '...' : 'Delete'}
 													</button>
 												</div>
 											</div>
@@ -513,7 +513,7 @@
 																disabled={installingOverlay !== null}
 																class="text-xs bg-accent text-white px-2 py-0.5 rounded hover:bg-accent-hover disabled:opacity-50"
 															>
-																{installingOverlay === overlay.path ? 'Installing...' : 'Install'}
+																{installingOverlay === overlay.path ? 'Downloading...' : 'Download'}
 															</button>
 														</div>
 													</div>
