@@ -41,7 +41,7 @@ jobs:
 
       - name: Promote main to prod
         run: |
-          git push origin main:prod
+          git push --force origin main:prod
 
       - name: Create GitHub Release
         env:
