@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import type { Adb } from '@yume-chan/adb';
-	import { listDirectory, pullFile, pushFile, isDirectory } from '$lib/adb/file-ops.js';
+	import { listDirectory, pullFile, pushFile, isDirectory, shell } from '$lib/adb/file-ops.js';
 	import { DEVICE_PATHS, type DirectoryEntry } from '$lib/adb/types.js';
 	import ImagePreview from './ImagePreview.svelte';
 
@@ -158,6 +158,28 @@
 		input.click();
 	}
 
+	let creatingFolder = $state(false);
+
+	async function createFolder() {
+		const name = prompt('New folder name:');
+		if (!name || !name.trim()) return;
+		const trimmed = name.trim();
+		if (trimmed.includes('/') || trimmed.includes('\\')) {
+			error = 'Folder name cannot contain slashes';
+			return;
+		}
+		creatingFolder = true;
+		error = '';
+		try {
+			const remotePath = currentPath === '/' ? '/' + trimmed : currentPath + '/' + trimmed;
+			await shell(adb, `mkdir -p "${remotePath}"`);
+			await navigate(currentPath);
+		} catch (e) {
+			error = `Failed to create folder: ${e instanceof Error ? e.message : String(e)}`;
+		}
+		creatingFolder = false;
+	}
+
 	function formatSize(size: bigint): string {
 		const n = Number(size);
 		if (n < 1024) return `${n} B`;
@@ -287,6 +309,13 @@
 	<div class="flex items-center justify-between mb-4">
 		<h2 class="text-2xl font-bold text-text">File Browser</h2>
 		<div class="flex items-center gap-2">
+			<button
+				onclick={createFolder}
+				disabled={creatingFolder}
+				class="text-sm bg-surface hover:bg-surface-hover text-text disabled:opacity-50 px-3 py-1.5 rounded"
+			>
+				{creatingFolder ? 'Creating...' : 'New Folder'}
+			</button>
 			<button
 				onclick={uploadFiles}
 				disabled={uploading}
