@@ -4,6 +4,7 @@
 	import RomsView from '../components/RomsView.svelte';
 	import FileBrowserView from '../components/FileBrowserView.svelte';
 	import OverlaysView from '../components/OverlaysView.svelte';
+	import CheatsView from '../components/CheatsView.svelte';
 	import CollectionsView from '../components/CollectionsView.svelte';
 	import LogsView from '../components/LogsView.svelte';
 	import ScreenshotsView from '../components/ScreenshotsView.svelte';
@@ -45,6 +46,8 @@
 			<RomsView adb={getConnection()!.adb} />
 		{:else if activeView === 'overlays'}
 			<OverlaysView adb={getConnection()!.adb} />
+		{:else if activeView === 'cheats'}
+			<CheatsView adb={getConnection()!.adb} />
 		{:else if activeView === 'collections'}
 			<CollectionsView adb={getConnection()!.adb} />
 		{:else if activeView === 'screenshots'}
