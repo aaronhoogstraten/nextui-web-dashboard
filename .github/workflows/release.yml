@@ -51,3 +51,9 @@ jobs:
             --target main \
             --title "${{ inputs.version }}" \
             --generate-notes
+
+      - name: Trigger deploy workflow
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run deploy.yml --ref prod
