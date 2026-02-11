@@ -23,6 +23,7 @@
 		hasMedia: boolean;
 		thumbnailUrl: string | null;
 		loadingThumb: boolean;
+		displayName: string;
 	}
 
 	interface SystemState {
@@ -40,6 +41,9 @@
 		bglistUrl: string | null;
 		iconUrl: string | null;
 		iconFileName: string;
+		displayNameMap: Map<string, string>;
+		displayNameDirty: boolean;
+		savingNames: boolean;
 	}
 
 	function dirName(path: string): string {
@@ -63,7 +67,10 @@
 				bgUrl: null,
 				bglistUrl: null,
 				iconUrl: null,
-				iconFileName: `${dirName(devicePath)}.png`
+				iconFileName: `${dirName(devicePath)}.png`,
+				displayNameMap: new Map(),
+				displayNameDirty: false,
+				savingNames: false
 			};
 		})
 	);
@@ -144,7 +151,10 @@
 					bgUrl: null,
 					bglistUrl: null,
 					iconUrl: null,
-					iconFileName: `${dirName(devicePath)}.png`
+					iconFileName: `${dirName(devicePath)}.png`,
+					displayNameMap: new Map(),
+					displayNameDirty: false,
+					savingNames: false
 				});
 			}
 		} catch {
@@ -201,6 +211,19 @@
 				state.iconUrl = URL.createObjectURL(new Blob([data as unknown as BlobPart], { type: 'image/png' }));
 			} catch { /* icon doesn't exist — skip */ }
 
+			// Load map.txt for display names
+			let displayNameMap = new Map<string, string>();
+			try {
+				const mapExists = await pathExists(adb, `${state.devicePath}/map.txt`);
+				if (mapExists) {
+					const mapData = await pullFile(adb, `${state.devicePath}/map.txt`);
+					const mapContent = new TextDecoder().decode(mapData);
+					displayNameMap = parseMapTxt(mapContent);
+				}
+			} catch { /* map.txt read failed — skip */ }
+			state.displayNameMap = displayNameMap;
+			state.displayNameDirty = false;
+
 			// Build ROM entries with media matching
 			state.roms = romFiles.map((f) => {
 				const baseName = getBaseName(f.name);
@@ -213,7 +236,8 @@
 					mediaFileName,
 					hasMedia,
 					thumbnailUrl: null,
-					loadingThumb: false
+					loadingThumb: false,
+					displayName: displayNameMap.get(f.name) || ''
 				};
 			});
 
@@ -499,6 +523,111 @@
 			state.error = `Remove failed: ${e instanceof Error ? e.message : String(e)}`;
 		} finally {
 			removingMediaFor = null;
+		}
+	}
+
+	// =============================================
+	// Display Name Mapping (map.txt)
+	// =============================================
+
+	function parseMapTxt(content: string): Map<string, string> {
+		const map = new Map<string, string>();
+		for (const line of content.split('\n')) {
+			const tabIdx = line.indexOf('\t');
+			if (tabIdx < 0) continue;
+			const filename = line.substring(0, tabIdx);
+			const displayName = line.substring(tabIdx + 1).trimEnd();
+			if (filename && displayName) map.set(filename, displayName);
+		}
+		return map;
+	}
+
+	function serializeMapTxt(map: Map<string, string>): string {
+		const lines: string[] = [];
+		for (const [filename, displayName] of map) {
+			if (displayName) lines.push(`${filename}\t${displayName}`);
+		}
+		return lines.join('\n') + (lines.length > 0 ? '\n' : '');
+	}
+
+	function renameRom(state: SystemState, rom: RomEntry) {
+		const current = rom.displayName || '';
+		const result = prompt('Display name for ' + rom.name + ':', current);
+		if (result === null) return; // cancelled
+		const trimmed = result.trim();
+		rom.displayName = trimmed;
+		// Mark system dirty if any ROM differs from saved map
+		state.displayNameDirty = state.roms.some(
+			(r) => (r.displayName || '') !== (state.displayNameMap.get(r.name) || '')
+		);
+	}
+
+	async function saveDisplayNames(state: SystemState) {
+		state.savingNames = true;
+		try {
+			// Rebuild map from current ROM entries + preserve unknown entries
+			const newMap = new Map<string, string>();
+			// Keep entries for filenames not in the current ROM list (preserved unknowns)
+			const romNames = new Set(state.roms.map((r) => r.name));
+			for (const [k, v] of state.displayNameMap) {
+				if (!romNames.has(k) && v) newMap.set(k, v);
+			}
+			// Add current ROM display names
+			for (const rom of state.roms) {
+				if (rom.displayName) newMap.set(rom.name, rom.displayName);
+			}
+
+			if (newMap.size === 0) {
+				await shell(adb, `rm -f "${state.devicePath}/map.txt"`);
+			} else {
+				const content = serializeMapTxt(newMap);
+				const data = new TextEncoder().encode(content);
+				await pushFile(adb, `${state.devicePath}/map.txt`, data);
+			}
+			state.displayNameMap = newMap;
+			state.displayNameDirty = false;
+		} catch (e) {
+			state.error = `Failed to save names: ${e instanceof Error ? e.message : String(e)}`;
+		} finally {
+			state.savingNames = false;
+		}
+	}
+
+	let savingNameFor: string | null = $state(null);
+
+	async function saveDisplayNameForRom(state: SystemState, rom: RomEntry) {
+		savingNameFor = rom.name;
+		try {
+			// Update the saved map with this ROM's current display name
+			if (rom.displayName) {
+				state.displayNameMap.set(rom.name, rom.displayName);
+			} else {
+				state.displayNameMap.delete(rom.name);
+			}
+
+			// Write the full map (including preserved unknowns)
+			const cleanMap = new Map<string, string>();
+			for (const [k, v] of state.displayNameMap) {
+				if (v) cleanMap.set(k, v);
+			}
+
+			if (cleanMap.size === 0) {
+				await shell(adb, `rm -f "${state.devicePath}/map.txt"`);
+			} else {
+				const content = serializeMapTxt(cleanMap);
+				const data = new TextEncoder().encode(content);
+				await pushFile(adb, `${state.devicePath}/map.txt`, data);
+			}
+			state.displayNameMap = cleanMap;
+
+			// Recheck system dirty state
+			state.displayNameDirty = state.roms.some(
+				(r) => (r.displayName || '') !== (state.displayNameMap.get(r.name) || '')
+			);
+		} catch (e) {
+			state.error = `Failed to save name: ${e instanceof Error ? e.message : String(e)}`;
+		} finally {
+			savingNameFor = null;
 		}
 	}
 
@@ -854,13 +983,24 @@
 									</div>
 								{/if}
 							</div>
-							<button
-								onclick={() => uploadRoms(s)}
-								disabled={uploadingTo !== null}
-								class="text-sm bg-accent text-white px-3 py-1.5 rounded hover:bg-accent-hover disabled:opacity-50"
-							>
-								{uploadingTo === s.system.systemCode ? 'Uploading...' : 'Upload ROMs'}
-							</button>
+							<div class="flex items-center gap-2">
+								{#if s.displayNameDirty}
+									<button
+										onclick={() => saveDisplayNames(s)}
+										disabled={s.savingNames}
+										class="text-sm bg-green-700 text-white px-3 py-1.5 rounded hover:bg-green-600 disabled:opacity-50"
+									>
+										{s.savingNames ? 'Saving...' : 'Save Names'}
+									</button>
+								{/if}
+								<button
+									onclick={() => uploadRoms(s)}
+									disabled={uploadingTo !== null}
+									class="text-sm bg-accent text-white px-3 py-1.5 rounded hover:bg-accent-hover disabled:opacity-50"
+								>
+									{uploadingTo === s.system.systemCode ? 'Uploading...' : 'Upload ROMs'}
+								</button>
+							</div>
 						</div>
 
 						{#if s.error}
@@ -942,11 +1082,21 @@
 
 										<!-- ROM info -->
 										<div class="flex-1 min-w-0">
-											<div class="text-sm text-text truncate">{rom.name}</div>
-											{#if rom.hasMedia}
-												<div class="text-xs text-text-muted truncate">{rom.mediaFileName}</div>
+											{#if rom.displayName}
+												<div class="text-sm text-text truncate">
+													{#if rom.displayName.startsWith('.')}
+														<span class="text-text-muted text-xs mr-1">[hidden]</span>
+													{/if}
+													{rom.displayName}
+												</div>
+												<div class="text-xs text-text-muted truncate">{rom.name}</div>
 											{:else}
-												<div class="text-xs text-text-muted italic">No media</div>
+												<div class="text-sm text-text truncate">{rom.name}</div>
+												{#if rom.hasMedia}
+													<div class="text-xs text-text-muted truncate">{rom.mediaFileName}</div>
+												{:else}
+													<div class="text-xs text-text-muted italic">No media</div>
+												{/if}
 											{/if}
 										</div>
 
@@ -957,6 +1107,23 @@
 
 										<!-- Action buttons -->
 										<div class="flex items-center gap-1 shrink-0">
+											<button
+												onclick={() => renameRom(s, rom)}
+												class="text-xs px-2 py-1 rounded text-text-muted hover:bg-surface"
+												title="Set display name"
+											>
+												Rename
+											</button>
+											{#if (rom.displayName || '') !== (s.displayNameMap.get(rom.name) || '')}
+												<button
+													onclick={() => saveDisplayNameForRom(s, rom)}
+													disabled={savingNameFor !== null}
+													class="text-xs px-2 py-1 rounded text-green-400 hover:bg-surface disabled:opacity-50"
+													title="Save display name to device"
+												>
+													{savingNameFor === rom.name ? 'Saving...' : 'Save name'}
+												</button>
+											{/if}
 											<button
 												onclick={() => uploadMedia(s, rom)}
 												disabled={uploadingMediaFor !== null || removingMediaFor !== null || removingRom !== null}
