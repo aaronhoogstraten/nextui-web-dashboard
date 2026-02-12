@@ -132,19 +132,17 @@ export async function listDirectory(adb: Adb, remotePath: string): Promise<Direc
  */
 export async function pathExists(adb: Adb, remotePath: string): Promise<boolean> {
 	adbLog.debug(`sync.lstat → ${remotePath} (pathExists)`);
+	const sync = await adb.sync(); // Let transport errors propagate
 	try {
-		const sync = await adb.sync();
-		try {
-			const st = await sync.lstat(remotePath);
-			const exists = st.mode !== 0;
-			adbLog.debug(`sync.lstat ✓ ${remotePath} → ${exists ? 'exists' : 'not found'}`);
-			return exists;
-		} finally {
-			await sync.dispose();
-		}
+		const st = await sync.lstat(remotePath);
+		const exists = st.mode !== 0;
+		adbLog.debug(`sync.lstat ✓ ${remotePath} → ${exists ? 'exists' : 'not found'}`);
+		return exists;
 	} catch (e) {
 		adbLog.debug(`sync.lstat ✗ ${remotePath}: ${e}`);
 		return false;
+	} finally {
+		await sync.dispose();
 	}
 }
 
@@ -154,30 +152,20 @@ export async function pathExists(adb: Adb, remotePath: string): Promise<boolean>
  */
 export async function isDirectory(adb: Adb, remotePath: string): Promise<boolean> {
 	adbLog.debug(`sync.lstat → ${remotePath} (isDirectory)`);
+	const sync = await adb.sync(); // Let transport errors propagate
 	try {
-		const sync = await adb.sync();
-		try {
-			const st = await sync.lstat(remotePath);
-			const isDir = (st.mode & 0o170000) === 0o040000; // S_IFDIR
-			adbLog.debug(`sync.lstat ✓ ${remotePath} → isDir=${isDir}`);
-			return isDir;
-		} finally {
-			await sync.dispose();
-		}
+		const st = await sync.lstat(remotePath);
+		const isDir = (st.mode & 0o170000) === 0o040000; // S_IFDIR
+		adbLog.debug(`sync.lstat ✓ ${remotePath} → isDir=${isDir}`);
+		return isDir;
 	} catch (e) {
 		adbLog.debug(`sync.lstat ✗ ${remotePath}: ${e}`);
 		return false;
+	} finally {
+		await sync.dispose();
 	}
 }
 
-/**
- * Run a shell command on the device and return stdout.
- * Tries multiple approaches since some devices have limited ADB daemon support.
- *
- * @param adb - Active ADB connection
- * @param command - Shell command to execute
- * @returns Command stdout
- */
 /**
  * Run a shell command on the device and return stdout.
  * Uses raw shell socket (createSocketAndWait) which works on NextUI's
