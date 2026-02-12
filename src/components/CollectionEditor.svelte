@@ -4,6 +4,7 @@
 	import { listDirectory, pushFile, pathExists } from '$lib/adb/file-ops.js';
 	import { parseRomDirectoryName } from '$lib/roms/definitions.js';
 	import { formatError } from '$lib/utils.js';
+	import Modal from './Modal.svelte';
 
 	interface CollectionInfo {
 		name: string;
@@ -334,8 +335,8 @@
 
 <!-- ROM Picker Modal -->
 {#if pickerOpen}
-	<div class="fixed inset-0 bg-black/80 flex items-center justify-center z-50" role="dialog">
-		<div class="bg-bg border border-border rounded-lg w-full max-w-2xl max-h-[80vh] flex flex-col mx-4">
+	<Modal onclose={closePicker} maxWidth="max-w-2xl">
+		<div class="max-h-[80vh] flex flex-col">
 			<div class="flex items-center justify-between p-4 border-b border-border shrink-0">
 				<h3 class="text-lg font-bold text-text">Add ROMs to Collection</h3>
 				<div class="flex items-center gap-2">
@@ -405,5 +406,5 @@
 				{/if}
 			</div>
 		</div>
-	</div>
+	</Modal>
 {/if}

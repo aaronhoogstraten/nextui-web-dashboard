@@ -2,7 +2,10 @@
 	let { src, alt, onClose }: { src: string; alt: string; onClose: () => void } = $props();
 
 	function handleKeydown(e: KeyboardEvent) {
-		if (e.key === 'Escape') onClose();
+		if (e.key === 'Escape') {
+			e.stopPropagation();
+			onClose();
+		}
 	}
 </script>
 
@@ -12,6 +15,8 @@
 	class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 cursor-pointer border-none p-0"
 	onclick={onClose}
 	aria-label="Close image preview"
+	aria-modal="true"
+	role="dialog"
 	type="button"
 >
 	<div class="text-center">

@@ -6,6 +6,7 @@
 	import { adbExec } from '$lib/stores/connection.svelte.js';
 	import { formatSize, formatError, pickFiles } from '$lib/utils.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
+	import Modal from './Modal.svelte';
 
 	let { adb }: { adb: Adb } = $props();
 
@@ -415,8 +416,8 @@
 </div>
 
 {#if pickerOpen}
-	<div class="fixed inset-0 bg-black/80 flex items-center justify-center z-50" role="dialog">
-		<div class="bg-bg border border-border rounded-lg w-full max-w-md max-h-[70vh] flex flex-col mx-4">
+	<Modal onclose={() => (pickerOpen = false)}>
+		<div class="max-h-[70vh] flex flex-col">
 			<div class="flex items-center justify-between p-4 border-b border-border shrink-0">
 				<h3 class="text-lg font-bold text-text">Select System</h3>
 				<button
@@ -444,5 +445,5 @@
 				{/if}
 			</div>
 		</div>
-	</div>
+	</Modal>
 {/if}

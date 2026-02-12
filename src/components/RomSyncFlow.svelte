@@ -6,6 +6,7 @@
 	import { formatSize } from '$lib/utils.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
 	import { parseRomDirectoryName } from '$lib/roms/index.js';
+	import Modal from './Modal.svelte';
 
 	let { adb, oncomplete }: { adb: Adb; oncomplete: () => void } = $props();
 
@@ -418,8 +419,8 @@
 
 <!-- Sync Conflict Dialog -->
 {#if syncConflictFile}
-	<div class="fixed inset-0 bg-black/80 flex items-center justify-center z-50" role="dialog">
-		<div class="bg-bg border border-border rounded-lg w-full max-w-md mx-4 p-6">
+	<Modal onclose={() => resolveSyncConflict('skip')}>
+		<div class="p-6">
 			<h3 class="text-lg font-bold text-text mb-3">File Already Exists</h3>
 			<div class="text-sm text-text mb-4">
 				<div class="font-mono text-xs text-text-muted mb-3 truncate" title={syncConflictFile.name}>{syncConflictFile.name}</div>
@@ -435,5 +436,5 @@
 				<button onclick={() => resolveSyncConflict('skip-all')} class="text-sm bg-surface text-text-muted px-3 py-2 rounded hover:bg-surface-hover">Skip All</button>
 			</div>
 		</div>
-	</div>
+	</Modal>
 {/if}
