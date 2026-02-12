@@ -200,11 +200,31 @@
 	let communityLoading = $state(false);
 	let communityError: string = $state('');
 	let installingOverlay: string | null = $state(null);
+	let rateLimitRemaining: number | null = $state(null);
+	let rateLimitReset: Date | null = $state(null);
+
+	function updateRateLimit(res: Response) {
+		const remaining = res.headers.get('X-RateLimit-Remaining');
+		const reset = res.headers.get('X-RateLimit-Reset');
+		if (remaining !== null) rateLimitRemaining = parseInt(remaining, 10);
+		if (reset !== null) rateLimitReset = new Date(parseInt(reset, 10) * 1000);
+	}
+
+	function formatResetTime(reset: Date): string {
+		const mins = Math.max(0, Math.ceil((reset.getTime() - Date.now()) / 60000));
+		if (mins === 0) return 'less than a minute';
+		return `${mins} minute${mins !== 1 ? 's' : ''}`;
+	}
 
 	async function fetchJson(url: string): Promise<any[]> {
 		const res = await fetch(url);
+		updateRateLimit(res);
 		if (!res.ok) {
 			if (res.status === 404) return [];
+			if (res.status === 403 && rateLimitRemaining === 0) {
+				const waitMsg = rateLimitReset ? ` Try again in ${formatResetTime(rateLimitReset)}.` : '';
+				throw new Error(`GitHub API rate limit exceeded (60 requests/hour for unauthenticated access).${waitMsg}`);
+			}
 			throw new Error(`GitHub API ${res.status}: ${res.statusText}`);
 		}
 		return res.json();
@@ -473,6 +493,12 @@
 											View on GitHub
 										</a>
 									</div>
+
+									{#if rateLimitRemaining !== null && rateLimitRemaining <= 10}
+										<div class="text-xs text-yellow-500 mb-2">
+											GitHub API: {rateLimitRemaining} request{rateLimitRemaining !== 1 ? 's' : ''} remaining{rateLimitReset ? ` (resets in ${formatResetTime(rateLimitReset)})` : ''}
+										</div>
+									{/if}
 
 									{#if communityLoading}
 										<div class="text-sm text-text-muted py-4 text-center">Loading community overlays...</div>
