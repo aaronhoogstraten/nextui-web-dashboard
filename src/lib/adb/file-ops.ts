@@ -510,15 +510,3 @@ export async function runDiagnostics(
 
 	return results;
 }
-
-/**
- * Compute SHA-256 checksum of data using the Web Crypto API.
- *
- * @param data - Data to hash
- * @returns Lowercase hex string of the SHA-256 hash
- */
-export async function sha256(data: Uint8Array): Promise<string> {
-	const hashBuffer = await crypto.subtle.digest('SHA-256', data as unknown as BufferSource);
-	const hashArray = Array.from(new Uint8Array(hashBuffer));
-	return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
-}

@@ -23,6 +23,5 @@ export {
 	shell,
 	getStorageInfo,
 	verifyNextUIInstallation,
-	runDiagnostics,
-	sha256
+	runDiagnostics
 } from './file-ops.js';
