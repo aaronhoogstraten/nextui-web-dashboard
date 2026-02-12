@@ -230,9 +230,15 @@ export async function getStorageInfo(adb: Adb): Promise<StorageInfo | null> {
  * @param adb - Active ADB connection
  * @returns Object with success status and error message if failed
  */
+export interface VerifyResult {
+	ok: boolean;
+	error?: string;
+	version?: string;
+}
+
 export async function verifyNextUIInstallation(
 	adb: Adb
-): Promise<{ ok: boolean; error?: string; version?: string }> {
+): Promise<VerifyResult> {
 	// Check base path by listing /mnt and looking for SDCARD
 	if (!(await pathExists(adb, DEVICE_PATHS.base))) {
 		return { ok: false, error: `NextUI installation not found at ${DEVICE_PATHS.base}` };

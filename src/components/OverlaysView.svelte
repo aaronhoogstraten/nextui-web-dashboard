@@ -212,7 +212,14 @@
 		return plural(mins, 'minute');
 	}
 
-	async function fetchJson(url: string): Promise<any[]> {
+	interface GitHubEntry {
+		name: string;
+		path: string;
+		type: 'file' | 'dir' | 'symlink' | 'submodule';
+		download_url: string | null;
+	}
+
+	async function fetchJson(url: string): Promise<GitHubEntry[]> {
 		const res = await fetch(url);
 		updateRateLimit(res);
 		if (!res.ok) {
