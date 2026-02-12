@@ -4,6 +4,7 @@
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { listDirectory, pullFile, pushFile, shell, pathExists } from '$lib/adb/file-ops.js';
 	import { parseRomDirectoryName } from '$lib/roms/definitions.js';
+	import { formatError, pickFile } from '$lib/utils.js';
 	import ImagePreview from './ImagePreview.svelte';
 
 	let { adb }: { adb: Adb } = $props();
@@ -126,7 +127,7 @@
 			// Load bg
 			loadBg();
 		} catch (e) {
-			error = `Failed to load collections: ${e instanceof Error ? e.message : String(e)}`;
+			error = `Failed to load collections: ${formatError(e)}`;
 		}
 
 		loading = false;
@@ -181,7 +182,7 @@
 			await pushFile(adb, `${COLLECTIONS_PATH}/${trimmed}.txt`, content);
 			await refresh();
 		} catch (e) {
-			error = `Failed to create collection: ${e instanceof Error ? e.message : String(e)}`;
+			error = `Failed to create collection: ${formatError(e)}`;
 		}
 	}
 
@@ -200,34 +201,26 @@
 			if (col.iconUrl) URL.revokeObjectURL(col.iconUrl);
 			collections = collections.filter((c) => c !== col);
 		} catch (e) {
-			error = `Delete failed: ${e instanceof Error ? e.message : String(e)}`;
+			error = `Delete failed: ${formatError(e)}`;
 		}
 		deletingCollection = null;
 	}
 
 	async function uploadIcon(col: CollectionState) {
-		const input = document.createElement('input');
-		input.type = 'file';
-		input.accept = '.png';
-
-		input.onchange = async () => {
-			const file = input.files?.[0];
-			if (!file) return;
-			uploadingIcon = col.name;
-			try {
-				await shell(adb, `mkdir -p "${MEDIA_PATH}"`);
-				const data = new Uint8Array(await file.arrayBuffer());
-				await pushFile(adb, `${MEDIA_PATH}/${col.name}.png`, data);
-				// Reload icon
-				if (col.iconUrl) URL.revokeObjectURL(col.iconUrl);
-				const blob = new Blob([data as unknown as BlobPart], { type: 'image/png' });
-				col.iconUrl = URL.createObjectURL(blob);
-			} catch (e) {
-				error = `Icon upload failed: ${e instanceof Error ? e.message : String(e)}`;
-			}
-			uploadingIcon = null;
-		};
-		input.click();
+		const file = await pickFile({ accept: '.png' });
+		if (!file) return;
+		uploadingIcon = col.name;
+		try {
+			await shell(adb, `mkdir -p "${MEDIA_PATH}"`);
+			const data = new Uint8Array(await file.arrayBuffer());
+			await pushFile(adb, `${MEDIA_PATH}/${col.name}.png`, data);
+			if (col.iconUrl) URL.revokeObjectURL(col.iconUrl);
+			const blob = new Blob([data as unknown as BlobPart], { type: 'image/png' });
+			col.iconUrl = URL.createObjectURL(blob);
+		} catch (e) {
+			error = `Icon upload failed: ${formatError(e)}`;
+		}
+		uploadingIcon = null;
 	}
 
 	async function removeIcon(col: CollectionState) {
@@ -237,30 +230,23 @@
 			if (col.iconUrl) URL.revokeObjectURL(col.iconUrl);
 			col.iconUrl = null;
 		} catch (e) {
-			error = `Remove icon failed: ${e instanceof Error ? e.message : String(e)}`;
+			error = `Remove icon failed: ${formatError(e)}`;
 		}
 	}
 
 	async function uploadBg() {
-		const input = document.createElement('input');
-		input.type = 'file';
-		input.accept = '.png';
-
-		input.onchange = async () => {
-			const file = input.files?.[0];
-			if (!file) return;
-			try {
-				await shell(adb, `mkdir -p "${MEDIA_PATH}"`);
-				const data = new Uint8Array(await file.arrayBuffer());
-				await pushFile(adb, `${MEDIA_PATH}/bg.png`, data);
-				if (bgUrl) URL.revokeObjectURL(bgUrl);
-				const blob = new Blob([data as unknown as BlobPart], { type: 'image/png' });
-				bgUrl = URL.createObjectURL(blob);
-			} catch (e) {
-				error = `Background upload failed: ${e instanceof Error ? e.message : String(e)}`;
-			}
-		};
-		input.click();
+		const file = await pickFile({ accept: '.png' });
+		if (!file) return;
+		try {
+			await shell(adb, `mkdir -p "${MEDIA_PATH}"`);
+			const data = new Uint8Array(await file.arrayBuffer());
+			await pushFile(adb, `${MEDIA_PATH}/bg.png`, data);
+			if (bgUrl) URL.revokeObjectURL(bgUrl);
+			const blob = new Blob([data as unknown as BlobPart], { type: 'image/png' });
+			bgUrl = URL.createObjectURL(blob);
+		} catch (e) {
+			error = `Background upload failed: ${formatError(e)}`;
+		}
 	}
 
 	async function removeBg() {
@@ -270,7 +256,7 @@
 			if (bgUrl) URL.revokeObjectURL(bgUrl);
 			bgUrl = null;
 		} catch (e) {
-			error = `Remove background failed: ${e instanceof Error ? e.message : String(e)}`;
+			error = `Remove background failed: ${formatError(e)}`;
 		}
 	}
 
@@ -320,7 +306,7 @@
 			editorOriginal = [...editorPaths];
 			error = 'Saved';
 		} catch (e) {
-			error = `Save failed: ${e instanceof Error ? e.message : String(e)}`;
+			error = `Save failed: ${formatError(e)}`;
 		}
 		saving = false;
 	}
@@ -393,7 +379,7 @@
 			}
 			pickerSystems = systems;
 		} catch (e) {
-			error = `Failed to load ROM systems: ${e instanceof Error ? e.message : String(e)}`;
+			error = `Failed to load ROM systems: ${formatError(e)}`;
 		}
 
 		pickerLoading = false;

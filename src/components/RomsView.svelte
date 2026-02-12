@@ -11,6 +11,7 @@
 	} from '$lib/roms/index.js';
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { listDirectory, pathExists, pullFile, pushFile, shell } from '$lib/adb/file-ops.js';
+	import { formatSize, formatError, pickFile, pickFiles } from '$lib/utils.js';
 	import ImagePreview from './ImagePreview.svelte';
 
 	let { adb }: { adb: Adb } = $props();
@@ -248,7 +249,7 @@
 			// Start loading thumbnails
 			loadThumbnails(state);
 		} catch (e) {
-			state.error = `Failed to load ROMs: ${e instanceof Error ? e.message : String(e)}`;
+			state.error = `Failed to load ROMs: ${formatError(e)}`;
 		}
 
 		state.loadingRoms = false;
@@ -310,34 +311,26 @@
 	}
 
 	async function uploadSpecialMedia(state: SystemState, filename: string) {
-		const input = document.createElement('input');
-		input.type = 'file';
-		input.accept = '.png';
+		const file = await pickFile({ accept: '.png' });
+		if (!file) return;
 
-		input.onchange = async () => {
-			const file = input.files?.[0];
-			if (!file) return;
-
-			uploadingBg = `${state.system.systemCode}/${filename}`;
-			try {
-				const dir = getSpecialMediaDir(state, filename);
-				const dirExists = await pathExists(adb, dir);
-				if (!dirExists) {
-					await shell(adb, `mkdir -p "${dir}"`);
-				}
-
-				const data = new Uint8Array(await file.arrayBuffer());
-				await pushFile(adb, getSpecialMediaPath(state, filename), data);
-				const url = URL.createObjectURL(new Blob([data as unknown as BlobPart], { type: 'image/png' }));
-				setSpecialMedia(state, filename, url);
-			} catch (e) {
-				state.error = `Upload failed: ${e instanceof Error ? e.message : String(e)}`;
-			} finally {
-				uploadingBg = null;
+		uploadingBg = `${state.system.systemCode}/${filename}`;
+		try {
+			const dir = getSpecialMediaDir(state, filename);
+			const dirExists = await pathExists(adb, dir);
+			if (!dirExists) {
+				await shell(adb, `mkdir -p "${dir}"`);
 			}
-		};
 
-		input.click();
+			const data = new Uint8Array(await file.arrayBuffer());
+				await pushFile(adb, getSpecialMediaPath(state, filename), data);
+			const url = URL.createObjectURL(new Blob([data as unknown as BlobPart], { type: 'image/png' }));
+			setSpecialMedia(state, filename, url);
+		} catch (e) {
+			state.error = `Upload failed: ${formatError(e)}`;
+		} finally {
+			uploadingBg = null;
+		}
 	}
 
 	async function removeSpecialMedia(state: SystemState, filename: string) {
@@ -348,7 +341,7 @@
 			await shell(adb, `rm "${getSpecialMediaPath(state, filename)}"`);
 			setSpecialMedia(state, filename, null);
 		} catch (e) {
-			state.error = `Delete failed: ${e instanceof Error ? e.message : String(e)}`;
+			state.error = `Delete failed: ${formatError(e)}`;
 		} finally {
 			removingBg = null;
 		}
@@ -359,14 +352,6 @@
 		if (state.expanded && !state.romsLoaded) {
 			await loadRomDetails(state);
 		}
-	}
-
-	function formatSize(size: bigint): string {
-		const n = Number(size);
-		if (n < 1024) return `${n} B`;
-		if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-		if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
-		return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`;
 	}
 
 	function openPreview(rom: RomEntry) {
@@ -382,96 +367,75 @@
 	}
 
 	async function uploadRoms(state: SystemState) {
-		const input = document.createElement('input');
-		input.type = 'file';
-		input.multiple = true;
-		input.accept = state.system.isCustom ? '' : state.system.supportedFormats.join(',');
+		const accept = state.system.isCustom ? undefined : state.system.supportedFormats.join(',');
+		const files = await pickFiles({ accept });
+		if (files.length === 0) return;
 
-		input.onchange = async () => {
-			const files = input.files;
-			if (!files || files.length === 0) return;
+		uploadingTo = state.system.systemCode;
+		let uploaded = 0;
 
-			uploadingTo = state.system.systemCode;
-			let uploaded = 0;
-
-			try {
-				for (const file of files) {
-					const ext = '.' + file.name.split('.').pop()?.toLowerCase();
-					if (!isValidRomExtension(ext, state.system)) {
-						continue;
-					}
-
-					const data = new Uint8Array(await file.arrayBuffer());
-					const remotePath = `${state.devicePath}/${file.name}`;
-					await pushFile(adb, remotePath, data);
-					uploaded++;
-				}
-
-				state.error = uploaded > 0 ? `Uploaded ${uploaded} file(s)` : 'No valid files selected';
-				// Reload ROM details
-				cleanupThumbnails(state);
-				state.roms = [];
-				state.romsLoaded = false;
-				if (state.expanded) {
-					await loadRomDetails(state);
-				} else {
-					// At least refresh count
-					try {
-						const entries = await listDirectory(adb, state.devicePath);
-						state.romCount = entries.filter((e) => e.isFile && !e.name.startsWith('.')).length;
-					} catch {
-						// ignore
-					}
-				}
-			} catch (e) {
-				state.error = `Upload failed: ${e instanceof Error ? e.message : String(e)}`;
-			} finally {
-				uploadingTo = null;
-			}
-		};
-
-		input.click();
-	}
-
-	async function uploadMedia(state: SystemState, rom: RomEntry) {
-		const input = document.createElement('input');
-		input.type = 'file';
-		input.accept = '.png';
-
-		input.onchange = async () => {
-			const file = input.files?.[0];
-			if (!file) return;
-
-			uploadingMediaFor = rom.name;
-
-			try {
-				const mediaPath = getRomMediaPath(state.system);
-
-				// Ensure .media directory exists
-				const mediaDirExists = await pathExists(adb, mediaPath);
-				if (!mediaDirExists) {
-					await shell(adb, `mkdir -p "${mediaPath}"`);
+		try {
+			for (const file of files) {
+				const ext = '.' + file.name.split('.').pop()?.toLowerCase();
+				if (!isValidRomExtension(ext, state.system)) {
+					continue;
 				}
 
 				const data = new Uint8Array(await file.arrayBuffer());
-				// Auto-rename to match the ROM's base name
-				const remotePath = `${mediaPath}/${rom.mediaFileName}`;
+				const remotePath = `${state.devicePath}/${file.name}`;
 				await pushFile(adb, remotePath, data);
-
-				// Update state and load the new thumbnail
-				rom.hasMedia = true;
-				const blob = new Blob([data as unknown as BlobPart], { type: 'image/png' });
-				if (rom.thumbnailUrl) URL.revokeObjectURL(rom.thumbnailUrl);
-				rom.thumbnailUrl = URL.createObjectURL(blob);
-				state.mediaCount = state.roms.filter((r) => r.hasMedia).length;
-			} catch (e) {
-				state.error = `Media upload failed: ${e instanceof Error ? e.message : String(e)}`;
-			} finally {
-				uploadingMediaFor = null;
+				uploaded++;
 			}
-		};
 
-		input.click();
+			state.error = uploaded > 0 ? `Uploaded ${uploaded} file(s)` : 'No valid files selected';
+			cleanupThumbnails(state);
+			state.roms = [];
+			state.romsLoaded = false;
+			if (state.expanded) {
+				await loadRomDetails(state);
+			} else {
+				try {
+					const entries = await listDirectory(adb, state.devicePath);
+					state.romCount = entries.filter((e) => e.isFile && !e.name.startsWith('.')).length;
+				} catch {
+					// ignore
+				}
+			}
+		} catch (e) {
+			state.error = `Upload failed: ${formatError(e)}`;
+		} finally {
+			uploadingTo = null;
+		}
+	}
+
+	async function uploadMedia(state: SystemState, rom: RomEntry) {
+		const file = await pickFile({ accept: '.png' });
+		if (!file) return;
+
+		uploadingMediaFor = rom.name;
+
+		try {
+			const mediaPath = getRomMediaPath(state.system);
+
+			const mediaDirExists = await pathExists(adb, mediaPath);
+			if (!mediaDirExists) {
+				await shell(adb, `mkdir -p "${mediaPath}"`);
+			}
+
+			const data = new Uint8Array(await file.arrayBuffer());
+			const remotePath = `${mediaPath}/${rom.mediaFileName}`;
+			await pushFile(adb, remotePath, data);
+
+			rom.hasMedia = true;
+			const blob = new Blob([data as unknown as BlobPart], { type: 'image/png' });
+			if (rom.thumbnailUrl) URL.revokeObjectURL(rom.thumbnailUrl);
+			rom.thumbnailUrl = URL.createObjectURL(blob);
+			state.mediaCount = state.roms.filter((r) => r.hasMedia).length;
+		} catch (e) {
+			state.error = `Media upload failed: ${formatError(e)}`;
+		} finally {
+			uploadingMediaFor = null;
+		}
 	}
 
 	let removingRom: string | null = $state(null);
@@ -500,7 +464,7 @@
 			state.romCount = state.roms.length;
 			state.mediaCount = state.roms.filter((r) => r.hasMedia).length;
 		} catch (e) {
-			state.error = `Delete failed: ${e instanceof Error ? e.message : String(e)}`;
+			state.error = `Delete failed: ${formatError(e)}`;
 		} finally {
 			removingRom = null;
 		}
@@ -520,7 +484,7 @@
 			rom.hasMedia = false;
 			state.mediaCount = state.roms.filter((r) => r.hasMedia).length;
 		} catch (e) {
-			state.error = `Remove failed: ${e instanceof Error ? e.message : String(e)}`;
+			state.error = `Remove failed: ${formatError(e)}`;
 		} finally {
 			removingMediaFor = null;
 		}
@@ -587,7 +551,7 @@
 			state.displayNameMap = newMap;
 			state.displayNameDirty = false;
 		} catch (e) {
-			state.error = `Failed to save names: ${e instanceof Error ? e.message : String(e)}`;
+			state.error = `Failed to save names: ${formatError(e)}`;
 		} finally {
 			state.savingNames = false;
 		}
@@ -625,7 +589,7 @@
 				(r) => (r.displayName || '') !== (state.displayNameMap.get(r.name) || '')
 			);
 		} catch (e) {
-			state.error = `Failed to save name: ${e instanceof Error ? e.message : String(e)}`;
+			state.error = `Failed to save name: ${formatError(e)}`;
 		} finally {
 			savingNameFor = null;
 		}
@@ -697,13 +661,6 @@
 			existsCount: sys.files.filter((f) => f.status === 'exists').length,
 			checkedCount: sys.files.filter((f) => f.checked).length
 		};
-	}
-
-	function syncFormatSize(bytes: number): string {
-		if (bytes < 1024) return `${bytes} B`;
-		if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-		if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-		return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
 	}
 
 	async function startSyncFlow() {
@@ -1260,10 +1217,10 @@
 											</span>
 										</td>
 										<td class="py-1 px-2 text-right text-text-muted text-xs tabular-nums">
-											{syncFormatSize(file.localSize)}
+											{formatSize(file.localSize)}
 										</td>
 										<td class="py-1 px-2 text-right text-text-muted text-xs tabular-nums">
-											{file.deviceSize !== null ? syncFormatSize(file.deviceSize) : '\u2014'}
+											{file.deviceSize !== null ? formatSize(file.deviceSize) : '\u2014'}
 										</td>
 										<td class="py-1 px-2">
 											{#if file.status === 'new'}
@@ -1342,8 +1299,8 @@
 			<div class="text-sm text-text mb-4">
 				<div class="font-mono text-xs text-text-muted mb-3 truncate" title={syncConflictFile.name}>{syncConflictFile.name}</div>
 				<div class="flex justify-between text-xs">
-					<div><span class="text-text-muted">Local:</span> <span class="text-text">{syncFormatSize(syncConflictFile.localSize)}</span></div>
-					<div><span class="text-text-muted">Device:</span> <span class="text-text">{syncConflictFile.deviceSize !== null ? syncFormatSize(syncConflictFile.deviceSize) : 'unknown'}</span></div>
+					<div><span class="text-text-muted">Local:</span> <span class="text-text">{formatSize(syncConflictFile.localSize)}</span></div>
+					<div><span class="text-text-muted">Device:</span> <span class="text-text">{syncConflictFile.deviceSize !== null ? formatSize(syncConflictFile.deviceSize) : 'unknown'}</span></div>
 				</div>
 			</div>
 			<div class="grid grid-cols-2 gap-2">

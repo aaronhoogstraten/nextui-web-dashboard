@@ -3,6 +3,7 @@
 	import type { Adb } from '@yume-chan/adb';
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { listDirectory, pullFile, pushFile, shell, pathExists } from '$lib/adb/file-ops.js';
+	import { formatSize, formatError, pickFiles } from '$lib/utils.js';
 
 	let { adb }: { adb: Adb } = $props();
 
@@ -44,13 +45,6 @@
 	// --- Helpers ---
 
 	const CHEATS_PATH = DEVICE_PATHS.cheats;
-
-	function formatSize(size: bigint): string {
-		const n = Number(size);
-		if (n < 1024) return `${n} B`;
-		if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-		return `${(n / 1024 / 1024).toFixed(1)} MB`;
-	}
 
 	function extractRomName(chtFileName: string): string {
 		// Cheat filename format: "RomName.ext.cht" → ROM is "RomName.ext"
@@ -104,7 +98,7 @@
 			}
 			systems = result;
 		} catch (e) {
-			error = `Failed to load cheats: ${e instanceof Error ? e.message : String(e)}`;
+			error = `Failed to load cheats: ${formatError(e)}`;
 		}
 
 		loading = false;
@@ -156,51 +150,43 @@
 	// --- Actions ---
 
 	async function uploadCheats(sys: CheatSystem) {
-		const input = document.createElement('input');
-		input.type = 'file';
-		input.multiple = true;
-		input.accept = '.cht';
+		const files = await pickFiles({ accept: '.cht' });
+		if (files.length === 0) return;
 
-		input.onchange = async () => {
-			const files = input.files;
-			if (!files || files.length === 0) return;
+		uploadingTo = sys.systemCode;
+		error = '';
+		let uploaded = 0;
 
-			uploadingTo = sys.systemCode;
-			error = '';
-			let uploaded = 0;
+		try {
+			const sysPath = `${CHEATS_PATH}/${sys.systemCode}`;
+			await shell(adb, `mkdir -p "${sysPath}"`);
 
-			try {
-				const sysPath = `${CHEATS_PATH}/${sys.systemCode}`;
-				await shell(adb, `mkdir -p "${sysPath}"`);
-
-				for (const file of files) {
-					const data = new Uint8Array(await file.arrayBuffer());
-					await pushFile(adb, `${sysPath}/${file.name}`, data);
-					uploaded++;
-				}
-				error = `Uploaded ${uploaded} cheat file(s) to ${sys.systemCode}`;
-				// Reload this system
-				const sysEntries = await listDirectory(adb, sysPath);
-				const chtFiles = sysEntries
-					.filter((e) => e.isFile && e.name.endsWith('.cht'))
-					.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
-				sys.cheats = chtFiles.map((f) => ({
-					fileName: f.name,
-					romName: extractRomName(f.name),
-					size: f.size,
-					romExists: null
-				}));
-				if (sys.expanded) {
-					sys.loading = true;
-					await validateRoms(sys);
-					sys.loading = false;
-				}
-			} catch (e) {
-				error = `Upload failed: ${e instanceof Error ? e.message : String(e)}`;
+			for (const file of files) {
+				const data = new Uint8Array(await file.arrayBuffer());
+				await pushFile(adb, `${sysPath}/${file.name}`, data);
+				uploaded++;
 			}
-			uploadingTo = null;
-		};
-		input.click();
+			error = `Uploaded ${uploaded} cheat file(s) to ${sys.systemCode}`;
+			// Reload this system
+			const sysEntries = await listDirectory(adb, sysPath);
+			const chtFiles = sysEntries
+				.filter((e) => e.isFile && e.name.endsWith('.cht'))
+				.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+			sys.cheats = chtFiles.map((f) => ({
+				fileName: f.name,
+				romName: extractRomName(f.name),
+				size: f.size,
+				romExists: null
+			}));
+			if (sys.expanded) {
+				sys.loading = true;
+				await validateRoms(sys);
+				sys.loading = false;
+			}
+		} catch (e) {
+			error = `Upload failed: ${formatError(e)}`;
+		}
+		uploadingTo = null;
 	}
 
 	async function openSystemPicker() {
@@ -221,44 +207,36 @@
 					};
 				});
 		} catch (e) {
-			error = `Failed to load ROM systems: ${e instanceof Error ? e.message : String(e)}`;
+			error = `Failed to load ROM systems: ${formatError(e)}`;
 			pickerOpen = false;
 		}
 		pickerLoading = false;
 	}
 
-	function selectSystemAndUpload(sys: PickerSystem) {
+	async function selectSystemAndUpload(sys: PickerSystem) {
 		pickerOpen = false;
 		const code = sys.systemCode;
 
-		const input = document.createElement('input');
-		input.type = 'file';
-		input.multiple = true;
-		input.accept = '.cht';
+		const files = await pickFiles({ accept: '.cht' });
+		if (files.length === 0) return;
 
-		input.onchange = async () => {
-			const files = input.files;
-			if (!files || files.length === 0) return;
+		uploadingTo = code;
+		error = '';
 
-			uploadingTo = code;
-			error = '';
+		try {
+			const sysPath = `${CHEATS_PATH}/${code}`;
+			await shell(adb, `mkdir -p "${sysPath}"`);
 
-			try {
-				const sysPath = `${CHEATS_PATH}/${code}`;
-				await shell(adb, `mkdir -p "${sysPath}"`);
-
-				for (const file of files) {
-					const data = new Uint8Array(await file.arrayBuffer());
-					await pushFile(adb, `${sysPath}/${file.name}`, data);
-				}
-				error = `Uploaded ${files.length} cheat file(s) to ${code}`;
-				await refresh();
-			} catch (e) {
-				error = `Upload failed: ${e instanceof Error ? e.message : String(e)}`;
+			for (const file of files) {
+				const data = new Uint8Array(await file.arrayBuffer());
+				await pushFile(adb, `${sysPath}/${file.name}`, data);
 			}
-			uploadingTo = null;
-		};
-		input.click();
+			error = `Uploaded ${files.length} cheat file(s) to ${code}`;
+			await refresh();
+		} catch (e) {
+			error = `Upload failed: ${formatError(e)}`;
+		}
+		uploadingTo = null;
 	}
 
 	async function deleteCheat(sys: CheatSystem, cheat: CheatFile) {
@@ -271,7 +249,7 @@
 				systems = systems.filter((s) => s !== sys);
 			}
 		} catch (e) {
-			error = `Delete failed: ${e instanceof Error ? e.message : String(e)}`;
+			error = `Delete failed: ${formatError(e)}`;
 		}
 		deletingFile = null;
 	}
@@ -287,7 +265,7 @@
 			a.click();
 			URL.revokeObjectURL(url);
 		} catch (e) {
-			error = `Download failed: ${e instanceof Error ? e.message : String(e)}`;
+			error = `Download failed: ${formatError(e)}`;
 		}
 	}
 

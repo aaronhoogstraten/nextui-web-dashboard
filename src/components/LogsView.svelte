@@ -4,6 +4,7 @@
 	import { listDirectory, pullFile } from '$lib/adb/file-ops.js';
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { getNextUIVersion } from '$lib/stores/connection.svelte.js';
+	import { formatSize, formatError } from '$lib/utils.js';
 	import JSZip from 'jszip';
 
 	let { adb }: { adb: Adb } = $props();
@@ -24,12 +25,6 @@
 	let progress: string = $state('');
 
 	const totalSize = $derived(logFiles.reduce((sum, f) => sum + Number(f.size), 0));
-
-	function formatSize(bytes: number): string {
-		if (bytes < 1024) return `${bytes} B`;
-		if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-		return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-	}
 
 	async function scanForLogs() {
 		scanning = true;
@@ -67,7 +62,7 @@
 				error = 'No log files found on device.';
 			}
 		} catch (e) {
-			error = `Failed to scan for logs: ${e instanceof Error ? e.message : String(e)}`;
+			error = `Failed to scan for logs: ${formatError(e)}`;
 		}
 		scanning = false;
 	}
@@ -109,7 +104,7 @@
 			progress = '';
 			error = `Downloaded ${filename} (${logFiles.length} files)`;
 		} catch (e) {
-			error = `Download failed: ${e instanceof Error ? e.message : String(e)}`;
+			error = `Download failed: ${formatError(e)}`;
 			progress = '';
 		}
 		downloading = false;

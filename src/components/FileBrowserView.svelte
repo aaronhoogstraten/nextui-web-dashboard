@@ -3,6 +3,7 @@
 	import type { Adb } from '@yume-chan/adb';
 	import { listDirectory, pullFile, pushFile, isDirectory, shell } from '$lib/adb/file-ops.js';
 	import { DEVICE_PATHS, type DirectoryEntry } from '$lib/adb/types.js';
+	import { formatSize, formatError, joinPath, pickFiles } from '$lib/utils.js';
 	import ImagePreview from './ImagePreview.svelte';
 
 	let { adb }: { adb: Adb } = $props();
@@ -84,15 +85,14 @@
 			entries = result;
 			currentPath = path;
 		} catch (e) {
-			error = `Failed to list ${path}: ${e instanceof Error ? e.message : String(e)}`;
+			error = `Failed to list ${path}: ${formatError(e)}`;
 		}
 		loading = false;
 	}
 
 	async function handleEntryClick(entry: DirectoryEntry) {
 		if (entry.isDirectory) {
-			const newPath = currentPath === '/' ? '/' + entry.name : currentPath + '/' + entry.name;
-			await navigate(newPath);
+			await navigate(joinPath(currentPath, entry.name));
 		}
 	}
 
@@ -106,8 +106,7 @@
 		if (entry.isDirectory) return;
 		downloadingFile = entry.name;
 		try {
-			const remotePath =
-				currentPath === '/' ? '/' + entry.name : currentPath + '/' + entry.name;
+			const remotePath = joinPath(currentPath, entry.name);
 			const content = await pullFile(adb, remotePath);
 
 			// Trigger browser download
@@ -119,43 +118,31 @@
 			a.click();
 			URL.revokeObjectURL(url);
 		} catch (e) {
-			error = `Download failed: ${e instanceof Error ? e.message : String(e)}`;
+			error = `Download failed: ${formatError(e)}`;
 		}
 		downloadingFile = null;
 	}
 
 	async function uploadFiles() {
-		const input = document.createElement('input');
-		input.type = 'file';
-		input.multiple = true;
+		const files = await pickFiles();
+		if (files.length === 0) return;
 
-		input.onchange = async () => {
-			const files = input.files;
-			if (!files || files.length === 0) return;
+		uploading = true;
+		error = '';
+		let uploaded = 0;
 
-			uploading = true;
-			error = '';
-			let uploaded = 0;
-
-			try {
-				for (const file of files) {
-					const data = new Uint8Array(await file.arrayBuffer());
-					const remotePath =
-						currentPath === '/'
-							? '/' + file.name
-							: currentPath + '/' + file.name;
-					await pushFile(adb, remotePath, data);
-					uploaded++;
-				}
-				error = `Uploaded ${uploaded} file(s)`;
-				await navigate(currentPath);
-			} catch (e) {
-				error = `Upload failed: ${e instanceof Error ? e.message : String(e)}`;
+		try {
+			for (const file of files) {
+				const data = new Uint8Array(await file.arrayBuffer());
+				await pushFile(adb, joinPath(currentPath, file.name), data);
+				uploaded++;
 			}
-			uploading = false;
-		};
-
-		input.click();
+			error = `Uploaded ${uploaded} file(s)`;
+			await navigate(currentPath);
+		} catch (e) {
+			error = `Upload failed: ${formatError(e)}`;
+		}
+		uploading = false;
 	}
 
 	let creatingFolder = $state(false);
@@ -171,21 +158,13 @@
 		creatingFolder = true;
 		error = '';
 		try {
-			const remotePath = currentPath === '/' ? '/' + trimmed : currentPath + '/' + trimmed;
+			const remotePath = joinPath(currentPath, trimmed);
 			await shell(adb, `mkdir -p "${remotePath}"`);
 			await navigate(currentPath);
 		} catch (e) {
-			error = `Failed to create folder: ${e instanceof Error ? e.message : String(e)}`;
+			error = `Failed to create folder: ${formatError(e)}`;
 		}
 		creatingFolder = false;
-	}
-
-	function formatSize(size: bigint): string {
-		const n = Number(size);
-		if (n < 1024) return `${n} B`;
-		if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-		if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
-		return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`;
 	}
 
 	function formatDate(mtime: bigint): string {
@@ -228,7 +207,7 @@
 			editorContent = text;
 			editorOriginal = text;
 		} catch (e) {
-			editorError = `Failed to open: ${e instanceof Error ? e.message : String(e)}`;
+			editorError = `Failed to open: ${formatError(e)}`;
 		} finally {
 			editorLoading = false;
 		}
@@ -244,7 +223,7 @@
 			editorOriginal = editorContent;
 			editorError = 'Saved';
 		} catch (e) {
-			editorError = `Save failed: ${e instanceof Error ? e.message : String(e)}`;
+			editorError = `Save failed: ${formatError(e)}`;
 		} finally {
 			editorSaving = false;
 		}
@@ -274,7 +253,7 @@
 	async function previewImage(entry: DirectoryEntry) {
 		previewLoading = entry.name;
 		try {
-			const remotePath = currentPath === '/' ? '/' + entry.name : currentPath + '/' + entry.name;
+			const remotePath = joinPath(currentPath, entry.name);
 			const data = await pullFile(adb, remotePath);
 			const ext = entry.name.substring(entry.name.lastIndexOf('.')).toLowerCase();
 			const mimeMap: Record<string, string> = {
@@ -286,7 +265,7 @@
 			previewSrc = URL.createObjectURL(blob);
 			previewAlt = entry.name;
 		} catch (e) {
-			error = `Preview failed: ${e instanceof Error ? e.message : String(e)}`;
+			error = `Preview failed: ${formatError(e)}`;
 		} finally {
 			previewLoading = null;
 		}
@@ -439,7 +418,7 @@
 										<div class="flex items-center gap-2">
 											{#if isTextFile(entry.name)}
 												<button
-													onclick={() => openEditor(currentPath === '/' ? '/' + entry.name : currentPath + '/' + entry.name)}
+													onclick={() => openEditor(joinPath(currentPath, entry.name))}
 													class="text-xs text-accent hover:underline"
 												>
 													Edit

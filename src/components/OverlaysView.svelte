@@ -3,6 +3,7 @@
 	import type { Adb } from '@yume-chan/adb';
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { listDirectory, pullFile, pushFile, shell, pathExists } from '$lib/adb/file-ops.js';
+	import { formatSize, formatError, pickFiles } from '$lib/utils.js';
 	import ImagePreview from './ImagePreview.svelte';
 
 	let { adb }: { adb: Adb } = $props();
@@ -112,13 +113,6 @@
 		}
 	}
 
-	function formatSize(size: bigint): string {
-		const n = Number(size);
-		if (n < 1024) return `${n} B`;
-		if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-		return `${(n / 1024 / 1024).toFixed(1)} MB`;
-	}
-
 	function openPreview(file: OverlayFile, systemCode: string) {
 		if (file.thumbnailUrl) {
 			previewSrc = file.thumbnailUrl;
@@ -132,69 +126,57 @@
 	}
 
 	async function uploadOverlays(sys: SystemOverlays) {
-		const input = document.createElement('input');
-		input.type = 'file';
-		input.multiple = true;
-		input.accept = '.png';
+		const files = await pickFiles({ accept: '.png' });
+		if (files.length === 0) return;
 
-		input.onchange = async () => {
-			const files = input.files;
-			if (!files || files.length === 0) return;
+		uploadingTo = sys.systemCode;
+		let uploaded = 0;
 
-			uploadingTo = sys.systemCode;
-			let uploaded = 0;
-
-			try {
-				// Ensure directory exists
-				const dirExists = await pathExists(adb, sys.devicePath);
-				if (!dirExists) {
-					await shell(adb, `mkdir -p "${sys.devicePath}"`);
-				}
-
-				for (const file of files) {
-					if (!file.name.toLowerCase().endsWith('.png')) continue;
-					const data = new Uint8Array(await file.arrayBuffer());
-					await pushFile(adb, `${sys.devicePath}/${file.name}`, data);
-					uploaded++;
-				}
-
-				if (uploaded > 0) {
-					sys.error = `Uploaded ${uploaded} overlay(s)`;
-					// Reload this system's files
-					try {
-						const entries = await listDirectory(adb, sys.devicePath);
-						// Clean up old thumbnails
-						for (const f of sys.files) {
-							if (f.thumbnailUrl) URL.revokeObjectURL(f.thumbnailUrl);
-						}
-						sys.files = entries
-							.filter((f) => f.isFile && f.name.toLowerCase().endsWith('.png'))
-							.sort((a, b) =>
-								a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
-							)
-							.map((f) => ({
-								name: f.name,
-								size: f.size,
-								thumbnailUrl: null,
-								loadingThumb: false
-							}));
-						if (sys.expanded) {
-							await loadThumbnails(sys);
-						}
-					} catch {
-						// ignore
-					}
-				} else {
-					sys.error = 'No PNG files selected';
-				}
-			} catch (e) {
-				sys.error = `Upload failed: ${e instanceof Error ? e.message : String(e)}`;
-			} finally {
-				uploadingTo = null;
+		try {
+			const dirExists = await pathExists(adb, sys.devicePath);
+			if (!dirExists) {
+				await shell(adb, `mkdir -p "${sys.devicePath}"`);
 			}
-		};
 
-		input.click();
+			for (const file of files) {
+				if (!file.name.toLowerCase().endsWith('.png')) continue;
+				const data = new Uint8Array(await file.arrayBuffer());
+				await pushFile(adb, `${sys.devicePath}/${file.name}`, data);
+				uploaded++;
+			}
+
+			if (uploaded > 0) {
+				sys.error = `Uploaded ${uploaded} overlay(s)`;
+				try {
+					const entries = await listDirectory(adb, sys.devicePath);
+					for (const f of sys.files) {
+						if (f.thumbnailUrl) URL.revokeObjectURL(f.thumbnailUrl);
+					}
+					sys.files = entries
+						.filter((f) => f.isFile && f.name.toLowerCase().endsWith('.png'))
+						.sort((a, b) =>
+							a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+						)
+						.map((f) => ({
+							name: f.name,
+							size: f.size,
+							thumbnailUrl: null,
+							loadingThumb: false
+						}));
+					if (sys.expanded) {
+						await loadThumbnails(sys);
+					}
+				} catch {
+					// ignore
+				}
+			} else {
+				sys.error = 'No PNG files selected';
+			}
+		} catch (e) {
+			sys.error = `Upload failed: ${formatError(e)}`;
+		} finally {
+			uploadingTo = null;
+		}
 	}
 
 	let removingFile: string | null = $state(null);
@@ -285,7 +267,7 @@
 			communityOverlays = overlays;
 			communityCache.set(systemCode, overlays);
 		} catch (e) {
-			communityError = e instanceof Error ? e.message : String(e);
+			communityError = formatError(e);
 		} finally {
 			communityLoading = false;
 		}
@@ -332,7 +314,7 @@
 
 			sys.error = `Installed ${overlay.name}`;
 		} catch (e) {
-			sys.error = `Install failed: ${e instanceof Error ? e.message : String(e)}`;
+			sys.error = `Install failed: ${formatError(e)}`;
 		} finally {
 			installingOverlay = null;
 		}
@@ -350,7 +332,7 @@
 			if (file.thumbnailUrl) URL.revokeObjectURL(file.thumbnailUrl);
 			sys.files = sys.files.filter((f) => f !== file);
 		} catch (e) {
-			sys.error = `Remove failed: ${e instanceof Error ? e.message : String(e)}`;
+			sys.error = `Remove failed: ${formatError(e)}`;
 		} finally {
 			removingFile = null;
 		}

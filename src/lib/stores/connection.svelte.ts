@@ -2,6 +2,7 @@ import { connectWebUSB, disconnect as adbDisconnect } from '$lib/adb/connection.
 import type { AdbConnection } from '$lib/adb/types.js';
 import { verifyNextUIInstallation } from '$lib/adb/file-ops.js';
 import { adbLog } from '$lib/stores/log.svelte.js';
+import { formatError } from '$lib/utils.js';
 
 /** Shared reactive connection state — use $state.raw to prevent deep proxy on Adb internals */
 let connection: AdbConnection | null = $state.raw(null);
@@ -69,7 +70,7 @@ export async function connect() {
 		status = `Connected: ${deviceName}`;
 		adbLog.info('NextUI installation verified');
 	} catch (e) {
-		const msg = e instanceof Error ? e.message : String(e);
+		const msg = formatError(e);
 		error = msg;
 		status = 'Connection failed';
 		connection = null;

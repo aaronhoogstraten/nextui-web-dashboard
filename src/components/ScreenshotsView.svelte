@@ -3,6 +3,7 @@
 	import type { Adb } from '@yume-chan/adb';
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { listDirectory, pullFile, shell } from '$lib/adb/file-ops.js';
+	import { formatSize, formatError } from '$lib/utils.js';
 	import ImagePreview from './ImagePreview.svelte';
 	import JSZip from 'jszip';
 
@@ -33,12 +34,6 @@
 		const dot = name.lastIndexOf('.');
 		if (dot < 0) return false;
 		return IMAGE_EXTENSIONS.has(name.substring(dot).toLowerCase());
-	}
-
-	function formatSize(bytes: number): string {
-		if (bytes < 1024) return `${bytes} B`;
-		if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-		return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 	}
 
 	function formatDate(mtime: bigint): string {
@@ -129,7 +124,7 @@
 			if (shot.thumbnailUrl) URL.revokeObjectURL(shot.thumbnailUrl);
 			screenshots = screenshots.filter((s) => s !== shot);
 		} catch (e) {
-			error = `Delete failed: ${e instanceof Error ? e.message : String(e)}`;
+			error = `Delete failed: ${formatError(e)}`;
 		} finally {
 			removingFile = null;
 		}
@@ -168,7 +163,7 @@
 			downloadProgress = '';
 			error = `Downloaded ${filename} (${screenshots.length} files)`;
 		} catch (e) {
-			error = `Download failed: ${e instanceof Error ? e.message : String(e)}`;
+			error = `Download failed: ${formatError(e)}`;
 			downloadProgress = '';
 		}
 		downloading = false;

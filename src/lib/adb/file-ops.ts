@@ -5,6 +5,7 @@ import JSZip from 'jszip';
 import type { DirectoryEntry, StorageInfo } from './types.js';
 import { DEVICE_PATHS } from './types.js';
 import { adbLog } from '$lib/stores/log.svelte.js';
+import { formatError } from '$lib/utils.js';
 
 /**
  * Push a file to the device.
@@ -284,7 +285,7 @@ export async function verifyNextUIInstallation(
 			adbLog.error(`Failed to verify MinUI.zip contents: ${e}`);
 			return {
 				ok: false,
-				error: `Failed to verify MinUI.zip: ${e instanceof Error ? e.message : String(e)}`
+				error: `Failed to verify MinUI.zip: ${formatError(e)}`
 			};
 		}
 	}

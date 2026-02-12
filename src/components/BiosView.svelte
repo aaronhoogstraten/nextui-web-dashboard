@@ -5,6 +5,7 @@
 	import { validateBiosFile } from '$lib/bios/validation.js';
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { pathExists, pullFile, pushFile, listDirectory, shell } from '$lib/adb/file-ops.js';
+	import { formatError, pickFile } from '$lib/utils.js';
 
 	let { adb }: { adb: Adb } = $props();
 
@@ -77,7 +78,7 @@
 					}
 				} catch (e) {
 					file.status = 'missing';
-					file.detail = e instanceof Error ? e.message : String(e);
+					file.detail = formatError(e);
 				}
 			}
 		}
@@ -201,39 +202,32 @@
 	}
 
 	async function uploadBiosFile(file: BiosFileState, isCustom: boolean) {
-		const input = document.createElement('input');
-		input.type = 'file';
-		if (!isCustom) input.accept = file.definition.fileName;
+		const ext = file.definition.fileName.substring(file.definition.fileName.lastIndexOf('.'));
+		const selected = await pickFile({ accept: isCustom ? undefined : ext });
+		if (!selected) return;
 
-		input.onchange = async () => {
-			const selected = input.files?.[0];
-			if (!selected) return;
+		uploadingFile = `${file.definition.systemCode}/${file.definition.fileName}`;
 
-			uploadingFile = `${file.definition.systemCode}/${file.definition.fileName}`;
+		try {
+			const data = new Uint8Array(await selected.arrayBuffer());
 
-			try {
-				const data = new Uint8Array(await selected.arrayBuffer());
-
-				if (!isCustom) {
-					const result = await validateBiosFile(data, file.definition);
-					if (!result.valid) {
-						file.status = 'invalid';
-						file.detail = `Selected file hash doesn't match expected. Got: ${result.actualSha1.substring(0, 16)}...`;
-						return;
-					}
+			if (!isCustom) {
+				const result = await validateBiosFile(data, file.definition);
+				if (!result.valid) {
+					file.status = 'invalid';
+					file.detail = `Selected file hash doesn't match expected. Got: ${result.actualSha1.substring(0, 16)}...`;
+					return;
 				}
-
-				await pushFile(adb, file.devicePath, data);
-				file.status = isCustom ? 'present' : 'valid';
-				file.detail = isCustom ? 'Uploaded' : 'Uploaded, hash OK';
-			} catch (e) {
-				file.detail = `Upload failed: ${e instanceof Error ? e.message : String(e)}`;
-			} finally {
-				uploadingFile = null;
 			}
-		};
 
-		input.click();
+			await pushFile(adb, file.devicePath, data);
+			file.status = isCustom ? 'present' : 'valid';
+			file.detail = isCustom ? 'Uploaded' : 'Uploaded, hash OK';
+		} catch (e) {
+			file.detail = `Upload failed: ${formatError(e)}`;
+		} finally {
+			uploadingFile = null;
+		}
 	}
 
 	async function removeBiosFile(file: BiosFileState, system: SystemState) {
@@ -254,7 +248,7 @@
 				file.detail = 'Removed';
 			}
 		} catch (e) {
-			file.detail = `Remove failed: ${e instanceof Error ? e.message : String(e)}`;
+			file.detail = `Remove failed: ${formatError(e)}`;
 		} finally {
 			removingFile = null;
 		}
