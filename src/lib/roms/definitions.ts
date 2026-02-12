@@ -252,6 +252,18 @@ export function isValidRomExtension(extension: string, system: RomSystem): boole
 }
 
 /**
+ * Get the ROM directory name for a system code (without the full device path).
+ * Pattern: "{DisplayName} ({SystemCode})"
+ * Returns null if the system code is not found in ROM_SYSTEMS.
+ */
+export function getRomDirectoryName(systemCode: string): string | null {
+	const system = ROM_SYSTEMS.find((s) => s.systemCode === systemCode);
+	if (!system) return null;
+	const pathName = system.romPathSystemName ?? system.systemName;
+	return `${pathName} (${system.systemCode})`;
+}
+
+/**
  * Parse a ROM directory name into systemName and systemCode.
  * Pattern: "{DisplayName} ({SystemCode})"
  * Returns null if the name doesn't match the pattern.

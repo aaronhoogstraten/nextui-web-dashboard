@@ -1,4 +1,5 @@
 import { DEVICE_PATHS } from '$lib/adb/types.js';
+import { getRomDirectoryName } from '$lib/roms/definitions.js';
 
 /** A single BIOS file definition */
 export interface BiosFileDefinition {
@@ -40,6 +41,19 @@ export interface BiosSystem {
  * Source: NextUI-Setup-Wizard/Components/Pages/BiosConfig.razor lines 752-929
  * Extended with full system list from NextUI base install.
  */
+/** Shared BIOS file data — referenced by multiple system codes to avoid hash duplication. */
+const GBA_BIOS = {
+	fileName: 'gba_bios.bin',
+	sha1: '300c20df6731a33952ded8c436f7f186d25d3492',
+	md5: 'a860e8c0b6d573d191e4ec7db1b1e4f6'
+} as const;
+
+const SEGA_CD_BIOS = [
+	{ fileName: 'bios_CD_E.bin', sha1: 'f891e0ea651e2232af0c5c4cb46a0cae2ee8f356', md5: 'e66fa1dc5820d254611fdcdba0662372' },
+	{ fileName: 'bios_CD_J.bin', sha1: '4846f448160059a7da0215a5df12ca160f26dd69', md5: '278a9397d192149e84e820ac621a8edd' },
+	{ fileName: 'bios_CD_U.bin', sha1: 'f4f315adcef9b8feb0364c21ab7f0eaf5457f3ed', md5: '2efd74e3232ff260e371b99f84024f7f' }
+] as const;
+
 export const BIOS_SYSTEMS: BiosSystem[] = [
 	{
 		systemName: 'Amiga',
@@ -239,18 +253,8 @@ export const BIOS_SYSTEMS: BiosSystem[] = [
 		systemName: 'Game Boy Advance',
 		systemCode: 'GBA / MGBA',
 		files: [
-			{
-				fileName: 'gba_bios.bin',
-				systemCode: 'GBA',
-				sha1: '300c20df6731a33952ded8c436f7f186d25d3492',
-				md5: 'a860e8c0b6d573d191e4ec7db1b1e4f6'
-			},
-			{
-				fileName: 'gba_bios.bin',
-				systemCode: 'MGBA',
-				sha1: '300c20df6731a33952ded8c436f7f186d25d3492',
-				md5: 'a860e8c0b6d573d191e4ec7db1b1e4f6'
-			}
+			{ ...GBA_BIOS, systemCode: 'GBA' },
+			{ ...GBA_BIOS, systemCode: 'MGBA' }
 		]
 	},
 	{
@@ -269,42 +273,8 @@ export const BIOS_SYSTEMS: BiosSystem[] = [
 		systemName: 'Mega Drive / Genesis / Sega CD',
 		systemCode: 'MD / SEGACD',
 		files: [
-			{
-				fileName: 'bios_CD_E.bin',
-				systemCode: 'MD',
-				sha1: 'f891e0ea651e2232af0c5c4cb46a0cae2ee8f356',
-				md5: 'e66fa1dc5820d254611fdcdba0662372'
-			},
-			{
-				fileName: 'bios_CD_J.bin',
-				systemCode: 'MD',
-				sha1: '4846f448160059a7da0215a5df12ca160f26dd69',
-				md5: '278a9397d192149e84e820ac621a8edd'
-			},
-			{
-				fileName: 'bios_CD_U.bin',
-				systemCode: 'MD',
-				sha1: 'f4f315adcef9b8feb0364c21ab7f0eaf5457f3ed',
-				md5: '2efd74e3232ff260e371b99f84024f7f'
-			},
-			{
-				fileName: 'bios_CD_E.bin',
-				systemCode: 'SEGACD',
-				sha1: 'f891e0ea651e2232af0c5c4cb46a0cae2ee8f356',
-				md5: 'e66fa1dc5820d254611fdcdba0662372'
-			},
-			{
-				fileName: 'bios_CD_J.bin',
-				systemCode: 'SEGACD',
-				sha1: '4846f448160059a7da0215a5df12ca160f26dd69',
-				md5: '278a9397d192149e84e820ac621a8edd'
-			},
-			{
-				fileName: 'bios_CD_U.bin',
-				systemCode: 'SEGACD',
-				sha1: 'f4f315adcef9b8feb0364c21ab7f0eaf5457f3ed',
-				md5: '2efd74e3232ff260e371b99f84024f7f'
-			}
+			...SEGA_CD_BIOS.map((f) => ({ ...f, systemCode: 'MD' })),
+			...SEGA_CD_BIOS.map((f) => ({ ...f, systemCode: 'SEGACD' }))
 		]
 	},
 	{
@@ -463,22 +433,10 @@ export const BIOS_SYSTEMS: BiosSystem[] = [
  */
 export function getBiosDevicePath(file: BiosFileDefinition): string {
 	if (file.isRomFile) {
-		const romDirName = getRomDirectoryName(file.systemCode);
+		const romDirName = getRomDirectoryName(file.systemCode) ?? `${file.systemCode} (${file.systemCode})`;
 		return `${DEVICE_PATHS.roms}/${romDirName}/${file.fileName}`;
 	}
 	return `${DEVICE_PATHS.bios}/${file.systemCode}/${file.fileName}`;
-}
-
-/**
- * Get the ROM directory name for a system code.
- * Matches the naming convention: "Display Name (CODE)"
- */
-function getRomDirectoryName(systemCode: string): string {
-	const nameMap: Record<string, string> = {
-		FBN: 'Arcade'
-	};
-	const displayName = nameMap[systemCode] ?? systemCode;
-	return `${displayName} (${systemCode})`;
 }
 
 /** Get all unique BIOS file definitions (flattened from all systems) */
