@@ -199,14 +199,25 @@ export async function getStorageInfo(adb: Adb): Promise<StorageInfo | null> {
 		const lines = output.trim().split('\n');
 		if (lines.length < 2) return null;
 
-		// Parse the data line (skip header)
-		const dataLine = lines[lines.length - 1];
-		const parts = dataLine.split(/\s+/);
-		if (parts.length < 4) return null;
+		// Parse header to find column indices (handles BusyBox and GNU df variants)
+		const header = lines[0].split(/\s+/);
+		const colTotal = header.findIndex((h) => /1k-blocks|1024-blocks|size/i.test(h));
+		const colUsed = header.findIndex((h) => /^used$/i.test(h));
+		const colAvail = header.findIndex((h) => /^avail/i.test(h));
 
-		const totalKb = parseInt(parts[1], 10);
-		const usedKb = parseInt(parts[2], 10);
-		const availableKb = parseInt(parts[3], 10);
+		if (colTotal < 0 || colUsed < 0 || colAvail < 0) {
+			// Fallback to positional if headers don't match
+			const parts = lines[lines.length - 1].split(/\s+/);
+			if (parts.length < 4) return null;
+			const t = parseInt(parts[1], 10), u = parseInt(parts[2], 10), a = parseInt(parts[3], 10);
+			if (isNaN(t) || isNaN(u) || isNaN(a)) return null;
+			return { totalBytes: t * 1024, usedBytes: u * 1024, availableBytes: a * 1024 };
+		}
+
+		const parts = lines[lines.length - 1].split(/\s+/);
+		const totalKb = parseInt(parts[colTotal], 10);
+		const usedKb = parseInt(parts[colUsed], 10);
+		const availableKb = parseInt(parts[colAvail], 10);
 
 		if (isNaN(totalKb) || isNaN(usedKb) || isNaN(availableKb)) return null;
 
@@ -301,212 +312,96 @@ export async function verifyNextUIInstallation(
 export async function runDiagnostics(
 	adb: Adb
 ): Promise<{ label: string; status: 'ok' | 'fail' | 'skip'; detail: string }[]> {
-	const results: { label: string; status: 'ok' | 'fail' | 'skip'; detail: string }[] = [];
+	type DiagResult = { label: string; status: 'ok' | 'fail' | 'skip'; detail: string };
 
-	// 1. ADB banner / transport info
-	try {
-		results.push({
-			label: 'ADB Transport',
-			status: 'ok',
-			detail: `serial=${adb.serial}, maxPayload=${adb.maxPayloadSize}, features=[${adb.banner.features?.join(', ') ?? 'none'}]`
-		});
-	} catch (e) {
-		results.push({
-			label: 'ADB Transport',
-			status: 'fail',
-			detail: String(e)
-		});
+	async function test(label: string, fn: () => Promise<DiagResult['detail']>): Promise<DiagResult> {
+		try {
+			return { label, status: 'ok', detail: await fn() };
+		} catch (e) {
+			return { label, status: 'fail', detail: String(e) };
+		}
 	}
 
-	// 2. Sync: opendir /
-	try {
+	const results: DiagResult[] = [];
+
+	results.push(await test('ADB Transport', async () =>
+		`serial=${adb.serial}, maxPayload=${adb.maxPayloadSize}, features=[${adb.banner.features?.join(', ') ?? 'none'}]`
+	));
+
+	results.push(await test('sync.opendir("/")', async () => {
 		const entries = await listDirectory(adb, '/');
-		results.push({
-			label: 'sync.opendir("/")',
-			status: 'ok',
-			detail: `${entries.length} entries: ${entries.map((e) => e.name).join(', ')}`
-		});
-	} catch (e) {
-		results.push({
-			label: 'sync.opendir("/")',
-			status: 'fail',
-			detail: String(e)
-		});
-	}
+		return `${entries.length} entries: ${entries.map((e) => e.name).join(', ')}`;
+	}));
 
-	// 3. Sync: opendir /mnt/SDCARD
-	try {
+	results.push(await test(`sync.opendir("${DEVICE_PATHS.base}")`, async () => {
 		const entries = await listDirectory(adb, DEVICE_PATHS.base);
 		const dirs = entries.filter((e) => e.isDirectory).map((e) => e.name);
-		results.push({
-			label: `sync.opendir("${DEVICE_PATHS.base}")`,
-			status: 'ok',
-			detail: `${entries.length} entries. Dirs: ${dirs.join(', ')}`
-		});
-	} catch (e) {
-		results.push({
-			label: `sync.opendir("${DEVICE_PATHS.base}")`,
-			status: 'fail',
-			detail: String(e)
-		});
-	}
+		return `${entries.length} entries. Dirs: ${dirs.join(', ')}`;
+	}));
 
-	// 4. Sync: stat
-	try {
+	results.push(await test(`sync.stat("${DEVICE_PATHS.base}")`, async () => {
 		const sync = await adb.sync();
 		try {
 			const st = await sync.stat(DEVICE_PATHS.base);
-			results.push({
-				label: `sync.stat("${DEVICE_PATHS.base}")`,
-				status: 'ok',
-				detail: `mode=${st.mode}, size=${st.size}`
-			});
+			return `mode=${st.mode}, size=${st.size}`;
 		} finally {
 			await sync.dispose();
 		}
-	} catch (e) {
-		results.push({
-			label: `sync.stat("${DEVICE_PATHS.base}")`,
-			status: 'fail',
-			detail: String(e)
-		});
-	}
+	}));
 
-	// 5. Sync: lstat
-	try {
+	results.push(await test(`sync.lstat("${DEVICE_PATHS.base}")`, async () => {
 		const sync = await adb.sync();
 		try {
 			const st = await sync.lstat(DEVICE_PATHS.base);
-			results.push({
-				label: `sync.lstat("${DEVICE_PATHS.base}")`,
-				status: 'ok',
-				detail: `mode=${st.mode}, size=${st.size}`
-			});
+			return `mode=${st.mode}, size=${st.size}`;
 		} finally {
 			await sync.dispose();
 		}
-	} catch (e) {
-		results.push({
-			label: `sync.lstat("${DEVICE_PATHS.base}")`,
-			status: 'fail',
-			detail: String(e)
-		});
-	}
+	}));
 
-	// 6. Sync: read a known file
-	try {
+	results.push(await test('sync.read("README.txt")', async () => {
 		const content = await pullFile(adb, `${DEVICE_PATHS.base}/README.txt`);
 		const text = new TextDecoder().decode(content.slice(0, 200));
-		results.push({
-			label: 'sync.read("README.txt")',
-			status: 'ok',
-			detail: `${content.byteLength} bytes. Start: ${text.substring(0, 80).replace(/\n/g, '\\n')}...`
-		});
-	} catch (e) {
-		results.push({
-			label: 'sync.read("README.txt")',
-			status: 'fail',
-			detail: String(e)
-		});
-	}
+		return `${content.byteLength} bytes. Start: ${text.substring(0, 80).replace(/\n/g, '\\n')}...`;
+	}));
 
-	// 7. Subprocess: noneProtocol
-	try {
+	results.push(await test('subprocess.noneProtocol', async () => {
 		const output = await adb.subprocess.noneProtocol.spawnWaitText('echo hello');
-		results.push({
-			label: 'subprocess.noneProtocol',
-			status: 'ok',
-			detail: `output="${output.trim()}"`
-		});
-	} catch (e) {
-		results.push({
-			label: 'subprocess.noneProtocol',
-			status: 'fail',
-			detail: String(e)
-		});
-	}
+		return `output="${output.trim()}"`;
+	}));
 
-	// 8. Subprocess: shellProtocol
+	// shellProtocol — may not be available
 	try {
 		const proto = adb.subprocess.shellProtocol;
 		if (proto) {
-			const result = await proto.spawnWaitText('echo hello');
-			results.push({
-				label: 'subprocess.shellProtocol',
-				status: 'ok',
-				detail: `stdout="${result.stdout.trim()}", exitCode=${result.exitCode}`
-			});
+			results.push(await test('subprocess.shellProtocol', async () => {
+				const result = await proto.spawnWaitText('echo hello');
+				return `stdout="${result.stdout.trim()}", exitCode=${result.exitCode}`;
+			}));
 		} else {
-			results.push({
-				label: 'subprocess.shellProtocol',
-				status: 'skip',
-				detail: 'Not available (shellProtocol is undefined)'
-			});
+			results.push({ label: 'subprocess.shellProtocol', status: 'skip', detail: 'Not available (shellProtocol is undefined)' });
 		}
 	} catch (e) {
-		results.push({
-			label: 'subprocess.shellProtocol',
-			status: 'fail',
-			detail: String(e)
-		});
+		results.push({ label: 'subprocess.shellProtocol', status: 'fail', detail: String(e) });
 	}
 
-	// 9. Raw shell socket
-	try {
+	results.push(await test('createSocketAndWait("shell:...")', async () => {
 		const output = await adb.createSocketAndWait('shell:echo hello');
-		results.push({
-			label: 'createSocketAndWait("shell:...")',
-			status: 'ok',
-			detail: `output="${output.trim()}"`
-		});
-	} catch (e) {
-		results.push({
-			label: 'createSocketAndWait("shell:...")',
-			status: 'fail',
-			detail: String(e)
-		});
-	}
+		return `output="${output.trim()}"`;
+	}));
 
-	// 10. Verify NextUI (using fixed pathExists)
-	try {
+	results.push(await test('verifyNextUIInstallation', async () => {
 		const result = await verifyNextUIInstallation(adb);
-		results.push({
-			label: 'verifyNextUIInstallation',
-			status: result.ok ? 'ok' : 'fail',
-			detail: result.ok ? 'Verified' : result.error ?? 'Unknown error'
-		});
-	} catch (e) {
-		results.push({
-			label: 'verifyNextUIInstallation',
-			status: 'fail',
-			detail: String(e)
-		});
-	}
+		if (!result.ok) throw new Error(result.error ?? 'Unknown error');
+		return 'Verified';
+	}));
 
-	// 11. Storage info
-	try {
+	results.push(await test('getStorageInfo', async () => {
 		const info = await getStorageInfo(adb);
-		if (info) {
-			const toGB = (b: number) => (b / 1024 / 1024 / 1024).toFixed(2);
-			results.push({
-				label: 'getStorageInfo',
-				status: 'ok',
-				detail: `${toGB(info.usedBytes)} GB / ${toGB(info.totalBytes)} GB (${toGB(info.availableBytes)} GB free)`
-			});
-		} else {
-			results.push({
-				label: 'getStorageInfo',
-				status: 'fail',
-				detail: 'Returned null (shell may not be supported)'
-			});
-		}
-	} catch (e) {
-		results.push({
-			label: 'getStorageInfo',
-			status: 'fail',
-			detail: String(e)
-		});
-	}
+		if (!info) throw new Error('Returned null (shell may not be supported)');
+		const toGB = (b: number) => (b / 1024 / 1024 / 1024).toFixed(2);
+		return `${toGB(info.usedBytes)} GB / ${toGB(info.totalBytes)} GB (${toGB(info.availableBytes)} GB free)`;
+	}));
 
 	return results;
 }
