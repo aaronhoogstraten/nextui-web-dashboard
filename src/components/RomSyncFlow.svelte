@@ -86,7 +86,7 @@
 
 		const localSystems: { dirName: string; files: SyncFile[] }[] = [];
 
-		for await (const entry of (dirHandle as any).values()) {
+		for await (const entry of dirHandle.values()) {
 			if (entry.kind !== 'directory') continue;
 			const parsed = parseRomDirectoryName(entry.name);
 			if (!parsed) continue;
@@ -94,24 +94,28 @@
 			syncScanStatus = `Scanning ${entry.name}...`;
 			const sysFiles: SyncFile[] = [];
 
-			const sysDirHandle = await (dirHandle as any).getDirectoryHandle(entry.name);
-			for await (const fileEntry of (sysDirHandle as any).values()) {
-				if (fileEntry.kind !== 'file' || fileEntry.name.startsWith('.')) continue;
-				const file = await fileEntry.getFile();
+			const sysDirHandle = await dirHandle.getDirectoryHandle(entry.name);
+			for await (const fileEntry of sysDirHandle.values()) {
+				if (fileEntry.kind !== 'file') continue;
+				if (fileEntry.name.startsWith('.')) continue;
+				const fileHandle = fileEntry as FileSystemFileHandle;
+				const file = await fileHandle.getFile();
 				sysFiles.push({
 					name: fileEntry.name, localSize: file.size, deviceSize: null,
-					status: 'new', checked: true, isMedia: false, fileHandle: fileEntry
+					status: 'new', checked: true, isMedia: false, fileHandle
 				});
 			}
 
 			try {
-				const mediaDirHandle = await (sysDirHandle as any).getDirectoryHandle('.media');
-				for await (const mediaEntry of (mediaDirHandle as any).values()) {
-					if (mediaEntry.kind !== 'file' || mediaEntry.name.startsWith('.')) continue;
-					const file = await mediaEntry.getFile();
+				const mediaDirHandle = await sysDirHandle.getDirectoryHandle('.media');
+				for await (const mediaEntry of mediaDirHandle.values()) {
+					if (mediaEntry.kind !== 'file') continue;
+					if (mediaEntry.name.startsWith('.')) continue;
+					const fileHandle = mediaEntry as FileSystemFileHandle;
+					const file = await fileHandle.getFile();
 					sysFiles.push({
 						name: mediaEntry.name, localSize: file.size, deviceSize: null,
-						status: 'new', checked: true, isMedia: true, fileHandle: mediaEntry
+						status: 'new', checked: true, isMedia: true, fileHandle
 					});
 				}
 			} catch { /* no .media/ */ }

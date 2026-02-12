@@ -25,13 +25,13 @@
 
 	async function startSyncFlow() {
 		try {
-			const dirHandle = await (window as any).showDirectoryPicker({ mode: 'read' });
+			const dirHandle = await window.showDirectoryPicker!({ mode: 'read' });
 			syncActive = true;
 			// Wait for component to mount, then start
 			await new Promise((r) => setTimeout(r, 0));
 			if (syncFlow) await syncFlow.start(dirHandle);
-		} catch (e: any) {
-			if (e.name === 'AbortError') return;
+		} catch (e) {
+			if (e instanceof DOMException && e.name === 'AbortError') return;
 		}
 	}
 
