@@ -25,7 +25,7 @@ export function getTheme(): Theme {
 
 export function toggleTheme() {
 	theme = theme === 'dark' ? 'light' : 'dark';
-	localStorage.setItem(STORAGE_KEY, theme);
+	if (typeof localStorage !== 'undefined') localStorage.setItem(STORAGE_KEY, theme);
 	applyTheme(theme);
 }
 
