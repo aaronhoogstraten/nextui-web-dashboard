@@ -3,7 +3,8 @@
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { listDirectory, pushFile } from '$lib/adb/file-ops.js';
 	import { adbExec } from '$lib/stores/connection.svelte.js';
-	import { formatSize, errorMsg, type Notification } from '$lib/utils.js';
+	import { formatSize, formatError, errorMsg, type Notification } from '$lib/utils.js';
+	import { adbLog } from '$lib/stores/log.svelte.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
 	import { parseRomDirectoryName } from '$lib/roms/index.js';
 	import Modal from './Modal.svelte';
@@ -230,7 +231,10 @@
 					: `${devicePath}/${item.file.name}`;
 				await pushFile(adb, remotePath, data);
 				syncTransferred++;
-			} catch { syncFailed++; }
+			} catch (e) {
+				adbLog.error(`Sync failed for ${item.system}/${item.file.name}: ${formatError(e)}`);
+				syncFailed++;
+			}
 
 			syncCompleted++;
 		}
