@@ -625,9 +625,14 @@
 			: systems
 	);
 
-	// Refresh on mount (untrack to prevent reactive loop)
+	// Refresh on mount + cleanup blob URLs on unmount
 	$effect(() => {
 		untrack(() => refreshAll());
+		return () => {
+			for (const s of systems) {
+				cleanupThumbnails(s);
+			}
+		};
 	});
 </script>
 

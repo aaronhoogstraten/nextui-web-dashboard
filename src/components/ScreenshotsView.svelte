@@ -171,9 +171,14 @@
 		downloading = false;
 	}
 
-	// Refresh on mount
+	// Refresh on mount + cleanup blob URLs on unmount
 	$effect(() => {
 		untrack(() => refresh());
+		return () => {
+			for (const s of screenshots) {
+				if (s.thumbnailUrl) URL.revokeObjectURL(s.thumbnailUrl);
+			}
+		};
 	});
 </script>
 

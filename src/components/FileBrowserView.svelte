@@ -279,9 +279,12 @@
 		previewAlt = '';
 	}
 
-	// Load initial directory on mount (untrack to prevent reactive loop)
+	// Load initial directory on mount + cleanup blob URLs on unmount
 	$effect(() => {
 		untrack(() => navigate(DEVICE_PATHS.base, true));
+		return () => {
+			if (previewSrc) URL.revokeObjectURL(previewSrc);
+		};
 	});
 </script>
 

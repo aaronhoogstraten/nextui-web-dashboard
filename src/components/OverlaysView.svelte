@@ -340,9 +340,16 @@
 		}
 	}
 
-	// Refresh on mount
+	// Refresh on mount + cleanup blob URLs on unmount
 	$effect(() => {
 		untrack(() => refreshAll());
+		return () => {
+			for (const sys of systems) {
+				for (const f of sys.files) {
+					if (f.thumbnailUrl) URL.revokeObjectURL(f.thumbnailUrl);
+				}
+			}
+		};
 	});
 </script>
 

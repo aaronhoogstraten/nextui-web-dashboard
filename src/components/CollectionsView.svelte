@@ -258,9 +258,15 @@
 		previewAlt = '';
 	}
 
-	// Refresh on mount
+	// Refresh on mount + cleanup blob URLs on unmount
 	$effect(() => {
 		untrack(() => refresh());
+		return () => {
+			for (const c of collections) {
+				if (c.iconUrl) URL.revokeObjectURL(c.iconUrl);
+			}
+			if (bgUrl) URL.revokeObjectURL(bgUrl);
+		};
 	});
 </script>
 
