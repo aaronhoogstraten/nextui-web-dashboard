@@ -12,7 +12,7 @@
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { listDirectory, pathExists, pullFile, pushFile } from '$lib/adb/file-ops.js';
 	import { adbExec } from '$lib/stores/connection.svelte.js';
-	import { formatSize, formatError, pickFile, pickFiles } from '$lib/utils.js';
+	import { formatSize, formatError, compareByName, plural, pickFile, pickFiles } from '$lib/utils.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
 	import ImagePreview from './ImagePreview.svelte';
 	import RomSyncFlow from './RomSyncFlow.svelte';
@@ -203,7 +203,7 @@
 			const entries = await listDirectory(adb, state.devicePath);
 			const romFiles = entries
 				.filter((e) => e.isFile && !e.name.startsWith('.'))
-				.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+				.sort(compareByName);
 
 			// Get media files
 			let mediaNames = new Set<string>();
@@ -686,7 +686,7 @@
 							<span class="text-sm text-text-muted">Counting...</span>
 						{:else if s.romCount !== null}
 							<span class="text-sm {s.romCount > 0 ? 'text-green-500' : 'text-text-muted'}">
-								{s.romCount} ROM{s.romCount !== 1 ? 's' : ''}
+								{plural(s.romCount, 'ROM')}
 							</span>
 							{#if s.mediaCount > 0}
 								<span class="text-sm text-text-muted">

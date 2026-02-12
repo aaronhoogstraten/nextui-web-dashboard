@@ -4,7 +4,7 @@
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { listDirectory, pullFile, pushFile, pathExists } from '$lib/adb/file-ops.js';
 	import { adbExec } from '$lib/stores/connection.svelte.js';
-	import { formatError, pickFile, errorMsg, type Notification } from '$lib/utils.js';
+	import { formatError, compareByName, plural, pickFile, errorMsg, type Notification } from '$lib/utils.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
 	import ImagePreview from './ImagePreview.svelte';
 	import CollectionEditor from './CollectionEditor.svelte';
@@ -76,7 +76,7 @@
 			const entries = await listDirectory(adb, COLLECTIONS_PATH);
 			const txtFiles = entries
 				.filter((e) => e.isFile && e.name.endsWith('.txt'))
-				.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+				.sort(compareByName);
 
 			const results: CollectionState[] = [];
 			for (const entry of txtFiles) {
@@ -361,7 +361,7 @@
 										{col.name}
 									</button>
 									<div class="text-xs text-text-muted">
-										{col.romPaths.length} ROM{col.romPaths.length !== 1 ? 's' : ''}
+										{plural(col.romPaths.length, 'ROM')}
 									</div>
 								</div>
 
@@ -402,7 +402,7 @@
 		</div>
 
 		<div class="mt-2 text-xs text-text-muted">
-			{collections.length} collection{collections.length !== 1 ? 's' : ''}
+			{plural(collections.length, 'collection')}
 		</div>
 	{/if}
 </div>

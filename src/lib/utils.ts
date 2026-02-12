@@ -42,6 +42,37 @@ export function joinPath(base: string, name: string): string {
 	return base === '/' ? '/' + name : base + '/' + name;
 }
 
+/**
+ * Locale-aware case-insensitive comparator for sorting objects by `name`.
+ */
+export function compareByName<T extends { name: string }>(a: T, b: T): number {
+	return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+}
+
+/**
+ * Simple English pluralization: `plural(3, 'file')` → `'3 files'`.
+ */
+export function plural(count: number, word: string): string {
+	return `${count} ${word}${count !== 1 ? 's' : ''}`;
+}
+
+/**
+ * Get the MIME type for an image filename based on its extension.
+ */
+export function getMimeType(name: string): string {
+	const ext = name.substring(name.lastIndexOf('.')).toLowerCase();
+	const mimeMap: Record<string, string> = {
+		'.png': 'image/png',
+		'.jpg': 'image/jpeg',
+		'.jpeg': 'image/jpeg',
+		'.bmp': 'image/bmp',
+		'.gif': 'image/gif',
+		'.webp': 'image/webp',
+		'.svg': 'image/svg+xml'
+	};
+	return mimeMap[ext] || 'image/png';
+}
+
 interface FilePickerOptions {
 	accept?: string;
 }

@@ -3,7 +3,7 @@
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { listDirectory, pushFile, pathExists } from '$lib/adb/file-ops.js';
 	import { parseRomDirectoryName } from '$lib/roms/definitions.js';
-	import { formatError, errorMsg, successMsg, type Notification } from '$lib/utils.js';
+	import { formatError, compareByName, plural, errorMsg, successMsg, type Notification } from '$lib/utils.js';
 	import Modal from './Modal.svelte';
 	import StatusMessage from './StatusMessage.svelte';
 
@@ -149,7 +149,7 @@
 			const entries = await listDirectory(adb, DEVICE_PATHS.roms);
 			const dirs = entries
 				.filter((e) => e.isDirectory && !e.name.startsWith('.'))
-				.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+				.sort(compareByName);
 
 			const systems: RomPickerSystem[] = [];
 			for (const d of dirs) {
@@ -165,7 +165,7 @@
 						expanded: false,
 						loading: false,
 						files: romFiles
-							.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
+							.sort(compareByName)
 							.map((e) => ({ name: e.name, selected: false })),
 						fileCount: romFiles.length
 					});
@@ -329,7 +329,7 @@
 </div>
 
 <div class="mt-2 text-xs text-text-muted">
-	{editorPaths.length} ROM{editorPaths.length !== 1 ? 's' : ''} in collection
+	{plural(editorPaths.length, 'ROM')} in collection
 </div>
 
 <!-- ROM Picker Modal -->
@@ -344,7 +344,7 @@
 							onclick={addSelectedRoms}
 							class="text-sm bg-accent text-white px-3 py-1.5 rounded hover:bg-accent-hover"
 						>
-							Add {selectedCount} ROM{selectedCount !== 1 ? 's' : ''}
+							Add {plural(selectedCount, 'ROM')}
 						</button>
 					{/if}
 					<button
@@ -370,7 +370,7 @@
 								>
 									<span class="text-text">{sys.dirName}</span>
 									<div class="flex items-center gap-2">
-										<span class="text-xs text-text-muted">{sys.fileCount} ROM{sys.fileCount !== 1 ? 's' : ''}</span>
+										<span class="text-xs text-text-muted">{plural(sys.fileCount, 'ROM')}</span>
 										<span class="text-text-muted text-xs">
 											{sys.expanded ? '\u25B2' : '\u25BC'}
 										</span>

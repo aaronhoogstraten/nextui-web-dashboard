@@ -4,7 +4,7 @@
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { listDirectory, pullFile, pushFile, pathExists } from '$lib/adb/file-ops.js';
 	import { adbExec } from '$lib/stores/connection.svelte.js';
-	import { formatSize, formatError, pickFiles, errorMsg, successMsg, type Notification } from '$lib/utils.js';
+	import { formatSize, formatError, compareByName, plural, pickFiles, errorMsg, successMsg, type Notification } from '$lib/utils.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
 	import Modal from './Modal.svelte';
 	import StatusMessage from './StatusMessage.svelte';
@@ -76,7 +76,7 @@
 			const entries = await listDirectory(adb, CHEATS_PATH);
 			const dirs = entries
 				.filter((e) => e.isDirectory && !e.name.startsWith('.'))
-				.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+				.sort(compareByName);
 
 			const result: CheatSystem[] = [];
 			for (const dir of dirs) {
@@ -84,7 +84,7 @@
 				const sysEntries = await listDirectory(adb, sysPath);
 				const chtFiles = sysEntries
 					.filter((e) => e.isFile && e.name.endsWith('.cht'))
-					.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+					.sort(compareByName);
 
 				if (chtFiles.length === 0) continue;
 
@@ -182,7 +182,7 @@
 			const sysEntries = await listDirectory(adb, sysPath);
 			const chtFiles = sysEntries
 				.filter((e) => e.isFile && e.name.endsWith('.cht'))
-				.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+				.sort(compareByName);
 			sys.cheats = chtFiles.map((f) => ({
 				fileName: f.name,
 				romName: extractRomName(f.name),
@@ -209,7 +209,7 @@
 			const entries = await listDirectory(adb, DEVICE_PATHS.roms);
 			pickerSystems = entries
 				.filter((e) => e.isDirectory && !e.name.startsWith('.'))
-				.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
+				.sort(compareByName)
 				.map((d) => {
 					const match = d.name.match(/\(([^)]+)\)$/);
 					return {
@@ -322,7 +322,7 @@
 							<span class="font-semibold text-text">{sys.systemCode}</span>
 							<div class="flex items-center gap-3">
 								<span class="text-sm text-green-500">
-									{sys.cheats.length} cheat{sys.cheats.length !== 1 ? 's' : ''}
+									{plural(sys.cheats.length, 'cheat')}
 								</span>
 								<span class="text-text-muted">{sys.expanded ? '\u25B2' : '\u25BC'}</span>
 							</div>
@@ -404,8 +404,8 @@
 	</div>
 
 	<div class="mt-2 text-xs text-text-muted flex justify-between">
-		<span>{systems.length} system{systems.length !== 1 ? 's' : ''}</span>
-		<span>{totalCheats} cheat file{totalCheats !== 1 ? 's' : ''}</span>
+		<span>{plural(systems.length, 'system')}</span>
+		<span>{plural(totalCheats, 'cheat file')}</span>
 	</div>
 </div>
 

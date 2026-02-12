@@ -4,7 +4,7 @@
 	import { listDirectory, pullFile } from '$lib/adb/file-ops.js';
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { getNextUIVersion } from '$lib/stores/connection.svelte.js';
-	import { formatSize, formatError, errorMsg, successMsg, type Notification } from '$lib/utils.js';
+	import { formatSize, formatError, plural, errorMsg, successMsg, type Notification } from '$lib/utils.js';
 	import StatusMessage from './StatusMessage.svelte';
 	import JSZip from 'jszip';
 
@@ -182,7 +182,7 @@
 	</div>
 
 	<div class="mt-2 text-xs text-text-muted flex justify-between">
-		<span>{logFiles.length} log file{logFiles.length !== 1 ? 's' : ''}</span>
+		<span>{plural(logFiles.length, 'log file')}</span>
 		{#if logFiles.length > 0}
 			<span>Total: {formatSize(totalSize)}</span>
 		{/if}

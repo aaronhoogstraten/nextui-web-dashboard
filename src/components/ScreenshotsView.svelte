@@ -4,7 +4,7 @@
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { listDirectory, pullFile } from '$lib/adb/file-ops.js';
 	import { adbExec } from '$lib/stores/connection.svelte.js';
-	import { formatSize, formatError, errorMsg, successMsg, type Notification } from '$lib/utils.js';
+	import { formatSize, formatError, getMimeType, plural, errorMsg, successMsg, type Notification } from '$lib/utils.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
 	import ImagePreview from './ImagePreview.svelte';
 	import StatusMessage from './StatusMessage.svelte';
@@ -43,17 +43,6 @@
 		const ms = Number(mtime) * 1000;
 		if (ms === 0) return '';
 		return new Date(ms).toLocaleDateString();
-	}
-
-	function getMimeType(name: string): string {
-		const ext = name.substring(name.lastIndexOf('.')).toLowerCase();
-		const mimeMap: Record<string, string> = {
-			'.png': 'image/png',
-			'.jpg': 'image/jpeg',
-			'.jpeg': 'image/jpeg',
-			'.bmp': 'image/bmp'
-		};
-		return mimeMap[ext] || 'image/png';
 	}
 
 	async function refresh() {
@@ -262,7 +251,7 @@
 	</div>
 
 	<div class="mt-2 text-xs text-text-muted flex justify-between">
-		<span>{screenshots.length} screenshot{screenshots.length !== 1 ? 's' : ''}</span>
+		<span>{plural(screenshots.length, 'screenshot')}</span>
 		{#if screenshots.length > 0}
 			<span>Total: {formatSize(totalSize)}</span>
 		{/if}

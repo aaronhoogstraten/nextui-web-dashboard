@@ -4,7 +4,7 @@
 	import { listDirectory, pullFile, pushFile, isDirectory } from '$lib/adb/file-ops.js';
 	import { DEVICE_PATHS, type DirectoryEntry } from '$lib/adb/types.js';
 	import { adbExec } from '$lib/stores/connection.svelte.js';
-	import { formatSize, formatError, joinPath, pickFiles, errorMsg, successMsg, type Notification } from '$lib/utils.js';
+	import { formatSize, formatError, compareByName, getMimeType, joinPath, pickFiles, errorMsg, successMsg, type Notification } from '$lib/utils.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
 	import ImagePreview from './ImagePreview.svelte';
 	import StatusMessage from './StatusMessage.svelte';
@@ -46,7 +46,7 @@
 
 			let cmp = 0;
 			if (key === 'name') {
-				cmp = a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+				cmp = compareByName(a, b);
 			} else if (key === 'size') {
 				cmp = Number(a.size - b.size);
 			} else {
@@ -258,12 +258,7 @@
 		try {
 			const remotePath = joinPath(currentPath, entry.name);
 			const data = await pullFile(adb, remotePath);
-			const ext = entry.name.substring(entry.name.lastIndexOf('.')).toLowerCase();
-			const mimeMap: Record<string, string> = {
-				'.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
-				'.bmp': 'image/bmp', '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml'
-			};
-			const blob = new Blob([data], { type: mimeMap[ext] || 'image/png' });
+			const blob = new Blob([data], { type: getMimeType(entry.name) });
 			if (previewSrc) URL.revokeObjectURL(previewSrc);
 			previewSrc = URL.createObjectURL(blob);
 			previewAlt = entry.name;

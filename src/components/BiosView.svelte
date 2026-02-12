@@ -6,7 +6,7 @@
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { pathExists, pullFile, pushFile, listDirectory } from '$lib/adb/file-ops.js';
 	import { adbExec } from '$lib/stores/connection.svelte.js';
-	import { formatError, pickFile } from '$lib/utils.js';
+	import { formatError, plural, pickFile } from '$lib/utils.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
 
 	let { adb }: { adb: Adb } = $props();
@@ -302,7 +302,7 @@
 					<div class="flex items-center gap-3">
 						{#if system.isCustom}
 							<span class="text-xs text-blue-500">
-								{system.files.length} file{system.files.length !== 1 ? 's' : ''}
+								{plural(system.files.length, 'file')}
 							</span>
 						{:else}
 							{#if system.anyOneOf}

@@ -4,7 +4,7 @@
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { listDirectory, pullFile, pushFile, pathExists } from '$lib/adb/file-ops.js';
 	import { adbExec } from '$lib/stores/connection.svelte.js';
-	import { formatSize, formatError, pickFiles } from '$lib/utils.js';
+	import { formatSize, formatError, compareByName, plural, pickFiles } from '$lib/utils.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
 	import ImagePreview from './ImagePreview.svelte';
 
@@ -68,9 +68,7 @@
 					const files = await listDirectory(adb, devicePath);
 					entry.files = files
 						.filter((f) => f.isFile && f.name.toLowerCase().endsWith('.png'))
-						.sort((a, b) =>
-							a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
-						)
+						.sort(compareByName)
 						.map((f) => ({
 							name: f.name,
 							size: f.size,
@@ -156,9 +154,7 @@
 					}
 					sys.files = entries
 						.filter((f) => f.isFile && f.name.toLowerCase().endsWith('.png'))
-						.sort((a, b) =>
-							a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
-						)
+						.sort(compareByName)
 						.map((f) => ({
 							name: f.name,
 							size: f.size,
@@ -213,7 +209,7 @@
 	function formatResetTime(reset: Date): string {
 		const mins = Math.max(0, Math.ceil((reset.getTime() - Date.now()) / 60000));
 		if (mins === 0) return 'less than a minute';
-		return `${mins} minute${mins !== 1 ? 's' : ''}`;
+		return plural(mins, 'minute');
 	}
 
 	async function fetchJson(url: string): Promise<any[]> {
@@ -320,7 +316,7 @@
 				}
 				sys.files = entries
 					.filter((f) => f.isFile && f.name.toLowerCase().endsWith('.png'))
-					.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
+					.sort(compareByName)
 					.map((f) => ({
 						name: f.name,
 						size: f.size,
@@ -409,7 +405,7 @@
 							<span
 								class="text-sm {sys.files.length > 0 ? 'text-green-500' : 'text-text-muted'}"
 							>
-								{sys.files.length} overlay{sys.files.length !== 1 ? 's' : ''}
+								{plural(sys.files.length, 'overlay')}
 							</span>
 							<span class="text-text-muted">{sys.expanded ? '\u25B2' : '\u25BC'}</span>
 						</div>
@@ -496,7 +492,7 @@
 
 									{#if rateLimitRemaining !== null && rateLimitRemaining <= 10}
 										<div class="text-xs text-yellow-500 mb-2">
-											GitHub API: {rateLimitRemaining} request{rateLimitRemaining !== 1 ? 's' : ''} remaining{rateLimitReset ? ` (resets in ${formatResetTime(rateLimitReset)})` : ''}
+											GitHub API: {plural(rateLimitRemaining ?? 0, 'request')} remaining{rateLimitReset ? ` (resets in ${formatResetTime(rateLimitReset)})` : ''}
 										</div>
 									{/if}
 
