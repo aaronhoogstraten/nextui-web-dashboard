@@ -743,14 +743,12 @@
 									<div class="w-40 border border-border rounded-lg overflow-hidden bg-bg shrink-0">
 										<!-- Preview area -->
 										{#if media.url}
-											<!-- svelte-ignore a11y_click_events_have_key_events -->
-											<!-- svelte-ignore a11y_no_static_element_interactions -->
-											<div
+											<button
 												onclick={() => { previewSrc = media.url; previewAlt = `${s.system.systemName} — ${media.label}`; }}
-												class="h-28 bg-surface cursor-pointer grid place-items-center p-1"
+												class="h-28 w-full bg-surface cursor-pointer grid place-items-center p-1"
 											>
 												<img src={media.url} alt={media.label} class="max-w-full max-h-full object-contain" />
-											</div>
+											</button>
 										{:else}
 											<div class="h-28 bg-surface grid place-items-center">
 												<span class="text-text-muted text-xs">No {media.label}</span>
