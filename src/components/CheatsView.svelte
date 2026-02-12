@@ -153,25 +153,32 @@
 
 	// --- Actions ---
 
-	async function uploadCheats(sys: CheatSystem) {
+	/** Shared upload logic: pick .cht files, push to system dir. Returns count uploaded, or 0 if cancelled. */
+	async function pushCheatFiles(systemCode: string): Promise<number> {
 		const files = await pickFiles({ accept: '.cht' });
-		if (files.length === 0) return;
+		if (files.length === 0) return 0;
 
-		uploadingTo = sys.systemCode;
+		uploadingTo = systemCode;
 		notice = null;
-		let uploaded = 0;
 
+		const sysPath = `${CHEATS_PATH}/${systemCode}`;
+		await adbExec(ShellCmd.mkdir(sysPath));
+
+		for (const file of files) {
+			const data = new Uint8Array(await file.arrayBuffer());
+			await pushFile(adb, `${sysPath}/${file.name}`, data);
+		}
+		return files.length;
+	}
+
+	async function uploadCheats(sys: CheatSystem) {
 		try {
-			const sysPath = `${CHEATS_PATH}/${sys.systemCode}`;
-			await adbExec(ShellCmd.mkdir(sysPath));
+			const count = await pushCheatFiles(sys.systemCode);
+			if (count === 0) return;
 
-			for (const file of files) {
-				const data = new Uint8Array(await file.arrayBuffer());
-				await pushFile(adb, `${sysPath}/${file.name}`, data);
-				uploaded++;
-			}
-			notice = successMsg(`Uploaded ${uploaded} cheat file(s) to ${sys.systemCode}`);
-			// Reload this system
+			notice = successMsg(`Uploaded ${count} cheat file(s) to ${sys.systemCode}`);
+			// Reload this system's cheat list
+			const sysPath = `${CHEATS_PATH}/${sys.systemCode}`;
 			const sysEntries = await listDirectory(adb, sysPath);
 			const chtFiles = sysEntries
 				.filter((e) => e.isFile && e.name.endsWith('.cht'))
@@ -219,23 +226,11 @@
 
 	async function selectSystemAndUpload(sys: PickerSystem) {
 		pickerOpen = false;
-		const code = sys.systemCode;
-
-		const files = await pickFiles({ accept: '.cht' });
-		if (files.length === 0) return;
-
-		uploadingTo = code;
-		notice = null;
-
 		try {
-			const sysPath = `${CHEATS_PATH}/${code}`;
-			await adbExec(ShellCmd.mkdir(sysPath));
+			const count = await pushCheatFiles(sys.systemCode);
+			if (count === 0) return;
 
-			for (const file of files) {
-				const data = new Uint8Array(await file.arrayBuffer());
-				await pushFile(adb, `${sysPath}/${file.name}`, data);
-			}
-			notice = successMsg(`Uploaded ${files.length} cheat file(s) to ${code}`);
+			notice = successMsg(`Uploaded ${count} cheat file(s) to ${sys.systemCode}`);
 			await refresh();
 		} catch (e) {
 			notice = errorMsg(`Upload failed: ${formatError(e)}`);
