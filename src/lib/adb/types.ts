@@ -1,11 +1,5 @@
 import type { Adb } from '@yume-chan/adb';
 
-/** Connection method available in the current browser */
-export type ConnectionMethod = 'webusb' | 'websocket' | 'none';
-
-/** Current state of the device connection */
-export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'error';
-
 /** Information about the connected device */
 export interface DeviceInfo {
 	serial: string;
@@ -34,7 +28,7 @@ export interface DirectoryEntry {
 export interface AdbConnection {
 	adb: Adb;
 	device: DeviceInfo;
-	connectionMethod: ConnectionMethod;
+	connectionMethod: 'webusb';
 }
 
 /** Base path for NextUI on TrimUI devices */

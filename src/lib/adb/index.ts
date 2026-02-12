@@ -1,6 +1,4 @@
 export type {
-	ConnectionMethod,
-	ConnectionState,
 	DeviceInfo,
 	StorageInfo,
 	DirectoryEntry,
@@ -8,7 +6,6 @@ export type {
 } from './types.js';
 export { NEXTUI_BASE_PATH, DEVICE_PATHS } from './types.js';
 export {
-	detectConnectionMethod,
 	hasWebUSB,
 	getBrowserRecommendation,
 	connectWebUSB,

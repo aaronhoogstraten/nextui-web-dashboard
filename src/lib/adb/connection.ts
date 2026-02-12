@@ -1,7 +1,7 @@
 import { Adb, AdbDaemonTransport } from '@yume-chan/adb';
 import { AdbDaemonWebUsbDeviceManager } from '@yume-chan/adb-daemon-webusb';
 import AdbWebCredentialStore from '@yume-chan/adb-credential-web';
-import type { AdbConnection, ConnectionMethod, DeviceInfo } from './types.js';
+import type { AdbConnection, DeviceInfo } from './types.js';
 
 /** Cached credential store instance (persists RSA keys in IndexedDB) */
 let credentialStore: AdbWebCredentialStore | null = null;
@@ -13,20 +13,9 @@ function getCredentialStore(): AdbWebCredentialStore {
 	return credentialStore;
 }
 
-/** Detect which connection method is available in the current browser */
-export function detectConnectionMethod(): ConnectionMethod {
-	if (typeof navigator !== 'undefined' && 'usb' in navigator) {
-		return 'webusb';
-	}
-	if (typeof WebSocket !== 'undefined') {
-		return 'websocket';
-	}
-	return 'none';
-}
-
 /** Check if WebUSB is supported in the current browser */
 export function hasWebUSB(): boolean {
-	return detectConnectionMethod() === 'webusb';
+	return typeof navigator !== 'undefined' && 'usb' in navigator;
 }
 
 /** Get a user-facing recommendation based on browser capabilities */
@@ -36,11 +25,11 @@ export function getBrowserRecommendation(): string {
 	const ua = navigator.userAgent;
 
 	if (ua.includes('Firefox')) {
-		return 'Firefox does not support WebUSB. For the best experience, use Chrome or Edge. Alternatively, use the WebSocket bridge.';
+		return 'Firefox does not support WebUSB. Please use Chrome or Edge.';
 	}
 
 	if (ua.includes('Safari') && !ua.includes('Chrome')) {
-		return 'Safari does not support WebUSB. Please use Chrome or Edge, or use the WebSocket bridge.';
+		return 'Safari does not support WebUSB. Please use Chrome or Edge.';
 	}
 
 	return '';
