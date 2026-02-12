@@ -7,4 +7,4 @@ export {
 } from './definitions.js';
 
 export type { BiosValidationResult } from './validation.js';
-export { sha1, sha256, validateBiosFile } from './validation.js';
+export { sha1, validateBiosFile } from './validation.js';

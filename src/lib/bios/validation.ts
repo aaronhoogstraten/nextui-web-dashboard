@@ -1,16 +1,4 @@
-import { sha256 } from '$lib/adb/file-ops.js';
 import type { BiosFileDefinition } from './definitions.js';
-
-/**
- * Compute MD5 hash of data.
- * Uses a pure JS implementation since Web Crypto only supports SHA-*.
- */
-export async function md5(data: Uint8Array): Promise<string> {
-	// MD5 is not available in Web Crypto API.
-	// For BIOS validation we use SHA-1 (available via Web Crypto).
-	// This function is a placeholder — we validate with SHA-1 instead.
-	throw new Error('MD5 not available via Web Crypto. Use validateBiosFile() which uses SHA-1.');
-}
 
 /**
  * Compute SHA-1 hash of data using the Web Crypto API.
@@ -20,8 +8,6 @@ export async function sha1(data: Uint8Array): Promise<string> {
 	const hashArray = Array.from(new Uint8Array(hashBuffer));
 	return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
 }
-
-export { sha256 };
 
 /** Result of validating a BIOS file */
 export interface BiosValidationResult {
