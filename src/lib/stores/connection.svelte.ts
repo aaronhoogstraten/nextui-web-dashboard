@@ -81,6 +81,19 @@ export async function connect() {
 		connection = conn;
 		status = `Connected: ${deviceName}`;
 		adbLog.info('NextUI installation verified');
+
+		// Listen for unexpected disconnection (e.g. device sleep, USB unplug)
+		// The promise resolves on clean close, rejects on transport error (e.g. NetworkError)
+		const onDisconnect = () => {
+			if (connection === conn) {
+				adbLog.warn('Device disconnected unexpectedly');
+				connection = null;
+				status = 'Disconnected';
+				error = 'Device disconnected';
+				nextuiVersion = '';
+			}
+		};
+		conn.adb.disconnected.then(onDisconnect, onDisconnect);
 	} catch (e) {
 		const msg = formatError(e);
 		error = msg;

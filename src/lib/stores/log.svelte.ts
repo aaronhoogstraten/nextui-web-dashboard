@@ -25,10 +25,11 @@ export function getLogVersion(): number {
 }
 
 export function log(level: LogLevel, message: string) {
-	_entries.push({ id: nextId++, timestamp: new Date(), level, message });
-	if (_entries.length > MAX_ENTRIES) {
-		_entries.splice(0, _entries.length - MAX_ENTRIES);
+	if (_entries.length >= MAX_ENTRIES) {
+		// Drop oldest half in one operation instead of splicing one-by-one
+		_entries.splice(0, MAX_ENTRIES >> 1);
 	}
+	_entries.push({ id: nextId++, timestamp: new Date(), level, message });
 	version++;
 }
 

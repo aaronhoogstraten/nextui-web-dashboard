@@ -1,3 +1,8 @@
+<script lang="ts" module>
+	const TEXT_EXTENSIONS = new Set(['.txt', '.cfg', '.conf', '.ini', '.json', '.sh', '.xml', '.yml', '.log', '.csv']);
+	const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp', '.svg']);
+</script>
+
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import type { Adb } from '@yume-chan/adb';
@@ -177,7 +182,6 @@
 	}
 
 	// --- Text Editor ---
-	const TEXT_EXTENSIONS = new Set(['.txt', '.cfg', '.conf', '.ini', '.json', '.sh', '.xml', '.yml', '.log', '.csv']);
 
 	function isTextFile(name: string): boolean {
 		const dot = name.lastIndexOf('.');
@@ -241,7 +245,6 @@
 	}
 
 	// --- Image Preview ---
-	const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp', '.svg']);
 
 	function isImageFile(name: string): boolean {
 		const dot = name.lastIndexOf('.');

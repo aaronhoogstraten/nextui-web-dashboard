@@ -44,14 +44,21 @@
 
 	// --- State ---
 
+	// svelte-ignore state_referenced_locally -- intentional snapshot of initial prop value
 	let editorPaths: string[] = $state([...collection.romPaths]);
+	// svelte-ignore state_referenced_locally
 	let editorOriginal: string[] = $state([...collection.romPaths]);
 	let editorValidation: Map<string, boolean> = $state.raw(new Map());
 	let validating = $state(false);
 	let saving = $state(false);
 	let notice: Notification | null = $state(null);
 
-	const editorDirty = $derived(JSON.stringify(editorPaths) !== JSON.stringify(editorOriginal));
+	const editorDirty = $derived(
+		editorPaths.length !== editorOriginal.length ||
+			editorPaths.some((p, i) => p !== editorOriginal[i])
+	);
+
+	const editorPathSet = $derived(new Set(editorPaths));
 
 	// --- ROM Picker State ---
 
@@ -196,7 +203,7 @@
 			for (const file of sys.files) {
 				if (file.selected) {
 					const romPath = `/Roms/${sys.dirName}/${file.name}`;
-					if (!editorPaths.includes(romPath)) {
+					if (!editorPathSet.has(romPath)) {
 						newPaths.push(romPath);
 					}
 					file.selected = false;
@@ -381,7 +388,7 @@
 									<div class="p-2 bg-bg max-h-60 overflow-auto">
 										{#each sys.files as file}
 											{@const romPath = `/Roms/${sys.dirName}/${file.name}`}
-											{@const alreadyAdded = editorPaths.includes(romPath)}
+											{@const alreadyAdded = editorPathSet.has(romPath)}
 											<label class="flex items-center gap-2 py-0.5 px-1 text-sm rounded hover:bg-surface cursor-pointer {alreadyAdded ? 'opacity-50' : ''}">
 												<input
 													type="checkbox"

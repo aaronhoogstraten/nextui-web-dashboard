@@ -1,4 +1,4 @@
-type Theme = 'dark' | 'light';
+export type Theme = 'dark' | 'light';
 
 const STORAGE_KEY = 'nextui-dashboard-theme';
 
@@ -16,8 +16,8 @@ function applyTheme(t: Theme) {
 	document.documentElement.classList.toggle('light', t === 'light');
 }
 
-// Apply on load
-applyTheme(theme);
+// Apply on load — intentionally reads the initial value (toggleTheme re-applies on change)
+applyTheme(loadTheme());
 
 export function getTheme(): Theme {
 	return theme;

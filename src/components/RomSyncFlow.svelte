@@ -49,24 +49,28 @@
 	let syncConflictFile: SyncFile | null = $state.raw(null);
 	let syncConflictResolve: ((r: ConflictResolution) => void) | null = $state.raw(null);
 
-	const syncTotalNew = $derived(
-		syncSystems.reduce((sum, s) => sum + s.files.filter((f) => f.status === 'new').length, 0)
-	);
-	const syncTotalExisting = $derived(
-		syncSystems.reduce((sum, s) => sum + s.files.filter((f) => f.status === 'exists').length, 0)
-	);
-	const syncTotalChecked = $derived(
-		syncSystems.reduce((sum, s) => sum + s.files.filter((f) => f.checked).length, 0)
-	);
+	const syncTotals = $derived.by(() => {
+		let newCount = 0, existsCount = 0, checkedCount = 0;
+		for (const s of syncSystems) {
+			for (const f of s.files) {
+				if (f.status === 'new') newCount++;
+				else if (f.status === 'exists') existsCount++;
+				if (f.checked) checkedCount++;
+			}
+		}
+		return { newCount, existsCount, checkedCount };
+	});
 
 	// --- Helpers ---
 
 	function syncSystemCounts(sys: SyncSystem) {
-		return {
-			newCount: sys.files.filter((f) => f.status === 'new').length,
-			existsCount: sys.files.filter((f) => f.status === 'exists').length,
-			checkedCount: sys.files.filter((f) => f.checked).length
-		};
+		let newCount = 0, existsCount = 0, checkedCount = 0;
+		for (const f of sys.files) {
+			if (f.status === 'new') newCount++;
+			else if (f.status === 'exists') existsCount++;
+			if (f.checked) checkedCount++;
+		}
+		return { newCount, existsCount, checkedCount };
 	}
 
 	// --- Sync Flow ---
@@ -287,19 +291,19 @@
 	{/if}
 
 	<div class="flex items-center gap-4 mb-3 text-sm">
-		<span class="text-green-500">+{syncTotalNew} new</span>
-		<span class="text-yellow-500">~{syncTotalExisting} existing</span>
-		<span class="text-text-muted">{syncTotalChecked} selected</span>
+		<span class="text-green-500">+{syncTotals.newCount} new</span>
+		<span class="text-yellow-500">~{syncTotals.existsCount} existing</span>
+		<span class="text-text-muted">{syncTotals.checkedCount} selected</span>
 		<div class="flex-1"></div>
 		<button onclick={syncCheckAllNew} class="text-sm text-accent hover:underline">
 			Select All New
 		</button>
 		<button
 			onclick={executeSync}
-			disabled={syncTotalChecked === 0}
+			disabled={syncTotals.checkedCount === 0}
 			class="bg-accent text-white px-4 py-1.5 rounded hover:bg-accent-hover disabled:opacity-50 text-sm"
 		>
-			Start Sync ({plural(syncTotalChecked, 'file')})
+			Start Sync ({plural(syncTotals.checkedCount, 'file')})
 		</button>
 	</div>
 
