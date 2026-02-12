@@ -10,8 +10,10 @@
 		type RomSystem
 	} from '$lib/roms/index.js';
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
-	import { listDirectory, pathExists, pullFile, pushFile, shell } from '$lib/adb/file-ops.js';
+	import { listDirectory, pathExists, pullFile, pushFile } from '$lib/adb/file-ops.js';
+	import { adbExec } from '$lib/stores/connection.svelte.js';
 	import { formatSize, formatError, pickFile, pickFiles } from '$lib/utils.js';
+	import { ShellCmd } from '$lib/adb/adb-utils.js';
 	import ImagePreview from './ImagePreview.svelte';
 
 	let { adb }: { adb: Adb } = $props();
@@ -319,7 +321,7 @@
 			const dir = getSpecialMediaDir(state, filename);
 			const dirExists = await pathExists(adb, dir);
 			if (!dirExists) {
-				await shell(adb, `mkdir -p "${dir}"`);
+				await adbExec(ShellCmd.mkdir(dir));
 			}
 
 			const data = new Uint8Array(await file.arrayBuffer());
@@ -338,7 +340,7 @@
 
 		removingBg = `${state.system.systemCode}/${filename}`;
 		try {
-			await shell(adb, `rm "${getSpecialMediaPath(state, filename)}"`);
+			await adbExec(ShellCmd.rm(getSpecialMediaPath(state, filename)));
 			setSpecialMedia(state, filename, null);
 		} catch (e) {
 			state.error = `Delete failed: ${formatError(e)}`;
@@ -419,7 +421,7 @@
 
 			const mediaDirExists = await pathExists(adb, mediaPath);
 			if (!mediaDirExists) {
-				await shell(adb, `mkdir -p "${mediaPath}"`);
+				await adbExec(ShellCmd.mkdir(mediaPath));
 			}
 
 			const data = new Uint8Array(await file.arrayBuffer());
@@ -446,12 +448,12 @@
 		removingRom = rom.name;
 		try {
 			// Remove the ROM file
-			await shell(adb, `rm "${state.devicePath}/${rom.name}"`);
+			await adbExec(ShellCmd.rm(`${state.devicePath}/${rom.name}`));
 
 			// Also remove media art if present
 			if (rom.hasMedia) {
 				const mediaPath = getRomMediaPath(state.system);
-				await shell(adb, `rm "${mediaPath}/${rom.mediaFileName}"`);
+				await adbExec(ShellCmd.rm(`${mediaPath}/${rom.mediaFileName}`));
 			}
 
 			// Clean up thumbnail
@@ -475,7 +477,7 @@
 		try {
 			const mediaPath = getRomMediaPath(state.system);
 			const remotePath = `${mediaPath}/${rom.mediaFileName}`;
-			await shell(adb, `rm "${remotePath}"`);
+			await adbExec(ShellCmd.rm(remotePath));
 
 			if (rom.thumbnailUrl) {
 				URL.revokeObjectURL(rom.thumbnailUrl);
@@ -542,7 +544,7 @@
 			}
 
 			if (newMap.size === 0) {
-				await shell(adb, `rm -f "${state.devicePath}/map.txt"`);
+				await adbExec(ShellCmd.rmf(`${state.devicePath}/map.txt`));
 			} else {
 				const content = serializeMapTxt(newMap);
 				const data = new TextEncoder().encode(content);
@@ -576,7 +578,7 @@
 			}
 
 			if (cleanMap.size === 0) {
-				await shell(adb, `rm -f "${state.devicePath}/map.txt"`);
+				await adbExec(ShellCmd.rmf(`${state.devicePath}/map.txt`));
 			} else {
 				const content = serializeMapTxt(cleanMap);
 				const data = new TextEncoder().encode(content);
@@ -828,7 +830,7 @@
 
 			try {
 				const devicePath = `${DEVICE_PATHS.roms}/${item.system}`;
-				await shell(adb, `mkdir -p "${item.file.isMedia ? devicePath + '/.media' : devicePath}"`);
+				await adbExec(ShellCmd.mkdir(item.file.isMedia ? devicePath + '/.media' : devicePath));
 				const file = await item.file.fileHandle.getFile();
 				const data = new Uint8Array(await file.arrayBuffer());
 				const remotePath = item.file.isMedia

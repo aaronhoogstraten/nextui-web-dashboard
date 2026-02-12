@@ -4,8 +4,10 @@
 	import { BIOS_SYSTEMS, getBiosDevicePath, type BiosFileDefinition } from '$lib/bios/index.js';
 	import { validateBiosFile } from '$lib/bios/validation.js';
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
-	import { pathExists, pullFile, pushFile, listDirectory, shell } from '$lib/adb/file-ops.js';
+	import { pathExists, pullFile, pushFile, listDirectory } from '$lib/adb/file-ops.js';
+	import { adbExec } from '$lib/stores/connection.svelte.js';
 	import { formatError, pickFile } from '$lib/utils.js';
+	import { ShellCmd } from '$lib/adb/adb-utils.js';
 
 	let { adb }: { adb: Adb } = $props();
 
@@ -235,7 +237,7 @@
 		const key = `${file.definition.systemCode}/${file.definition.fileName}`;
 		removingFile = key;
 		try {
-			await shell(adb, `rm "${file.devicePath}"`);
+			await adbExec(ShellCmd.rm(file.devicePath));
 			if (system.isCustom) {
 				// Remove from the custom system's file list
 				system.files = system.files.filter((f) => f !== file);

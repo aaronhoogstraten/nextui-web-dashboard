@@ -2,8 +2,10 @@
 	import { untrack } from 'svelte';
 	import type { Adb } from '@yume-chan/adb';
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
-	import { listDirectory, pullFile, pushFile, shell, pathExists } from '$lib/adb/file-ops.js';
+	import { listDirectory, pullFile, pushFile, pathExists } from '$lib/adb/file-ops.js';
+	import { adbExec } from '$lib/stores/connection.svelte.js';
 	import { formatSize, formatError, pickFiles } from '$lib/utils.js';
+	import { ShellCmd } from '$lib/adb/adb-utils.js';
 
 	let { adb }: { adb: Adb } = $props();
 
@@ -64,7 +66,7 @@
 		try {
 			const dirExists = await pathExists(adb, CHEATS_PATH);
 			if (!dirExists) {
-				await shell(adb, `mkdir -p "${CHEATS_PATH}"`);
+				await adbExec(ShellCmd.mkdir(CHEATS_PATH));
 				loading = false;
 				return;
 			}
@@ -159,7 +161,7 @@
 
 		try {
 			const sysPath = `${CHEATS_PATH}/${sys.systemCode}`;
-			await shell(adb, `mkdir -p "${sysPath}"`);
+			await adbExec(ShellCmd.mkdir(sysPath));
 
 			for (const file of files) {
 				const data = new Uint8Array(await file.arrayBuffer());
@@ -225,7 +227,7 @@
 
 		try {
 			const sysPath = `${CHEATS_PATH}/${code}`;
-			await shell(adb, `mkdir -p "${sysPath}"`);
+			await adbExec(ShellCmd.mkdir(sysPath));
 
 			for (const file of files) {
 				const data = new Uint8Array(await file.arrayBuffer());
@@ -243,7 +245,7 @@
 		if (!confirm(`Delete cheat "${cheat.fileName}"?`)) return;
 		deletingFile = cheat.fileName;
 		try {
-			await shell(adb, `rm "${CHEATS_PATH}/${sys.systemCode}/${cheat.fileName}"`);
+			await adbExec(ShellCmd.rm(`${CHEATS_PATH}/${sys.systemCode}/${cheat.fileName}`));
 			sys.cheats = sys.cheats.filter((c) => c !== cheat);
 			if (sys.cheats.length === 0) {
 				systems = systems.filter((s) => s !== sys);

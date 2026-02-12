@@ -2,9 +2,11 @@
 	import { untrack } from 'svelte';
 	import type { Adb } from '@yume-chan/adb';
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
-	import { listDirectory, pullFile, pushFile, shell, pathExists } from '$lib/adb/file-ops.js';
+	import { listDirectory, pullFile, pushFile, pathExists } from '$lib/adb/file-ops.js';
+	import { adbExec } from '$lib/stores/connection.svelte.js';
 	import { parseRomDirectoryName } from '$lib/roms/definitions.js';
 	import { formatError, pickFile } from '$lib/utils.js';
+	import { ShellCmd } from '$lib/adb/adb-utils.js';
 	import ImagePreview from './ImagePreview.svelte';
 
 	let { adb }: { adb: Adb } = $props();
@@ -95,7 +97,7 @@
 			// Ensure Collections directory exists
 			const dirExists = await pathExists(adb, COLLECTIONS_PATH);
 			if (!dirExists) {
-				await shell(adb, `mkdir -p "${COLLECTIONS_PATH}"`);
+				await adbExec(ShellCmd.mkdir(COLLECTIONS_PATH));
 			}
 
 			const entries = await listDirectory(adb, COLLECTIONS_PATH);
@@ -177,7 +179,7 @@
 
 		error = '';
 		try {
-			await shell(adb, `mkdir -p "${COLLECTIONS_PATH}"`);
+			await adbExec(ShellCmd.mkdir(COLLECTIONS_PATH));
 			const content = new TextEncoder().encode('');
 			await pushFile(adb, `${COLLECTIONS_PATH}/${trimmed}.txt`, content);
 			await refresh();
@@ -191,12 +193,12 @@
 			return;
 		deletingCollection = col.name;
 		try {
-			await shell(adb, `rm "${COLLECTIONS_PATH}/${col.fileName}"`);
+			await adbExec(ShellCmd.rm(`${COLLECTIONS_PATH}/${col.fileName}`));
 			// Remove icon if exists
 			const iconPath = `${MEDIA_PATH}/${col.name}.png`;
 			const iconExists = await pathExists(adb, iconPath);
 			if (iconExists) {
-				await shell(adb, `rm "${iconPath}"`);
+				await adbExec(ShellCmd.rm(iconPath));
 			}
 			if (col.iconUrl) URL.revokeObjectURL(col.iconUrl);
 			collections = collections.filter((c) => c !== col);
@@ -211,7 +213,7 @@
 		if (!file) return;
 		uploadingIcon = col.name;
 		try {
-			await shell(adb, `mkdir -p "${MEDIA_PATH}"`);
+			await adbExec(ShellCmd.mkdir(MEDIA_PATH));
 			const data = new Uint8Array(await file.arrayBuffer());
 			await pushFile(adb, `${MEDIA_PATH}/${col.name}.png`, data);
 			if (col.iconUrl) URL.revokeObjectURL(col.iconUrl);
@@ -226,7 +228,7 @@
 	async function removeIcon(col: CollectionState) {
 		if (!confirm(`Remove icon for "${col.name}"?`)) return;
 		try {
-			await shell(adb, `rm "${MEDIA_PATH}/${col.name}.png"`);
+			await adbExec(ShellCmd.rm(`${MEDIA_PATH}/${col.name}.png`));
 			if (col.iconUrl) URL.revokeObjectURL(col.iconUrl);
 			col.iconUrl = null;
 		} catch (e) {
@@ -238,7 +240,7 @@
 		const file = await pickFile({ accept: '.png' });
 		if (!file) return;
 		try {
-			await shell(adb, `mkdir -p "${MEDIA_PATH}"`);
+			await adbExec(ShellCmd.mkdir(MEDIA_PATH));
 			const data = new Uint8Array(await file.arrayBuffer());
 			await pushFile(adb, `${MEDIA_PATH}/bg.png`, data);
 			if (bgUrl) URL.revokeObjectURL(bgUrl);
@@ -252,7 +254,7 @@
 	async function removeBg() {
 		if (!confirm('Remove collections list background?')) return;
 		try {
-			await shell(adb, `rm "${MEDIA_PATH}/bg.png"`);
+			await adbExec(ShellCmd.rm(`${MEDIA_PATH}/bg.png`));
 			if (bgUrl) URL.revokeObjectURL(bgUrl);
 			bgUrl = null;
 		} catch (e) {

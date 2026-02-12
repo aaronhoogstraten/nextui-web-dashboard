@@ -2,8 +2,10 @@
 	import { untrack } from 'svelte';
 	import type { Adb } from '@yume-chan/adb';
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
-	import { listDirectory, pullFile, shell } from '$lib/adb/file-ops.js';
+	import { listDirectory, pullFile } from '$lib/adb/file-ops.js';
+	import { adbExec } from '$lib/stores/connection.svelte.js';
 	import { formatSize, formatError } from '$lib/utils.js';
+	import { ShellCmd } from '$lib/adb/adb-utils.js';
 	import ImagePreview from './ImagePreview.svelte';
 	import JSZip from 'jszip';
 
@@ -120,7 +122,7 @@
 		if (!confirm(`Delete "${shot.name}"?`)) return;
 		removingFile = shot.name;
 		try {
-			await shell(adb, `rm "${DEVICE_PATHS.screenshots}/${shot.name}"`);
+			await adbExec(ShellCmd.rm(`${DEVICE_PATHS.screenshots}/${shot.name}`));
 			if (shot.thumbnailUrl) URL.revokeObjectURL(shot.thumbnailUrl);
 			screenshots = screenshots.filter((s) => s !== shot);
 		} catch (e) {

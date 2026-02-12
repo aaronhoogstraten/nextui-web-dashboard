@@ -6,6 +6,7 @@ import type { DirectoryEntry, StorageInfo } from './types.js';
 import { DEVICE_PATHS } from './types.js';
 import { adbLog } from '$lib/stores/log.svelte.js';
 import { formatError } from '$lib/utils.js';
+import { ShellCmd } from './adb-utils.js';
 
 /**
  * Push a file to the device.
@@ -206,7 +207,7 @@ export async function shell(adb: Adb, command: string): Promise<string> {
  */
 export async function getStorageInfo(adb: Adb): Promise<StorageInfo | null> {
 	try {
-		const output = await shell(adb, `df ${DEVICE_PATHS.base}`);
+		const output = await shell(adb, ShellCmd.df(DEVICE_PATHS.base).toString());
 		const lines = output.trim().split('\n');
 		if (lines.length < 2) return null;
 

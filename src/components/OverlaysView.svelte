@@ -2,8 +2,10 @@
 	import { untrack } from 'svelte';
 	import type { Adb } from '@yume-chan/adb';
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
-	import { listDirectory, pullFile, pushFile, shell, pathExists } from '$lib/adb/file-ops.js';
+	import { listDirectory, pullFile, pushFile, pathExists } from '$lib/adb/file-ops.js';
+	import { adbExec } from '$lib/stores/connection.svelte.js';
 	import { formatSize, formatError, pickFiles } from '$lib/utils.js';
+	import { ShellCmd } from '$lib/adb/adb-utils.js';
 	import ImagePreview from './ImagePreview.svelte';
 
 	let { adb }: { adb: Adb } = $props();
@@ -135,7 +137,7 @@
 		try {
 			const dirExists = await pathExists(adb, sys.devicePath);
 			if (!dirExists) {
-				await shell(adb, `mkdir -p "${sys.devicePath}"`);
+				await adbExec(ShellCmd.mkdir(sys.devicePath));
 			}
 
 			for (const file of files) {
@@ -284,7 +286,7 @@
 			// Ensure device directory exists
 			const dirExists = await pathExists(adb, sys.devicePath);
 			if (!dirExists) {
-				await shell(adb, `mkdir -p "${sys.devicePath}"`);
+				await adbExec(ShellCmd.mkdir(sys.devicePath));
 			}
 
 			// Push to device
@@ -328,7 +330,7 @@
 	async function removeOverlay(sys: SystemOverlays, file: OverlayFile) {
 		removingFile = `${sys.systemCode}/${file.name}`;
 		try {
-			await shell(adb, `rm "${sys.devicePath}/${file.name}"`);
+			await adbExec(ShellCmd.rm(`${sys.devicePath}/${file.name}`));
 			if (file.thumbnailUrl) URL.revokeObjectURL(file.thumbnailUrl);
 			sys.files = sys.files.filter((f) => f !== file);
 		} catch (e) {

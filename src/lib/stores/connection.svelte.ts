@@ -1,8 +1,9 @@
 import { connectWebUSB, disconnect as adbDisconnect } from '$lib/adb/connection.js';
 import type { AdbConnection } from '$lib/adb/types.js';
-import { verifyNextUIInstallation } from '$lib/adb/file-ops.js';
+import { verifyNextUIInstallation, shell } from '$lib/adb/file-ops.js';
 import { adbLog } from '$lib/stores/log.svelte.js';
 import { formatError } from '$lib/utils.js';
+import type { ShellCmd } from '$lib/adb/adb-utils.js';
 
 /** Shared reactive connection state — use $state.raw to prevent deep proxy on Adb internals */
 let connection: AdbConnection | null = $state.raw(null);
@@ -33,6 +34,16 @@ export function isConnected() {
 
 export function getNextUIVersion() {
 	return nextuiVersion;
+}
+
+/**
+ * Execute a typed shell command on the connected device.
+ * Uses the active connection from the store — no need to pass `adb`.
+ * Throws if not connected.
+ */
+export async function adbExec(cmd: ShellCmd): Promise<string> {
+	if (!connection) throw new Error('Not connected');
+	return shell(connection.adb, cmd.toString());
 }
 
 export async function connect() {

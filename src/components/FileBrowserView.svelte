@@ -1,9 +1,11 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import type { Adb } from '@yume-chan/adb';
-	import { listDirectory, pullFile, pushFile, isDirectory, shell } from '$lib/adb/file-ops.js';
+	import { listDirectory, pullFile, pushFile, isDirectory } from '$lib/adb/file-ops.js';
 	import { DEVICE_PATHS, type DirectoryEntry } from '$lib/adb/types.js';
+	import { adbExec } from '$lib/stores/connection.svelte.js';
 	import { formatSize, formatError, joinPath, pickFiles } from '$lib/utils.js';
+	import { ShellCmd } from '$lib/adb/adb-utils.js';
 	import ImagePreview from './ImagePreview.svelte';
 
 	let { adb }: { adb: Adb } = $props();
@@ -159,7 +161,7 @@
 		error = '';
 		try {
 			const remotePath = joinPath(currentPath, trimmed);
-			await shell(adb, `mkdir -p "${remotePath}"`);
+			await adbExec(ShellCmd.mkdir(remotePath));
 			await navigate(currentPath);
 		} catch (e) {
 			error = `Failed to create folder: ${formatError(e)}`;
