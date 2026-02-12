@@ -131,15 +131,11 @@ export async function listDirectory(adb: Adb, remotePath: string): Promise<Direc
  * @returns true if the path exists
  */
 export async function pathExists(adb: Adb, remotePath: string): Promise<boolean> {
-	adbLog.debug(`sync.lstat → ${remotePath} (pathExists)`);
 	const sync = await adb.sync(); // Let transport errors propagate
 	try {
 		const st = await sync.lstat(remotePath);
-		const exists = st.mode !== 0;
-		adbLog.debug(`sync.lstat ✓ ${remotePath} → ${exists ? 'exists' : 'not found'}`);
-		return exists;
-	} catch (e) {
-		adbLog.debug(`sync.lstat ✗ ${remotePath}: ${e}`);
+		return st.mode !== 0;
+	} catch {
 		return false;
 	} finally {
 		await sync.dispose();
@@ -151,15 +147,11 @@ export async function pathExists(adb: Adb, remotePath: string): Promise<boolean>
  * Uses lstat (works on NextUI devices) instead of stat.
  */
 export async function isDirectory(adb: Adb, remotePath: string): Promise<boolean> {
-	adbLog.debug(`sync.lstat → ${remotePath} (isDirectory)`);
 	const sync = await adb.sync(); // Let transport errors propagate
 	try {
 		const st = await sync.lstat(remotePath);
-		const isDir = (st.mode & 0o170000) === 0o040000; // S_IFDIR
-		adbLog.debug(`sync.lstat ✓ ${remotePath} → isDir=${isDir}`);
-		return isDir;
-	} catch (e) {
-		adbLog.debug(`sync.lstat ✗ ${remotePath}: ${e}`);
+		return (st.mode & 0o170000) === 0o040000; // S_IFDIR
+	} catch {
 		return false;
 	} finally {
 		await sync.dispose();
