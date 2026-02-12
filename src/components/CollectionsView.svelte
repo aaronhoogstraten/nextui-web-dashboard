@@ -4,10 +4,11 @@
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { listDirectory, pullFile, pushFile, pathExists } from '$lib/adb/file-ops.js';
 	import { adbExec } from '$lib/stores/connection.svelte.js';
-	import { formatError, pickFile } from '$lib/utils.js';
+	import { formatError, pickFile, errorMsg, type Notification } from '$lib/utils.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
 	import ImagePreview from './ImagePreview.svelte';
 	import CollectionEditor from './CollectionEditor.svelte';
+	import StatusMessage from './StatusMessage.svelte';
 
 	let { adb }: { adb: Adb } = $props();
 
@@ -25,7 +26,7 @@
 
 	let collections: CollectionState[] = $state([]);
 	let loading = $state(false);
-	let error: string = $state('');
+	let notice: Notification | null = $state(null);
 	let bgUrl: string | null = $state(null);
 
 	// --- State: Editor ---
@@ -53,7 +54,7 @@
 
 	async function refresh() {
 		loading = true;
-		error = '';
+		notice = null;
 
 		// Clean up old icon URLs
 		for (const c of collections) {
@@ -101,7 +102,7 @@
 			// Load bg
 			loadBg();
 		} catch (e) {
-			error = `Failed to load collections: ${formatError(e)}`;
+			notice = errorMsg(`Failed to load collections: ${formatError(e)}`);
 		}
 
 		loading = false;
@@ -145,18 +146,18 @@
 		if (!name || !name.trim()) return;
 		const trimmed = name.trim();
 		if (trimmed.includes('/') || trimmed.includes('\\')) {
-			error = 'Collection name cannot contain slashes';
+			notice = errorMsg('Collection name cannot contain slashes');
 			return;
 		}
 
-		error = '';
+		notice = null;
 		try {
 			await adbExec(ShellCmd.mkdir(COLLECTIONS_PATH));
 			const content = new TextEncoder().encode('');
 			await pushFile(adb, `${COLLECTIONS_PATH}/${trimmed}.txt`, content);
 			await refresh();
 		} catch (e) {
-			error = `Failed to create collection: ${formatError(e)}`;
+			notice = errorMsg(`Failed to create collection: ${formatError(e)}`);
 		}
 	}
 
@@ -175,7 +176,7 @@
 			if (col.iconUrl) URL.revokeObjectURL(col.iconUrl);
 			collections = collections.filter((c) => c !== col);
 		} catch (e) {
-			error = `Delete failed: ${formatError(e)}`;
+			notice = errorMsg(`Delete failed: ${formatError(e)}`);
 		}
 		deletingCollection = null;
 	}
@@ -192,7 +193,7 @@
 			const blob = new Blob([data as unknown as BlobPart], { type: 'image/png' });
 			col.iconUrl = URL.createObjectURL(blob);
 		} catch (e) {
-			error = `Icon upload failed: ${formatError(e)}`;
+			notice = errorMsg(`Icon upload failed: ${formatError(e)}`);
 		}
 		uploadingIcon = null;
 	}
@@ -204,7 +205,7 @@
 			if (col.iconUrl) URL.revokeObjectURL(col.iconUrl);
 			col.iconUrl = null;
 		} catch (e) {
-			error = `Remove icon failed: ${formatError(e)}`;
+			notice = errorMsg(`Remove icon failed: ${formatError(e)}`);
 		}
 	}
 
@@ -219,7 +220,7 @@
 			const blob = new Blob([data as unknown as BlobPart], { type: 'image/png' });
 			bgUrl = URL.createObjectURL(blob);
 		} catch (e) {
-			error = `Background upload failed: ${formatError(e)}`;
+			notice = errorMsg(`Background upload failed: ${formatError(e)}`);
 		}
 	}
 
@@ -230,7 +231,7 @@
 			if (bgUrl) URL.revokeObjectURL(bgUrl);
 			bgUrl = null;
 		} catch (e) {
-			error = `Remove background failed: ${formatError(e)}`;
+			notice = errorMsg(`Remove background failed: ${formatError(e)}`);
 		}
 	}
 
@@ -294,10 +295,8 @@
 			</div>
 		</div>
 
-		{#if error}
-			<div class="text-xs mb-3 {error === 'Saved' ? 'text-green-500' : 'text-yellow-500'}">
-				{error}
-			</div>
+		{#if notice}
+			<StatusMessage notification={notice} />
 		{/if}
 
 		<div class="text-xs text-text-muted mb-3">

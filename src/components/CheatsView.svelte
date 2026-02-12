@@ -4,9 +4,10 @@
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { listDirectory, pullFile, pushFile, pathExists } from '$lib/adb/file-ops.js';
 	import { adbExec } from '$lib/stores/connection.svelte.js';
-	import { formatSize, formatError, pickFiles } from '$lib/utils.js';
+	import { formatSize, formatError, pickFiles, errorMsg, successMsg, type Notification } from '$lib/utils.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
 	import Modal from './Modal.svelte';
+	import StatusMessage from './StatusMessage.svelte';
 
 	let { adb }: { adb: Adb } = $props();
 
@@ -30,7 +31,7 @@
 
 	let systems: CheatSystem[] = $state([]);
 	let loading = $state(false);
-	let error: string = $state('');
+	let notice: Notification | null = $state(null);
 	let uploadingTo: string | null = $state(null);
 	let deletingFile: string | null = $state(null);
 
@@ -61,7 +62,7 @@
 
 	async function refresh() {
 		loading = true;
-		error = '';
+		notice = null;
 		systems = [];
 
 		try {
@@ -101,7 +102,7 @@
 			}
 			systems = result;
 		} catch (e) {
-			error = `Failed to load cheats: ${formatError(e)}`;
+			notice = errorMsg(`Failed to load cheats: ${formatError(e)}`);
 		}
 
 		loading = false;
@@ -157,7 +158,7 @@
 		if (files.length === 0) return;
 
 		uploadingTo = sys.systemCode;
-		error = '';
+		notice = null;
 		let uploaded = 0;
 
 		try {
@@ -169,7 +170,7 @@
 				await pushFile(adb, `${sysPath}/${file.name}`, data);
 				uploaded++;
 			}
-			error = `Uploaded ${uploaded} cheat file(s) to ${sys.systemCode}`;
+			notice = successMsg(`Uploaded ${uploaded} cheat file(s) to ${sys.systemCode}`);
 			// Reload this system
 			const sysEntries = await listDirectory(adb, sysPath);
 			const chtFiles = sysEntries
@@ -187,7 +188,7 @@
 				sys.loading = false;
 			}
 		} catch (e) {
-			error = `Upload failed: ${formatError(e)}`;
+			notice = errorMsg(`Upload failed: ${formatError(e)}`);
 		}
 		uploadingTo = null;
 	}
@@ -210,7 +211,7 @@
 					};
 				});
 		} catch (e) {
-			error = `Failed to load ROM systems: ${formatError(e)}`;
+			notice = errorMsg(`Failed to load ROM systems: ${formatError(e)}`);
 			pickerOpen = false;
 		}
 		pickerLoading = false;
@@ -224,7 +225,7 @@
 		if (files.length === 0) return;
 
 		uploadingTo = code;
-		error = '';
+		notice = null;
 
 		try {
 			const sysPath = `${CHEATS_PATH}/${code}`;
@@ -234,10 +235,10 @@
 				const data = new Uint8Array(await file.arrayBuffer());
 				await pushFile(adb, `${sysPath}/${file.name}`, data);
 			}
-			error = `Uploaded ${files.length} cheat file(s) to ${code}`;
+			notice = successMsg(`Uploaded ${files.length} cheat file(s) to ${code}`);
 			await refresh();
 		} catch (e) {
-			error = `Upload failed: ${formatError(e)}`;
+			notice = errorMsg(`Upload failed: ${formatError(e)}`);
 		}
 		uploadingTo = null;
 	}
@@ -252,7 +253,7 @@
 				systems = systems.filter((s) => s !== sys);
 			}
 		} catch (e) {
-			error = `Delete failed: ${formatError(e)}`;
+			notice = errorMsg(`Delete failed: ${formatError(e)}`);
 		}
 		deletingFile = null;
 	}
@@ -268,7 +269,7 @@
 			a.click();
 			URL.revokeObjectURL(url);
 		} catch (e) {
-			error = `Download failed: ${formatError(e)}`;
+			notice = errorMsg(`Download failed: ${formatError(e)}`);
 		}
 	}
 
@@ -299,10 +300,8 @@
 		</div>
 	</div>
 
-	{#if error}
-		<div class="text-xs mb-3 {error.startsWith('Uploaded') ? 'text-green-500' : 'text-yellow-500'}">
-			{error}
-		</div>
+	{#if notice}
+		<StatusMessage notification={notice} />
 	{/if}
 
 	<div class="text-xs text-text-muted mb-3">

@@ -3,10 +3,11 @@
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { listDirectory, pushFile } from '$lib/adb/file-ops.js';
 	import { adbExec } from '$lib/stores/connection.svelte.js';
-	import { formatSize } from '$lib/utils.js';
+	import { formatSize, errorMsg, type Notification } from '$lib/utils.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
 	import { parseRomDirectoryName } from '$lib/roms/index.js';
 	import Modal from './Modal.svelte';
+	import StatusMessage from './StatusMessage.svelte';
 
 	let { adb, oncomplete }: { adb: Adb; oncomplete: () => void } = $props();
 
@@ -34,7 +35,7 @@
 	// --- State ---
 
 	let syncPhase: SyncPhase = $state('scanning');
-	let syncError: string = $state('');
+	let syncNotice: Notification | null = $state(null);
 	let syncSystems: SyncSystem[] = $state([]);
 	let syncScanStatus: string = $state('');
 	let syncCurrentSystem: string = $state('');
@@ -70,7 +71,7 @@
 	// --- Sync Flow ---
 
 	export async function start(dirHandle: FileSystemDirectoryHandle) {
-		syncError = '';
+		syncNotice = null;
 		syncPhase = 'scanning';
 		await scanSyncFolder(dirHandle);
 		if (syncPhase === 'scanning') {
@@ -120,7 +121,7 @@
 		}
 
 		if (localSystems.length === 0) {
-			syncError = 'No system directories found matching the expected pattern (e.g. "Game Boy (GB)").';
+			syncNotice = errorMsg('No system directories found matching the expected pattern (e.g. "Game Boy (GB)").');
 			oncomplete();
 			return;
 		}
@@ -191,10 +192,10 @@
 		const filesToSync = syncSystems.flatMap((sys) =>
 			sys.files.filter((f) => f.checked).map((f) => ({ system: sys.dirName, file: f }))
 		);
-		if (filesToSync.length === 0) { syncError = 'No files selected.'; return; }
+		if (filesToSync.length === 0) { syncNotice = errorMsg('No files selected.'); return; }
 
 		syncPhase = 'syncing';
-		syncError = '';
+		syncNotice = null;
 		syncCompleted = 0;
 		syncTotal = filesToSync.length;
 		syncTransferred = 0;
@@ -273,8 +274,8 @@
 		</div>
 	</div>
 
-	{#if syncError}
-		<div class="text-xs text-yellow-500 mb-3">{syncError}</div>
+	{#if syncNotice}
+		<StatusMessage notification={syncNotice} />
 	{/if}
 
 	<div class="flex items-center gap-4 mb-3 text-sm">

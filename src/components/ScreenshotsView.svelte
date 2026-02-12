@@ -4,9 +4,10 @@
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { listDirectory, pullFile } from '$lib/adb/file-ops.js';
 	import { adbExec } from '$lib/stores/connection.svelte.js';
-	import { formatSize, formatError } from '$lib/utils.js';
+	import { formatSize, formatError, errorMsg, successMsg, type Notification } from '$lib/utils.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
 	import ImagePreview from './ImagePreview.svelte';
+	import StatusMessage from './StatusMessage.svelte';
 	import JSZip from 'jszip';
 
 	let { adb }: { adb: Adb } = $props();
@@ -23,7 +24,7 @@
 
 	let screenshots: Screenshot[] = $state([]);
 	let loading = $state(false);
-	let error: string = $state('');
+	let notice: Notification | null = $state(null);
 	let previewSrc: string | null = $state(null);
 	let previewAlt: string = $state('');
 	let removingFile: string | null = $state(null);
@@ -57,7 +58,7 @@
 
 	async function refresh() {
 		loading = true;
-		error = '';
+		notice = null;
 
 		// Clean up old thumbnails
 		for (const s of screenshots) {
@@ -79,10 +80,10 @@
 				}));
 
 			if (screenshots.length === 0) {
-				error = 'No screenshots found on device.';
+				notice = errorMsg('No screenshots found on device.');
 			}
 		} catch {
-			error = 'Screenshots directory not found on device.';
+			notice = errorMsg('Screenshots directory not found on device.');
 		}
 
 		loading = false;
@@ -126,7 +127,7 @@
 			if (shot.thumbnailUrl) URL.revokeObjectURL(shot.thumbnailUrl);
 			screenshots = screenshots.filter((s) => s !== shot);
 		} catch (e) {
-			error = `Delete failed: ${formatError(e)}`;
+			notice = errorMsg(`Delete failed: ${formatError(e)}`);
 		} finally {
 			removingFile = null;
 		}
@@ -135,7 +136,7 @@
 	async function downloadAll() {
 		if (screenshots.length === 0) return;
 		downloading = true;
-		error = '';
+		notice = null;
 		downloadProgress = '';
 
 		try {
@@ -163,9 +164,9 @@
 			URL.revokeObjectURL(url);
 
 			downloadProgress = '';
-			error = `Downloaded ${filename} (${screenshots.length} files)`;
+			notice = successMsg(`Downloaded ${filename} (${screenshots.length} files)`);
 		} catch (e) {
-			error = `Download failed: ${formatError(e)}`;
+			notice = errorMsg(`Download failed: ${formatError(e)}`);
 			downloadProgress = '';
 		}
 		downloading = false;
@@ -203,10 +204,8 @@
 		</div>
 	</div>
 
-	{#if error}
-		<div class="text-xs mb-3 {error.startsWith('Downloaded') ? 'text-green-500' : 'text-yellow-500'}">
-			{error}
-		</div>
+	{#if notice}
+		<StatusMessage notification={notice} />
 	{/if}
 
 	{#if downloadProgress}

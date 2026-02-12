@@ -2,6 +2,20 @@
  * Shared utility functions used across components.
  */
 
+/** Typed notification state — replaces overloaded `error: string` pattern. */
+export interface Notification {
+	type: 'error' | 'success';
+	message: string;
+}
+
+export function errorMsg(message: string): Notification {
+	return { type: 'error', message };
+}
+
+export function successMsg(message: string): Notification {
+	return { type: 'success', message };
+}
+
 /**
  * Format a byte size into a human-readable string.
  * Accepts both bigint (from ADB lstat) and number.

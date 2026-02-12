@@ -3,8 +3,9 @@
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { listDirectory, pushFile, pathExists } from '$lib/adb/file-ops.js';
 	import { parseRomDirectoryName } from '$lib/roms/definitions.js';
-	import { formatError } from '$lib/utils.js';
+	import { formatError, errorMsg, successMsg, type Notification } from '$lib/utils.js';
 	import Modal from './Modal.svelte';
+	import StatusMessage from './StatusMessage.svelte';
 
 	interface CollectionInfo {
 		name: string;
@@ -48,7 +49,7 @@
 	let editorValidation: Map<string, boolean> = $state.raw(new Map());
 	let validating = $state(false);
 	let saving = $state(false);
-	let error: string = $state('');
+	let notice: Notification | null = $state(null);
 
 	const editorDirty = $derived(JSON.stringify(editorPaths) !== JSON.stringify(editorOriginal));
 
@@ -105,16 +106,16 @@
 
 	async function saveCollection() {
 		saving = true;
-		error = '';
+		notice = null;
 		try {
 			const content = editorPaths.join('\n') + (editorPaths.length > 0 ? '\n' : '');
 			const data = new TextEncoder().encode(content);
 			await pushFile(adb, `${COLLECTIONS_PATH}/${collection.fileName}`, data);
 			editorOriginal = [...editorPaths];
 			onsave(editorPaths);
-			error = 'Saved';
+			notice = successMsg('Saved');
 		} catch (e) {
-			error = `Save failed: ${formatError(e)}`;
+			notice = errorMsg(`Save failed: ${formatError(e)}`);
 		}
 		saving = false;
 	}
@@ -174,7 +175,7 @@
 			}
 			pickerSystems = systems;
 		} catch (e) {
-			error = `Failed to load ROM systems: ${formatError(e)}`;
+			notice = errorMsg(`Failed to load ROM systems: ${formatError(e)}`);
 		}
 
 		pickerLoading = false;
@@ -258,10 +259,8 @@
 	</div>
 </div>
 
-{#if error}
-	<div class="text-xs mb-3 {error === 'Saved' ? 'text-green-500' : 'text-yellow-500'}">
-		{error}
-	</div>
+{#if notice}
+	<StatusMessage notification={notice} />
 {/if}
 
 {#if validating}

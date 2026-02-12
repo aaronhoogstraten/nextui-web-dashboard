@@ -4,16 +4,17 @@
 	import { listDirectory, pullFile, pushFile, isDirectory } from '$lib/adb/file-ops.js';
 	import { DEVICE_PATHS, type DirectoryEntry } from '$lib/adb/types.js';
 	import { adbExec } from '$lib/stores/connection.svelte.js';
-	import { formatSize, formatError, joinPath, pickFiles } from '$lib/utils.js';
+	import { formatSize, formatError, joinPath, pickFiles, errorMsg, successMsg, type Notification } from '$lib/utils.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
 	import ImagePreview from './ImagePreview.svelte';
+	import StatusMessage from './StatusMessage.svelte';
 
 	let { adb }: { adb: Adb } = $props();
 
 	let currentPath: string = $state(DEVICE_PATHS.base);
 	let entries: DirectoryEntry[] = $state([]);
 	let loading = $state(false);
-	let error: string = $state('');
+	let notice: Notification | null = $state(null);
 	let sortKey: 'name' | 'size' | 'mtime' = $state('name');
 	let sortAsc = $state(true);
 	let uploading = $state(false);
@@ -81,13 +82,13 @@
 			editorError = '';
 		}
 		loading = true;
-		error = '';
+		notice = null;
 		try {
 			const result = await listDirectory(adb, path);
 			entries = result;
 			currentPath = path;
 		} catch (e) {
-			error = `Failed to list ${path}: ${formatError(e)}`;
+			notice = errorMsg(`Failed to list ${path}: ${formatError(e)}`);
 		}
 		loading = false;
 	}
@@ -120,7 +121,7 @@
 			a.click();
 			URL.revokeObjectURL(url);
 		} catch (e) {
-			error = `Download failed: ${formatError(e)}`;
+			notice = errorMsg(`Download failed: ${formatError(e)}`);
 		}
 		downloadingFile = null;
 	}
@@ -130,7 +131,7 @@
 		if (files.length === 0) return;
 
 		uploading = true;
-		error = '';
+		notice = null;
 		let uploaded = 0;
 
 		try {
@@ -139,10 +140,10 @@
 				await pushFile(adb, joinPath(currentPath, file.name), data);
 				uploaded++;
 			}
-			error = `Uploaded ${uploaded} file(s)`;
+			notice = successMsg(`Uploaded ${uploaded} file(s)`);
 			await navigate(currentPath);
 		} catch (e) {
-			error = `Upload failed: ${formatError(e)}`;
+			notice = errorMsg(`Upload failed: ${formatError(e)}`);
 		}
 		uploading = false;
 	}
@@ -154,17 +155,17 @@
 		if (!name || !name.trim()) return;
 		const trimmed = name.trim();
 		if (trimmed.includes('/') || trimmed.includes('\\')) {
-			error = 'Folder name cannot contain slashes';
+			notice = errorMsg('Folder name cannot contain slashes');
 			return;
 		}
 		creatingFolder = true;
-		error = '';
+		notice = null;
 		try {
 			const remotePath = joinPath(currentPath, trimmed);
 			await adbExec(ShellCmd.mkdir(remotePath));
 			await navigate(currentPath);
 		} catch (e) {
-			error = `Failed to create folder: ${formatError(e)}`;
+			notice = errorMsg(`Failed to create folder: ${formatError(e)}`);
 		}
 		creatingFolder = false;
 	}
@@ -267,7 +268,7 @@
 			previewSrc = URL.createObjectURL(blob);
 			previewAlt = entry.name;
 		} catch (e) {
-			error = `Preview failed: ${formatError(e)}`;
+			notice = errorMsg(`Preview failed: ${formatError(e)}`);
 		} finally {
 			previewLoading = null;
 		}
@@ -337,8 +338,8 @@
 	</div>
 
 	<!-- Error / status -->
-	{#if error}
-		<div class="text-xs text-yellow-500 mb-3">{error}</div>
+	{#if notice}
+		<StatusMessage notification={notice} />
 	{/if}
 
 	<!-- Table + Editor split view -->

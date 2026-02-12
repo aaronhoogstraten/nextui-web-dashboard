@@ -4,7 +4,8 @@
 	import { listDirectory, pullFile } from '$lib/adb/file-ops.js';
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { getNextUIVersion } from '$lib/stores/connection.svelte.js';
-	import { formatSize, formatError } from '$lib/utils.js';
+	import { formatSize, formatError, errorMsg, successMsg, type Notification } from '$lib/utils.js';
+	import StatusMessage from './StatusMessage.svelte';
 	import JSZip from 'jszip';
 
 	let { adb }: { adb: Adb } = $props();
@@ -21,14 +22,14 @@
 	let logFiles: LogFile[] = $state([]);
 	let scanning = $state(false);
 	let downloading = $state(false);
-	let error: string = $state('');
+	let notice: Notification | null = $state(null);
 	let progress: string = $state('');
 
 	const totalSize = $derived(logFiles.reduce((sum, f) => sum + Number(f.size), 0));
 
 	async function scanForLogs() {
 		scanning = true;
-		error = '';
+		notice = null;
 		logFiles = [];
 		const found: LogFile[] = [];
 
@@ -59,10 +60,10 @@
 
 			logFiles = found;
 			if (found.length === 0) {
-				error = 'No log files found on device.';
+				notice = errorMsg('No log files found on device.');
 			}
 		} catch (e) {
-			error = `Failed to scan for logs: ${formatError(e)}`;
+			notice = errorMsg(`Failed to scan for logs: ${formatError(e)}`);
 		}
 		scanning = false;
 	}
@@ -70,7 +71,7 @@
 	async function downloadLogs() {
 		if (logFiles.length === 0) return;
 		downloading = true;
-		error = '';
+		notice = null;
 		progress = '';
 
 		try {
@@ -102,9 +103,9 @@
 			URL.revokeObjectURL(url);
 
 			progress = '';
-			error = `Downloaded ${filename} (${logFiles.length} files)`;
+			notice = successMsg(`Downloaded ${filename} (${logFiles.length} files)`);
 		} catch (e) {
-			error = `Download failed: ${formatError(e)}`;
+			notice = errorMsg(`Download failed: ${formatError(e)}`);
 			progress = '';
 		}
 		downloading = false;
@@ -137,10 +138,8 @@
 		</div>
 	</div>
 
-	{#if error}
-		<div class="text-xs mb-3 {error.startsWith('Downloaded') ? 'text-green-500' : 'text-yellow-500'}">
-			{error}
-		</div>
+	{#if notice}
+		<StatusMessage notification={notice} />
 	{/if}
 
 	{#if progress}
