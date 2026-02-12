@@ -113,7 +113,7 @@
 			const content = await pullFile(adb, remotePath);
 
 			// Trigger browser download
-			const blob = new Blob([content as unknown as BlobPart]);
+			const blob = new Blob([content]);
 			const url = URL.createObjectURL(blob);
 			const a = document.createElement('a');
 			a.href = url;
@@ -263,7 +263,7 @@
 				'.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
 				'.bmp': 'image/bmp', '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml'
 			};
-			const blob = new Blob([data as unknown as BlobPart], { type: mimeMap[ext] || 'image/png' });
+			const blob = new Blob([data], { type: mimeMap[ext] || 'image/png' });
 			if (previewSrc) URL.revokeObjectURL(previewSrc);
 			previewSrc = URL.createObjectURL(blob);
 			previewAlt = entry.name;

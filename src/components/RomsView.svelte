@@ -223,7 +223,7 @@
 				if (mediaNames.has(fileName)) {
 					try {
 						const data = await pullFile(adb, `${mediaPath}/${fileName}`);
-						const url = URL.createObjectURL(new Blob([data as unknown as BlobPart], { type: 'image/png' }));
+						const url = URL.createObjectURL(new Blob([data], { type: 'image/png' }));
 						if (fileName === 'bg.png') state.bgUrl = url;
 						else state.bglistUrl = url;
 					} catch { /* skip */ }
@@ -233,7 +233,7 @@
 			try {
 				const iconPath = `${DEVICE_PATHS.roms}/.media/${state.iconFileName}`;
 				const data = await pullFile(adb, iconPath);
-				state.iconUrl = URL.createObjectURL(new Blob([data as unknown as BlobPart], { type: 'image/png' }));
+				state.iconUrl = URL.createObjectURL(new Blob([data], { type: 'image/png' }));
 			} catch { /* icon doesn't exist — skip */ }
 
 			// Load map.txt for display names
@@ -286,7 +286,7 @@
 			rom.loadingThumb = true;
 			try {
 				const data = await pullFile(adb, `${mediaPath}/${rom.mediaFileName}`);
-				const blob = new Blob([data as unknown as BlobPart], { type: 'image/png' });
+				const blob = new Blob([data], { type: 'image/png' });
 				rom.thumbnailUrl = URL.createObjectURL(blob);
 			} catch {
 				rom.hasMedia = false;
@@ -348,7 +348,7 @@
 
 			const data = new Uint8Array(await file.arrayBuffer());
 				await pushFile(adb, getSpecialMediaPath(state, filename), data);
-			const url = URL.createObjectURL(new Blob([data as unknown as BlobPart], { type: 'image/png' }));
+			const url = URL.createObjectURL(new Blob([data], { type: 'image/png' }));
 			setSpecialMedia(state, filename, url);
 		} catch (e) {
 			state.error = `Upload failed: ${formatError(e)}`;
@@ -451,7 +451,7 @@
 			await pushFile(adb, remotePath, data);
 
 			rom.hasMedia = true;
-			const blob = new Blob([data as unknown as BlobPart], { type: 'image/png' });
+			const blob = new Blob([data], { type: 'image/png' });
 			if (rom.thumbnailUrl) URL.revokeObjectURL(rom.thumbnailUrl);
 			rom.thumbnailUrl = URL.createObjectURL(blob);
 			state.mediaCount = state.roms.filter((r) => r.hasMedia).length;

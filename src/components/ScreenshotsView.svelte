@@ -98,7 +98,7 @@
 			shot.loadingThumb = true;
 			try {
 				const data = await pullFile(adb, `${DEVICE_PATHS.screenshots}/${shot.name}`);
-				const blob = new Blob([data as unknown as BlobPart], { type: getMimeType(shot.name) });
+				const blob = new Blob([data], { type: getMimeType(shot.name) });
 				shot.thumbnailUrl = URL.createObjectURL(blob);
 			} catch {
 				// skip

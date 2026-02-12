@@ -54,7 +54,7 @@ export async function pushFile(
  * @param remotePath - Path to the file on the device
  * @returns File content as Uint8Array
  */
-export async function pullFile(adb: Adb, remotePath: string): Promise<Uint8Array> {
+export async function pullFile(adb: Adb, remotePath: string): Promise<Uint8Array<ArrayBuffer>> {
 	adbLog.info(`sync.read → ${remotePath}`);
 	const sync = await adb.sync();
 	try {

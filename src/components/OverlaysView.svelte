@@ -99,7 +99,7 @@
 			file.loadingThumb = true;
 			try {
 				const data = await pullFile(adb, `${sys.devicePath}/${file.name}`);
-				const blob = new Blob([data as unknown as BlobPart], { type: 'image/png' });
+				const blob = new Blob([data], { type: 'image/png' });
 				file.thumbnailUrl = URL.createObjectURL(blob);
 			} catch {
 				// skip

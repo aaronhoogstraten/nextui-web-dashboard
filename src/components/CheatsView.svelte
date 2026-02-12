@@ -256,7 +256,7 @@
 	async function downloadCheat(sys: CheatSystem, cheat: CheatFile) {
 		try {
 			const data = await pullFile(adb, `${CHEATS_PATH}/${sys.systemCode}/${cheat.fileName}`);
-			const blob = new Blob([data as unknown as BlobPart]);
+			const blob = new Blob([data]);
 			const url = URL.createObjectURL(blob);
 			const a = document.createElement('a');
 			a.href = url;

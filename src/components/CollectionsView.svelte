@@ -117,7 +117,7 @@
 				const exists = await pathExists(adb, iconPath);
 				if (exists) {
 					const data = await pullFile(adb, iconPath);
-					const blob = new Blob([data as unknown as BlobPart], { type: 'image/png' });
+					const blob = new Blob([data], { type: 'image/png' });
 					col.iconUrl = URL.createObjectURL(blob);
 				}
 			} catch {
@@ -133,7 +133,7 @@
 			const exists = await pathExists(adb, bgPath);
 			if (exists) {
 				const data = await pullFile(adb, bgPath);
-				const blob = new Blob([data as unknown as BlobPart], { type: 'image/png' });
+				const blob = new Blob([data], { type: 'image/png' });
 				bgUrl = URL.createObjectURL(blob);
 			}
 		} catch {
@@ -190,7 +190,7 @@
 			const data = new Uint8Array(await file.arrayBuffer());
 			await pushFile(adb, `${MEDIA_PATH}/${col.name}.png`, data);
 			if (col.iconUrl) URL.revokeObjectURL(col.iconUrl);
-			const blob = new Blob([data as unknown as BlobPart], { type: 'image/png' });
+			const blob = new Blob([data], { type: 'image/png' });
 			col.iconUrl = URL.createObjectURL(blob);
 		} catch (e) {
 			notice = errorMsg(`Icon upload failed: ${formatError(e)}`);
@@ -217,7 +217,7 @@
 			const data = new Uint8Array(await file.arrayBuffer());
 			await pushFile(adb, `${MEDIA_PATH}/bg.png`, data);
 			if (bgUrl) URL.revokeObjectURL(bgUrl);
-			const blob = new Blob([data as unknown as BlobPart], { type: 'image/png' });
+			const blob = new Blob([data], { type: 'image/png' });
 			bgUrl = URL.createObjectURL(blob);
 		} catch (e) {
 			notice = errorMsg(`Background upload failed: ${formatError(e)}`);
