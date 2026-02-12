@@ -47,6 +47,7 @@ export async function adbExec(cmd: ShellCmd): Promise<string> {
 }
 
 export async function connect() {
+	if (busy) return;
 	error = '';
 	busy = true;
 	status = 'Connecting...';
