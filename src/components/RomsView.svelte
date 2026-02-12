@@ -20,7 +20,7 @@
 	let { adb }: { adb: Adb } = $props();
 
 	let syncActive = $state(false);
-	let syncFlow: RomSyncFlow | undefined = $state(undefined);
+	let syncFlow: RomSyncFlow | undefined = $state.raw(undefined);
 	const hasDirectoryPicker = typeof window !== 'undefined' && 'showDirectoryPicker' in window;
 
 	async function startSyncFlow() {

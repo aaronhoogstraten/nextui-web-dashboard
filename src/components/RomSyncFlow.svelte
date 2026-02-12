@@ -44,8 +44,8 @@
 	let syncTransferred = $state(0);
 	let syncSkipped = $state(0);
 	let syncFailed = $state(0);
-	let syncConflictFile: SyncFile | null = $state(null);
-	let syncConflictResolve: ((r: ConflictResolution) => void) | null = $state(null);
+	let syncConflictFile: SyncFile | null = $state.raw(null);
+	let syncConflictResolve: ((r: ConflictResolution) => void) | null = $state.raw(null);
 
 	const syncTotalNew = $derived(
 		syncSystems.reduce((sum, s) => sum + s.files.filter((f) => f.status === 'new').length, 0)

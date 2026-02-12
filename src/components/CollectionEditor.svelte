@@ -45,7 +45,7 @@
 
 	let editorPaths: string[] = $state([...collection.romPaths]);
 	let editorOriginal: string[] = $state([...collection.romPaths]);
-	let editorValidation: Map<string, boolean> = $state(new Map());
+	let editorValidation: Map<string, boolean> = $state.raw(new Map());
 	let validating = $state(false);
 	let saving = $state(false);
 	let error: string = $state('');

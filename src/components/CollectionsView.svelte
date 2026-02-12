@@ -30,7 +30,7 @@
 
 	// --- State: Editor ---
 
-	let editing: CollectionState | null = $state(null);
+	let editing: CollectionState | null = $state.raw(null);
 
 	// --- State: Other ---
 
