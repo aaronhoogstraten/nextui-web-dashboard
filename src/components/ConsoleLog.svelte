@@ -39,7 +39,7 @@
 	}
 
 	function formatTime(d: Date): string {
-		return d.toLocaleTimeString('en-US', { hour12: false, fractionalSecondDigits: 3 });
+		return d.toLocaleTimeString('en-US', { hour12: false });
 	}
 
 	$effect(() => {
