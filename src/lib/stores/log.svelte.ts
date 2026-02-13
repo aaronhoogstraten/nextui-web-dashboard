@@ -14,14 +14,10 @@ const _entries: LogEntry[] = [];
 let version: number = $state(0);
 let nextId = 0;
 
+/** Returns a snapshot of current log entries. Reading this subscribes the caller to updates. */
 export function getLogEntries(): LogEntry[] {
-	// Reading version subscribes the caller to updates
 	void version;
-	return _entries;
-}
-
-export function getLogVersion(): number {
-	return version;
+	return _entries.slice();
 }
 
 export function log(level: LogLevel, message: string) {

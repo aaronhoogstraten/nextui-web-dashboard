@@ -8,6 +8,9 @@ import { adbLog } from '$lib/stores/log.svelte.js';
 import { formatError } from '$lib/utils.js';
 import { ShellCmd } from './adb-utils.js';
 
+/** Path inside MinUI.zip that distinguishes NextUI from other MinUI forks */
+const NEXTUI_SYSTEM_TXT = '.system/system.txt';
+
 /**
  * Push a file to the device.
  *
@@ -263,13 +266,13 @@ export async function verifyNextUIInstallation(
 		};
 	}
 
-	// Verify MinUI.zip contains .system/system.txt to distinguish NextUI from other MinUI forks
+	// Verify MinUI.zip contains system.txt to distinguish NextUI from other MinUI forks
 	if (hasMinUI) {
 		try {
-			adbLog.info('Verifying MinUI.zip contains .system/system.txt...');
+			adbLog.info(`Verifying MinUI.zip contains ${NEXTUI_SYSTEM_TXT}...`);
 			const zipData = await pullFile(adb, DEVICE_PATHS.minuiZip);
 			const zip = await JSZip.loadAsync(zipData);
-			const systemTxt = zip.file('.system/system.txt');
+			const systemTxt = zip.file(NEXTUI_SYSTEM_TXT);
 			if (!systemTxt) {
 				return {
 					ok: false,
@@ -277,7 +280,7 @@ export async function verifyNextUIInstallation(
 				};
 			}
 			const version = (await systemTxt.async('string')).trim();
-			adbLog.info(`MinUI.zip verified: .system/system.txt found (version: ${version})`);
+			adbLog.info(`MinUI.zip verified: ${NEXTUI_SYSTEM_TXT} found (version: ${version})`);
 			return { ok: true, version };
 		} catch (e) {
 			adbLog.error(`Failed to verify MinUI.zip contents: ${e}`);

@@ -23,6 +23,10 @@
 	}: { activeView: string; onNavigate: (view: string) => void } = $props();
 
 	const webUsbSupported = hasWebUSB();
+	const deviceLabel = $derived.by(() => {
+		const conn = getConnection();
+		return conn?.device.product ?? conn?.device.serial ?? 'Connected';
+	});
 
 	const navItems: NavItem[] = [
 		{ id: 'bios', label: 'BIOS' },
@@ -54,7 +58,7 @@
 		<div class="text-xs text-text-muted mb-2">Device</div>
 		{#if isConnected()}
 			<div class="text-sm text-green-400 truncate" title={getStatus()}>
-				{getConnection()?.device.product ?? getConnection()?.device.serial ?? 'Connected'}
+				{deviceLabel}
 			</div>
 			{#if getNextUIVersion()}
 				<div class="text-xs text-text-muted mb-2">{getNextUIVersion()}</div>
@@ -81,7 +85,9 @@
 				{isBusy() ? 'Connecting...' : 'Connect'}
 			</button>
 			{#if !webUsbSupported}
-				<div class="text-xs text-yellow-400 mt-2">WebUSB not available. Use Chrome or Edge.</div>
+				<div class="text-xs text-yellow-400 mt-2">
+					WebUSB not available. Use a Chromium browser (Chrome, Edge).
+				</div>
 			{/if}
 		{/if}
 	</div>

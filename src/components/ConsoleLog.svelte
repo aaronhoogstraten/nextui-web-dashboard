@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getLogEntries, getLogVersion, clearLog, type LogLevel } from '$lib/stores/log.svelte.js';
+	import { getLogEntries, clearLog, type LogLevel } from '$lib/stores/log.svelte.js';
 
 	let collapsed = $state(false);
 	let autoScroll = $state(true);
@@ -8,10 +8,8 @@
 	let scrollPending = false;
 
 	const entries = $derived.by(() => {
-		// Subscribe to version changes; slice() to return a new array reference so {#each} re-renders
-		void getLogVersion();
 		const all = getLogEntries();
-		return showDebug ? all.slice() : all.filter((e) => e.level !== 'debug');
+		return showDebug ? all : all.filter((e) => e.level !== 'debug');
 	});
 
 	function levelColor(level: LogLevel): string {

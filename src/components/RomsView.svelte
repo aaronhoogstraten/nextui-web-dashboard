@@ -400,7 +400,8 @@
 
 		try {
 			for (const file of files) {
-				const ext = '.' + file.name.split('.').pop()?.toLowerCase();
+				const dotIndex = file.name.lastIndexOf('.');
+			const ext = dotIndex > 0 ? file.name.substring(dotIndex).toLowerCase() : '';
 				if (!isValidRomExtension(ext, state.system)) {
 					continue;
 				}

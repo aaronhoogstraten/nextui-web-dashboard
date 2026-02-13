@@ -25,15 +25,18 @@ export function getBrowserRecommendation(): string {
 	const ua = navigator.userAgent;
 
 	if (ua.includes('Firefox')) {
-		return 'Firefox does not support WebUSB. Please use Chrome or Edge.';
+		return 'Firefox does not support WebUSB. Please use a Chromium browser (Chrome, Edge).';
 	}
 
 	if (ua.includes('Safari') && !ua.includes('Chrome')) {
-		return 'Safari does not support WebUSB. Please use Chrome or Edge.';
+		return 'Safari does not support WebUSB. Please use a Chromium browser (Chrome, Edge).';
 	}
 
 	return '';
 }
+
+/** Default timeout for the connection + auth flow (ms) */
+const CONNECT_TIMEOUT_MS = 30_000;
 
 /**
  * Connect to a device via WebUSB.
@@ -41,7 +44,7 @@ export function getBrowserRecommendation(): string {
  * This prompts the user to select a USB device via the browser's device picker,
  * then authenticates and returns an active ADB connection.
  *
- * @throws Error if WebUSB is not supported or the user cancels device selection
+ * @throws Error if WebUSB is not supported, the user cancels, or connection times out
  */
 export async function connectWebUSB(): Promise<AdbConnection> {
 	if (!('usb' in navigator)) {
@@ -59,29 +62,33 @@ export async function connectWebUSB(): Promise<AdbConnection> {
 		throw new Error('No device selected');
 	}
 
-	// Open USB connection
-	const connection = await device.connect();
+	// Open USB connection + authenticate with timeout
+	const connectAndAuth = async (): Promise<AdbConnection> => {
+		const connection = await device.connect();
 
-	// Authenticate (NextUI devices are Linux-based, may not need RSA auth,
-	// but we provide credentials in case they do)
-	const transport = await AdbDaemonTransport.authenticate({
-		serial: device.serial,
-		connection,
-		credentialStore: getCredentialStore()
-	});
+		// Authenticate (NextUI devices are Linux-based, may not need RSA auth,
+		// but we provide credentials in case they do)
+		const transport = await AdbDaemonTransport.authenticate({
+			serial: device.serial,
+			connection,
+			credentialStore: getCredentialStore()
+		});
 
-	const adb = new Adb(transport);
+		const adb = new Adb(transport);
 
-	const deviceInfo: DeviceInfo = {
-		serial: device.serial,
-		product: device.name || undefined
+		const deviceInfo: DeviceInfo = {
+			serial: device.serial,
+			product: device.name || undefined
+		};
+
+		return { adb, device: deviceInfo, connectionMethod: 'webusb' };
 	};
 
-	return {
-		adb,
-		device: deviceInfo,
-		connectionMethod: 'webusb'
-	};
+	const timeout = new Promise<never>((_, reject) =>
+		setTimeout(() => reject(new Error('Connection timed out')), CONNECT_TIMEOUT_MS)
+	);
+
+	return Promise.race([connectAndAuth(), timeout]);
 }
 
 /**

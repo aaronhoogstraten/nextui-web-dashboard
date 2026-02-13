@@ -3,8 +3,8 @@ import type { BiosFileDefinition } from './definitions.js';
 /**
  * Compute SHA-1 hash of data using the Web Crypto API.
  */
-export async function sha1(data: Uint8Array): Promise<string> {
-	const hashBuffer = await crypto.subtle.digest('SHA-1', data as unknown as BufferSource);
+export async function sha1(data: Uint8Array<ArrayBuffer>): Promise<string> {
+	const hashBuffer = await crypto.subtle.digest('SHA-1', data);
 	const hashArray = Array.from(new Uint8Array(hashBuffer));
 	return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
 }
@@ -30,7 +30,7 @@ export interface BiosValidationResult {
  * @returns Validation result with match status and computed hash
  */
 export async function validateBiosFile(
-	data: Uint8Array,
+	data: Uint8Array<ArrayBuffer>,
 	definition: BiosFileDefinition
 ): Promise<BiosValidationResult> {
 	const actualSha1 = await sha1(data);

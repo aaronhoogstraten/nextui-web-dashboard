@@ -75,7 +75,7 @@ export async function connect() {
 		}
 
 		// Use version from MinUI.zip verification
-		nextuiVersion = verify.version || 'Unknown';
+		nextuiVersion = verify.version ?? 'Unknown';
 		adbLog.info(`NextUI version: ${nextuiVersion}`);
 
 		connection = conn;
@@ -114,10 +114,11 @@ export async function disconnect() {
 		adbLog.info('Disconnected');
 	} catch (e) {
 		adbLog.warn(`Disconnect error (ignored): ${e}`);
+	} finally {
+		connection = null;
+		status = 'Disconnected';
+		error = '';
+		nextuiVersion = '';
+		busy = false;
 	}
-	connection = null;
-	status = 'Disconnected';
-	error = '';
-	nextuiVersion = '';
-	busy = false;
 }

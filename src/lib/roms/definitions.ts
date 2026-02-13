@@ -217,6 +217,16 @@ export const ROM_SYSTEMS: RomSystem[] = [
 	}
 ];
 
+/** Set of all known ROM system codes — used for cross-module validation */
+export const ROM_SYSTEM_CODES: ReadonlySet<string> = new Set(ROM_SYSTEMS.map((s) => s.systemCode));
+
+// Dev-time assertion: ensure all system codes are unique
+if (import.meta.env.DEV) {
+	const codes = ROM_SYSTEMS.map((s) => s.systemCode);
+	const dupes = codes.filter((c, i) => codes.indexOf(c) !== i);
+	if (dupes.length > 0) console.error(`Duplicate ROM system codes: ${dupes.join(', ')}`);
+}
+
 /**
  * Get the device folder path for a ROM system.
  * Pattern: /mnt/SDCARD/Roms/{DisplayName} ({SystemCode})
@@ -243,6 +253,7 @@ export function getRomMediaPath(system: RomSystem): string {
 
 /**
  * Check if a file extension is valid for a given system.
+ * Custom (device-discovered) systems accept any extension since their formats are unknown.
  * @param extension - File extension with dot (e.g. ".nes")
  * @param system - ROM system to check against
  */
@@ -266,11 +277,17 @@ export function getRomDirectoryName(systemCode: string): string | null {
 /**
  * Parse a ROM directory name into systemName and systemCode.
  * Pattern: "{DisplayName} ({SystemCode})"
+ * Uses the last parenthesized group so display names with parens are handled correctly.
  * Returns null if the name doesn't match the pattern.
  */
 export function parseRomDirectoryName(
 	dirName: string
 ): { systemName: string; systemCode: string } | null {
-	const match = dirName.match(/^(.+)\s+\(([^)]+)\)$/);
-	return match ? { systemName: match[1], systemCode: match[2] } : null;
+	const lastOpen = dirName.lastIndexOf(' (');
+	if (lastOpen < 0) return null;
+	const lastClose = dirName.indexOf(')', lastOpen);
+	if (lastClose < 0 || lastClose !== dirName.length - 1) return null;
+	const systemName = dirName.substring(0, lastOpen);
+	const systemCode = dirName.substring(lastOpen + 2, lastClose);
+	return systemCode ? { systemName, systemCode } : null;
 }

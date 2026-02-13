@@ -1,5 +1,5 @@
 import { DEVICE_PATHS } from '$lib/adb/types.js';
-import { getRomDirectoryName } from '$lib/roms/definitions.js';
+import { getRomDirectoryName, ROM_SYSTEM_CODES } from '$lib/roms/definitions.js';
 
 /** A single BIOS file definition */
 export interface BiosFileDefinition {
@@ -117,11 +117,6 @@ export const BIOS_SYSTEMS: BiosSystem[] = [
 		]
 	},
 	{
-		systemName: 'Atari 2600',
-		systemCode: 'A2600',
-		files: []
-	},
-	{
 		systemName: 'Atari 5200',
 		systemCode: 'A5200',
 		files: [
@@ -192,26 +187,6 @@ export const BIOS_SYSTEMS: BiosSystem[] = [
 				md5: '1b1e985ea5325a1f46eb7fd9681707bf'
 			}
 		]
-	},
-	{
-		systemName: 'Commodore 64',
-		systemCode: 'C64',
-		files: []
-	},
-	{
-		systemName: 'Commodore PET',
-		systemCode: 'PET',
-		files: []
-	},
-	{
-		systemName: 'Commodore Plus4',
-		systemCode: 'PLUS4',
-		files: []
-	},
-	{
-		systemName: 'Commodore VIC20',
-		systemCode: 'VIC',
-		files: []
 	},
 	{
 		systemName: 'Doom',
@@ -314,16 +289,6 @@ export const BIOS_SYSTEMS: BiosSystem[] = [
 		]
 	},
 	{
-		systemName: 'Neo Geo Pocket',
-		systemCode: 'NGP',
-		files: []
-	},
-	{
-		systemName: 'Neo Geo Pocket Color',
-		systemCode: 'NGPC',
-		files: []
-	},
-	{
 		systemName: 'PC Engine',
 		systemCode: 'PCE',
 		files: [
@@ -334,11 +299,6 @@ export const BIOS_SYSTEMS: BiosSystem[] = [
 				md5: '38179df8f4ac870017db21ebcbf53114'
 			}
 		]
-	},
-	{
-		systemName: 'Pico-8',
-		systemCode: 'P8',
-		files: []
 	},
 	{
 		systemName: 'Pokemon mini',
@@ -413,16 +373,6 @@ export const BIOS_SYSTEMS: BiosSystem[] = [
 			}
 		]
 	},
-	{
-		systemName: 'Super Nintendo',
-		systemCode: 'SFC',
-		files: []
-	},
-	{
-		systemName: 'Virtual Boy',
-		systemCode: 'VB',
-		files: []
-	}
 ];
 
 /**
@@ -439,12 +389,34 @@ export function getBiosDevicePath(file: BiosFileDefinition): string {
 	return `${DEVICE_PATHS.bios}/${file.systemCode}/${file.fileName}`;
 }
 
+/** All BIOS file definitions (flattened from all systems) */
+const ALL_BIOS_FILES: BiosFileDefinition[] = BIOS_SYSTEMS.flatMap((s) => s.files);
+
+/** Pre-built lookup: systemCode → BIOS files */
+const BIOS_FILES_BY_SYSTEM = new Map<string, BiosFileDefinition[]>();
+for (const file of ALL_BIOS_FILES) {
+	const list = BIOS_FILES_BY_SYSTEM.get(file.systemCode);
+	if (list) list.push(file);
+	else BIOS_FILES_BY_SYSTEM.set(file.systemCode, [file]);
+}
+
 /** Get all unique BIOS file definitions (flattened from all systems) */
 export function getAllBiosFiles(): BiosFileDefinition[] {
-	return BIOS_SYSTEMS.flatMap((s) => s.files);
+	return ALL_BIOS_FILES;
 }
 
 /** Get BIOS files for a specific system code */
 export function getBiosFilesForSystem(systemCode: string): BiosFileDefinition[] {
-	return getAllBiosFiles().filter((f) => f.systemCode === systemCode);
+	return BIOS_FILES_BY_SYSTEM.get(systemCode) ?? [];
+}
+
+// Dev-time assertion: ensure all BIOS file system codes exist in ROM_SYSTEMS
+if (import.meta.env.DEV) {
+	const invalid = ALL_BIOS_FILES
+		.map((f) => f.systemCode)
+		.filter((code) => !ROM_SYSTEM_CODES.has(code));
+	if (invalid.length > 0) {
+		const unique = [...new Set(invalid)];
+		console.error(`BIOS system codes not found in ROM_SYSTEMS: ${unique.join(', ')}`);
+	}
 }
