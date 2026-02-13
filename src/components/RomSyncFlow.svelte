@@ -8,6 +8,7 @@
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
 	import { parseRomDirectoryName } from '$lib/roms/index.js';
 	import Modal from './Modal.svelte';
+	import OverwriteDialog, { type ConflictResolution } from './OverwriteDialog.svelte';
 	import StatusMessage from './StatusMessage.svelte';
 
 	let { adb, oncomplete }: { adb: Adb; oncomplete: () => void } = $props();
@@ -31,8 +32,6 @@
 	}
 
 	type SyncPhase = 'scanning' | 'review' | 'syncing' | 'done';
-	type ConflictResolution = 'overwrite' | 'skip' | 'overwrite-all' | 'skip-all';
-
 	// --- State ---
 
 	let syncPhase: SyncPhase = $state('scanning');
@@ -46,8 +45,8 @@
 	let syncTransferred = $state(0);
 	let syncSkipped = $state(0);
 	let syncFailed = $state(0);
-	let syncConflictFile: SyncFile | null = $state.raw(null);
-	let syncConflictResolve: ((r: ConflictResolution) => void) | null = $state.raw(null);
+	let overwriteDialog: OverwriteDialog;
+	let currentConflictFile: SyncFile | null = $state.raw(null);
 
 	const syncTotals = $derived.by(() => {
 		let newCount = 0, existsCount = 0, checkedCount = 0;
@@ -253,18 +252,10 @@
 	}
 
 	function showSyncConflict(file: SyncFile): Promise<ConflictResolution> {
-		return new Promise((resolve) => {
-			syncConflictFile = file;
-			syncConflictResolve = resolve;
+		currentConflictFile = file;
+		return overwriteDialog.show(file.name, true).finally(() => {
+			currentConflictFile = null;
 		});
-	}
-
-	function resolveSyncConflict(resolution: ConflictResolution) {
-		if (syncConflictResolve) {
-			syncConflictResolve(resolution);
-			syncConflictFile = null;
-			syncConflictResolve = null;
-		}
 	}
 </script>
 
@@ -430,24 +421,13 @@
 	</div>
 {/if}
 
-<!-- Sync Conflict Dialog -->
-{#if syncConflictFile}
-	<Modal onclose={() => resolveSyncConflict('skip')}>
-		<div class="p-6">
-			<h3 class="text-lg font-bold text-text mb-3">File Already Exists</h3>
-			<div class="text-sm text-text mb-4">
-				<div class="font-mono text-xs text-text-muted mb-3 truncate" title={syncConflictFile.name}>{syncConflictFile.name}</div>
-				<div class="flex justify-between text-xs">
-					<div><span class="text-text-muted">Local:</span> <span class="text-text">{formatSize(syncConflictFile.localSize)}</span></div>
-					<div><span class="text-text-muted">Device:</span> <span class="text-text">{syncConflictFile.deviceSize !== null ? formatSize(syncConflictFile.deviceSize) : 'unknown'}</span></div>
-				</div>
+<OverwriteDialog bind:this={overwriteDialog}>
+	{#snippet detail()}
+		{#if currentConflictFile}
+			<div class="flex justify-between text-xs">
+				<div><span class="text-text-muted">Local:</span> <span class="text-text">{formatSize(currentConflictFile.localSize)}</span></div>
+				<div><span class="text-text-muted">Device:</span> <span class="text-text">{currentConflictFile.deviceSize !== null ? formatSize(currentConflictFile.deviceSize) : 'unknown'}</span></div>
 			</div>
-			<div class="grid grid-cols-2 gap-2">
-				<button onclick={() => resolveSyncConflict('overwrite')} class="text-sm bg-accent text-white px-3 py-2 rounded hover:bg-accent-hover">Overwrite</button>
-				<button onclick={() => resolveSyncConflict('skip')} class="text-sm bg-surface text-text px-3 py-2 rounded hover:bg-surface-hover">Skip</button>
-				<button onclick={() => resolveSyncConflict('overwrite-all')} class="text-sm bg-accent/70 text-white px-3 py-2 rounded hover:bg-accent">Overwrite All</button>
-				<button onclick={() => resolveSyncConflict('skip-all')} class="text-sm bg-surface text-text-muted px-3 py-2 rounded hover:bg-surface-hover">Skip All</button>
-			</div>
-		</div>
-	</Modal>
-{/if}
+		{/if}
+	{/snippet}
+</OverwriteDialog>

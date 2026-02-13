@@ -15,6 +15,7 @@
 	import { formatSize, formatError, compareByName, plural, pickFile, pickFiles } from '$lib/utils.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
 	import ImagePreview from './ImagePreview.svelte';
+	import OverwriteDialog, { type ConflictResolution } from './OverwriteDialog.svelte';
 	import RomSyncFlow from './RomSyncFlow.svelte';
 
 	let { adb }: { adb: Adb } = $props();
@@ -108,6 +109,8 @@
 	let uploadingMediaFor: string | null = $state(null);
 	let previewSrc: string | null = $state(null);
 	let previewAlt: string = $state('');
+
+	let overwriteDialog: OverwriteDialog;
 
 	async function refreshAll() {
 		refreshing = true;
@@ -397,13 +400,36 @@
 
 		uploadingTo = state.system.systemCode;
 		let uploaded = 0;
+		let skipped = 0;
 
 		try {
+			// Build set of existing file names for conflict detection
+			let existingNames: Set<string> | null = null;
+			try {
+				const entries = await listDirectory(adb, state.devicePath);
+				existingNames = new Set(entries.filter((e) => e.isFile).map((e) => e.name));
+			} catch {
+				// If listing fails, skip conflict detection
+			}
+
+			let conflictPolicy: 'ask' | 'overwrite-all' | 'skip-all' = 'ask';
+
 			for (const file of files) {
 				const dotIndex = file.name.lastIndexOf('.');
-			const ext = dotIndex > 0 ? file.name.substring(dotIndex).toLowerCase() : '';
+				const ext = dotIndex > 0 ? file.name.substring(dotIndex).toLowerCase() : '';
 				if (!isValidRomExtension(ext, state.system)) {
 					continue;
+				}
+
+				// Check for conflict
+				if (existingNames?.has(file.name)) {
+					if (conflictPolicy === 'skip-all') { skipped++; continue; }
+					if (conflictPolicy === 'ask') {
+						const resolution = await overwriteDialog.show(file.name, files.length > 1);
+						if (resolution === 'skip') { skipped++; continue; }
+						if (resolution === 'skip-all') { skipped++; conflictPolicy = 'skip-all'; continue; }
+						if (resolution === 'overwrite-all') conflictPolicy = 'overwrite-all';
+					}
 				}
 
 				const data = new Uint8Array(await file.arrayBuffer());
@@ -412,7 +438,10 @@
 				uploaded++;
 			}
 
-			state.error = uploaded > 0 ? `Uploaded ${uploaded} file(s)` : 'No valid files selected';
+			const parts: string[] = [];
+			if (uploaded > 0) parts.push(`Uploaded ${plural(uploaded, 'file')}`);
+			if (skipped > 0) parts.push(`skipped ${skipped}`);
+			state.error = parts.length > 0 ? parts.join(', ') : 'No valid files selected';
 			cleanupThumbnails(state);
 			state.roms = [];
 			state.romsLoaded = false;
@@ -904,3 +933,5 @@
 {#if previewSrc}
 	<ImagePreview src={previewSrc} alt={previewAlt} onClose={closePreview} />
 {/if}
+
+<OverwriteDialog bind:this={overwriteDialog} />
