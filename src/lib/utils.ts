@@ -107,3 +107,19 @@ export function pickFile(options?: FilePickerOptions): Promise<File | null> {
 		input.click();
 	});
 }
+
+/**
+ * Open a directory picker dialog. Returns all files within the selected folder,
+ * each with `webkitRelativePath` set (e.g. "FolderName/sub/file.txt").
+ * Returns an empty array if the user cancels.
+ */
+export function pickDirectory(): Promise<File[]> {
+	return new Promise((resolve) => {
+		const input = document.createElement('input');
+		input.type = 'file';
+		input.webkitdirectory = true;
+		input.onchange = () => resolve(input.files ? Array.from(input.files) : []);
+		input.oncancel = () => resolve([]);
+		input.click();
+	});
+}

@@ -1,5 +1,16 @@
 <script lang="ts" module>
-	const TEXT_EXTENSIONS = new Set(['.txt', '.cfg', '.conf', '.ini', '.json', '.sh', '.xml', '.yml', '.log', '.csv']);
+	const TEXT_EXTENSIONS = new Set([
+		'.txt',
+		'.cfg',
+		'.conf',
+		'.ini',
+		'.json',
+		'.sh',
+		'.xml',
+		'.yml',
+		'.log',
+		'.csv'
+	]);
 	const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp', '.svg']);
 </script>
 
@@ -9,7 +20,19 @@
 	import { listDirectory, pullFile, pushFile, isDirectory } from '$lib/adb/file-ops.js';
 	import { DEVICE_PATHS, type DirectoryEntry } from '$lib/adb/types.js';
 	import { adbExec } from '$lib/stores/connection.svelte.js';
-	import { formatSize, formatError, compareByName, getMimeType, joinPath, pickFiles, errorMsg, successMsg, type Notification } from '$lib/utils.js';
+	import {
+		formatSize,
+		formatError,
+		compareByName,
+		getMimeType,
+		joinPath,
+		pickFiles,
+		pickDirectory,
+		plural,
+		errorMsg,
+		successMsg,
+		type Notification
+	} from '$lib/utils.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
 	import ImagePreview from './ImagePreview.svelte';
 	import StatusMessage from './StatusMessage.svelte';
@@ -175,6 +198,40 @@
 		creatingFolder = false;
 	}
 
+	async function uploadFolder() {
+		const files = await pickDirectory();
+		if (files.length === 0) return;
+
+		uploading = true;
+		notice = null;
+		let uploaded = 0;
+		const createdDirs = new Set<string>();
+
+		try {
+			for (const file of files) {
+				// webkitRelativePath is e.g. "FolderName/sub/file.txt"
+				const relativePath = file.webkitRelativePath;
+				const lastSlash = relativePath.lastIndexOf('/');
+				if (lastSlash > 0) {
+					const dirPath = joinPath(currentPath, relativePath.substring(0, lastSlash));
+					if (!createdDirs.has(dirPath)) {
+						await adbExec(ShellCmd.mkdir(dirPath));
+						createdDirs.add(dirPath);
+					}
+				}
+
+				const data = new Uint8Array(await file.arrayBuffer());
+				await pushFile(adb, joinPath(currentPath, relativePath), data);
+				uploaded++;
+			}
+			notice = successMsg(`Uploaded ${plural(uploaded, 'file')}`);
+			await navigate(currentPath);
+		} catch (e) {
+			notice = errorMsg(`Upload failed after ${uploaded} files: ${formatError(e)}`);
+		}
+		uploading = false;
+	}
+
 	function formatDate(mtime: bigint): string {
 		const ms = Number(mtime) * 1000;
 		if (ms === 0) return '\u2014';
@@ -293,6 +350,13 @@
 		<h2 class="text-2xl font-bold text-text">File Browser</h2>
 		<div class="flex items-center gap-2">
 			<button
+				onclick={uploadFiles}
+				disabled={uploading}
+				class="text-sm bg-accent text-white px-3 py-1.5 rounded hover:bg-accent-hover disabled:opacity-50"
+			>
+				{uploading ? 'Uploading...' : 'Upload File'}
+			</button>
+			<button
 				onclick={createFolder}
 				disabled={creatingFolder}
 				class="text-sm bg-surface hover:bg-surface-hover text-text disabled:opacity-50 px-3 py-1.5 rounded"
@@ -300,11 +364,11 @@
 				{creatingFolder ? 'Creating...' : 'New Folder'}
 			</button>
 			<button
-				onclick={uploadFiles}
+				onclick={uploadFolder}
 				disabled={uploading}
 				class="text-sm bg-accent text-white px-3 py-1.5 rounded hover:bg-accent-hover disabled:opacity-50"
 			>
-				{uploading ? 'Uploading...' : 'Upload'}
+				{uploading ? 'Uploading...' : 'Upload Folder'}
 			</button>
 			<button
 				onclick={() => navigate(currentPath)}
@@ -325,10 +389,7 @@
 			{#if i === pathSegments.length - 1}
 				<span class="text-text font-medium">{segment.name}</span>
 			{:else}
-				<button
-					onclick={() => navigate(segment.path)}
-					class="text-accent hover:underline"
-				>
+				<button onclick={() => navigate(segment.path)} class="text-accent hover:underline">
 					{segment.name}
 				</button>
 			{/if}
@@ -374,7 +435,10 @@
 						{#if currentPath !== '/'}
 							<tr class="border-t border-border hover:bg-surface-hover transition-colors">
 								<td colspan="4" class="py-1.5 px-3">
-									<button onclick={navigateUp} class="text-accent hover:underline flex items-center gap-1.5">
+									<button
+										onclick={navigateUp}
+										class="text-accent hover:underline flex items-center gap-1.5"
+									>
 										<span class="text-text-muted">&#8617;</span> ..
 									</button>
 								</td>
@@ -387,7 +451,10 @@
 						{#if currentPath !== '/'}
 							<tr class="border-t border-border hover:bg-surface-hover transition-colors">
 								<td colspan="4" class="py-1.5 px-3">
-									<button onclick={navigateUp} class="text-accent hover:underline flex items-center gap-1.5">
+									<button
+										onclick={navigateUp}
+										class="text-accent hover:underline flex items-center gap-1.5"
+									>
 										<span class="text-text-muted">&#8617;</span> ..
 									</button>
 								</td>
@@ -458,7 +525,9 @@
 		{#if editorPath}
 			<div class="w-1/2 border border-border rounded-lg ml-2 flex flex-col min-w-0">
 				<!-- Editor header -->
-				<div class="flex items-center justify-between p-2 bg-surface border-b border-border shrink-0">
+				<div
+					class="flex items-center justify-between p-2 bg-surface border-b border-border shrink-0"
+				>
 					<div class="flex items-center gap-2 min-w-0">
 						<span class="text-sm font-mono text-text truncate" title={editorPath}>
 							{editorFileName()}{editorDirty ? ' *' : ''}
@@ -497,7 +566,11 @@
 
 				<!-- Editor footer -->
 				{#if editorError}
-					<div class="px-2 py-1 text-xs border-t border-border shrink-0 {editorError === 'Saved' ? 'text-green-500' : 'text-red-400'}">
+					<div
+						class="px-2 py-1 text-xs border-t border-border shrink-0 {editorError === 'Saved'
+							? 'text-green-500'
+							: 'text-red-400'}"
+					>
 						{editorError}
 					</div>
 				{/if}
