@@ -7,7 +7,8 @@
 		isConnected,
 		connect,
 		disconnect,
-		getNextUIVersion
+		getNextUIVersion,
+		getPlatform
 	} from '$lib/stores/connection.svelte.js';
 	import { hasWebUSB, getBrowserRecommendation } from '$lib/adb/connection.js';
 	import { toggleTheme, isDark } from '$lib/stores/theme.svelte.js';
@@ -25,7 +26,9 @@
 	const webUsbSupported = hasWebUSB();
 	const deviceLabel = $derived.by(() => {
 		const conn = getConnection();
-		return conn?.device.product ?? conn?.device.serial ?? 'Connected';
+		const name = conn?.device.product ?? conn?.device.serial ?? 'Connected';
+		const p = getPlatform();
+		return p ? `${name} (${p})` : name;
 	});
 
 	const navItems: NavItem[] = [

@@ -11,10 +11,18 @@
 	} from '$lib/roms/index.js';
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { listDirectory, pathExists, pullFile, pushFile } from '$lib/adb/file-ops.js';
-	import { adbExec } from '$lib/stores/connection.svelte.js';
-	import { formatSize, formatError, compareByName, plural, pickFile, pickFiles } from '$lib/utils.js';
+	import { adbExec, getPlatform } from '$lib/stores/connection.svelte.js';
+	import {
+		formatSize,
+		formatError,
+		compareByName,
+		plural,
+		pickFile,
+		pickFiles
+	} from '$lib/utils.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
 	import ImagePreview from './ImagePreview.svelte';
+	import Modal from './Modal.svelte';
 	import OverwriteDialog, { type ConflictResolution } from './OverwriteDialog.svelte';
 	import RomSyncFlow from './RomSyncFlow.svelte';
 
@@ -103,17 +111,63 @@
 
 	let refreshing = $state(false);
 	let hideEmpty = $state(true);
+	let availableEmus = $state(new Set<string>());
+	let missingEmuInfo: string | null = $state(null);
 	let uploadingTo: string | null = $state(null);
 	let uploadingBg: string | null = $state(null);
 	let removingBg: string | null = $state(null);
 	let uploadingMediaFor: string | null = $state(null);
 	let previewSrc: string | null = $state(null);
 	let previewAlt: string = $state('');
+	let detectedPlatform: string = $state('');
 
 	let overwriteDialog: OverwriteDialog;
 
+	async function scanAvailableEmulators(): Promise<Set<string>> {
+		const codes = new Set<string>();
+		detectedPlatform = getPlatform();
+
+		// Collect all directories that may contain .pak emulators
+		const emuDirs: string[] = [];
+		if (detectedPlatform) {
+			// User-installed emulators: Emus/{platform}/
+			emuDirs.push(`${DEVICE_PATHS.emus}/${detectedPlatform}`);
+			// Built-in emulators: .system/{platform}/paks/Emus/
+			emuDirs.push(`${DEVICE_PATHS.system}/${detectedPlatform}/paks/Emus`);
+		} else {
+			// Platform unknown — scan all subdirs under Emus/
+			try {
+				const deviceDirs = await listDirectory(adb, DEVICE_PATHS.emus);
+				for (const dir of deviceDirs) {
+					if (dir.isDirectory && !dir.name.startsWith('.')) {
+						emuDirs.push(`${DEVICE_PATHS.emus}/${dir.name}`);
+					}
+				}
+			} catch {
+				// Emus directory doesn't exist or unreadable
+			}
+		}
+
+		for (const dir of emuDirs) {
+			try {
+				const paks = await listDirectory(adb, dir);
+				for (const pak of paks) {
+					if (pak.name.endsWith('.pak')) {
+						codes.add(pak.name.slice(0, -4));
+					}
+				}
+			} catch {
+				// Skip unreadable dirs
+			}
+		}
+		return codes;
+	}
+
 	async function refreshAll() {
 		refreshing = true;
+
+		// Scan available emulators
+		availableEmus = await scanAvailableEmulators();
 
 		// Remove previously discovered custom systems (they'll be re-discovered)
 		for (const s of systems) {
@@ -219,9 +273,18 @@
 			}
 
 			// Load special media images if present
-			if (state.bgUrl) { URL.revokeObjectURL(state.bgUrl); state.bgUrl = null; }
-			if (state.bglistUrl) { URL.revokeObjectURL(state.bglistUrl); state.bglistUrl = null; }
-			if (state.iconUrl) { URL.revokeObjectURL(state.iconUrl); state.iconUrl = null; }
+			if (state.bgUrl) {
+				URL.revokeObjectURL(state.bgUrl);
+				state.bgUrl = null;
+			}
+			if (state.bglistUrl) {
+				URL.revokeObjectURL(state.bglistUrl);
+				state.bglistUrl = null;
+			}
+			if (state.iconUrl) {
+				URL.revokeObjectURL(state.iconUrl);
+				state.iconUrl = null;
+			}
 			for (const fileName of ['bg.png', 'bglist.png']) {
 				if (mediaNames.has(fileName)) {
 					try {
@@ -229,7 +292,9 @@
 						const url = URL.createObjectURL(new Blob([data], { type: 'image/png' }));
 						if (fileName === 'bg.png') state.bgUrl = url;
 						else state.bglistUrl = url;
-					} catch { /* skip */ }
+					} catch {
+						/* skip */
+					}
 				}
 			}
 			// System icon lives in Roms/.media/ (parent directory)
@@ -237,7 +302,9 @@
 				const iconPath = `${DEVICE_PATHS.roms}/.media/${state.iconFileName}`;
 				const data = await pullFile(adb, iconPath);
 				state.iconUrl = URL.createObjectURL(new Blob([data], { type: 'image/png' }));
-			} catch { /* icon doesn't exist — skip */ }
+			} catch {
+				/* icon doesn't exist — skip */
+			}
 
 			// Load map.txt for display names
 			let displayNameMap = new Map<string, string>();
@@ -248,7 +315,9 @@
 					const mapContent = new TextDecoder().decode(mapData);
 					displayNameMap = parseMapTxt(mapContent);
 				}
-			} catch { /* map.txt read failed — skip */ }
+			} catch {
+				/* map.txt read failed — skip */
+			}
 			state.displayNameMap = displayNameMap;
 			state.displayNameDirty = false;
 
@@ -305,9 +374,18 @@
 				rom.thumbnailUrl = null;
 			}
 		}
-		if (state.bgUrl) { URL.revokeObjectURL(state.bgUrl); state.bgUrl = null; }
-		if (state.bglistUrl) { URL.revokeObjectURL(state.bglistUrl); state.bglistUrl = null; }
-		if (state.iconUrl) { URL.revokeObjectURL(state.iconUrl); state.iconUrl = null; }
+		if (state.bgUrl) {
+			URL.revokeObjectURL(state.bgUrl);
+			state.bgUrl = null;
+		}
+		if (state.bglistUrl) {
+			URL.revokeObjectURL(state.bglistUrl);
+			state.bglistUrl = null;
+		}
+		if (state.iconUrl) {
+			URL.revokeObjectURL(state.iconUrl);
+			state.iconUrl = null;
+		}
 	}
 
 	function setSpecialMedia(state: SystemState, filename: string, url: string | null) {
@@ -350,7 +428,7 @@
 			}
 
 			const data = new Uint8Array(await file.arrayBuffer());
-				await pushFile(adb, getSpecialMediaPath(state, filename), data);
+			await pushFile(adb, getSpecialMediaPath(state, filename), data);
 			const url = URL.createObjectURL(new Blob([data], { type: 'image/png' }));
 			setSpecialMedia(state, filename, url);
 		} catch (e) {
@@ -423,11 +501,21 @@
 
 				// Check for conflict
 				if (existingNames?.has(file.name)) {
-					if (conflictPolicy === 'skip-all') { skipped++; continue; }
+					if (conflictPolicy === 'skip-all') {
+						skipped++;
+						continue;
+					}
 					if (conflictPolicy === 'ask') {
 						const resolution = await overwriteDialog.show(file.name, files.length > 1);
-						if (resolution === 'skip') { skipped++; continue; }
-						if (resolution === 'skip-all') { skipped++; conflictPolicy = 'skip-all'; continue; }
+						if (resolution === 'skip') {
+							skipped++;
+							continue;
+						}
+						if (resolution === 'skip-all') {
+							skipped++;
+							conflictPolicy = 'skip-all';
+							continue;
+						}
 						if (resolution === 'overwrite-all') conflictPolicy = 'overwrite-all';
 					}
 				}
@@ -650,9 +738,7 @@
 	}
 
 	let filteredSystems = $derived(
-		hideEmpty
-			? systems.filter((s) => s.romCount === null || s.romCount > 0)
-			: systems
+		hideEmpty ? systems.filter((s) => s.romCount === null || s.romCount > 0) : systems
 	);
 
 	// Refresh on mount + cleanup blob URLs on unmount
@@ -667,267 +753,309 @@
 </script>
 
 <div class="p-6 flex flex-col h-full">
-{#if syncActive}
-	<RomSyncFlow bind:this={syncFlow} {adb} oncomplete={onSyncComplete} />
-{:else}
-	<!-- Browse Mode -->
-	<div class="flex items-center justify-between mb-6">
-		<h2 class="text-2xl font-bold text-text">ROM Systems</h2>
-		<div class="flex items-center gap-4">
-			{#if hasDirectoryPicker}
+	{#if syncActive}
+		<RomSyncFlow bind:this={syncFlow} {adb} oncomplete={onSyncComplete} />
+	{:else}
+		<!-- Browse Mode -->
+		<div class="flex items-center justify-between mb-6">
+			<h2 class="text-2xl font-bold text-text">ROM Systems</h2>
+			<div class="flex items-center gap-4">
+				{#if hasDirectoryPicker}
+					<button
+						onclick={startSyncFlow}
+						class="text-sm bg-accent text-white px-3 py-1.5 rounded hover:bg-accent-hover"
+					>
+						Sync from Folder
+					</button>
+				{/if}
+				<label class="flex items-center gap-2 text-sm text-text-muted cursor-pointer">
+					<input type="checkbox" bind:checked={hideEmpty} class="accent-accent" />
+					Show systems with files only
+				</label>
 				<button
-					onclick={startSyncFlow}
-					class="text-sm bg-accent text-white px-3 py-1.5 rounded hover:bg-accent-hover"
+					onclick={refreshAll}
+					disabled={refreshing}
+					class="text-sm bg-surface hover:bg-surface-hover text-text disabled:opacity-50 px-3 py-1.5 rounded"
 				>
-					Sync from Folder
+					{refreshing ? 'Refreshing...' : 'Refresh'}
 				</button>
-			{/if}
-			<label class="flex items-center gap-2 text-sm text-text-muted cursor-pointer">
-				<input type="checkbox" bind:checked={hideEmpty} class="accent-accent" />
-				Show systems with files only
-			</label>
-			<button
-				onclick={refreshAll}
-				disabled={refreshing}
-				class="text-sm bg-surface hover:bg-surface-hover text-text disabled:opacity-50 px-3 py-1.5 rounded"
-			>
-				{refreshing ? 'Refreshing...' : 'Refresh'}
-			</button>
+			</div>
 		</div>
-	</div>
 
-	<div class="space-y-2">
-		{#each filteredSystems as s}
-			<div class="border border-border rounded-lg overflow-hidden">
-				<!-- System Header -->
-				<button
-					onclick={() => toggleExpand(s)}
-					class="w-full flex items-center justify-between p-3 bg-surface hover:bg-surface-hover text-left"
-				>
-					<div>
-						<span class="font-semibold text-text">{s.system.systemName}</span>
-						<span class="text-sm text-text-muted ml-2">({s.system.systemCode})</span>
-						{#if s.system.isCustom}
-							<span class="text-xs text-text-muted ml-1 italic">Custom</span>
-						{/if}
-					</div>
-					<div class="flex items-center gap-3">
-						{#if s.loading}
-							<span class="text-sm text-text-muted">Counting...</span>
-						{:else if s.romCount !== null}
-							<span class="text-sm {s.romCount > 0 ? 'text-green-500' : 'text-text-muted'}">
-								{plural(s.romCount, 'ROM')}
-							</span>
-							{#if s.mediaCount > 0}
-								<span class="text-sm text-text-muted">
-									{s.mediaCount} w/art
+		<div class="space-y-2">
+			{#each filteredSystems as s}
+				<div class="border border-border rounded-lg overflow-hidden">
+					<!-- System Header -->
+					<button
+						onclick={() => toggleExpand(s)}
+						class="w-full flex items-center justify-between p-3 bg-surface hover:bg-surface-hover text-left"
+					>
+						<div>
+							<span class="font-semibold text-text">{s.system.systemName}</span>
+							<span class="text-sm text-text-muted ml-2">({s.system.systemCode})</span>
+							{#if s.system.isCustom}
+								<span class="text-xs text-text-muted ml-1 italic">Custom</span>
+							{/if}
+							{#if availableEmus.size > 0 && !availableEmus.has(s.system.systemCode)}
+								{@const emuMsg = `No emulator found at Emus/${detectedPlatform}/${s.system.systemCode}.pak\n\nUse the Pak Store on your device to download more emulators.`}
+								<!-- svelte-ignore a11y_no_static_element_interactions -->
+								<span
+									onclick={(e: MouseEvent) => { e.stopPropagation(); missingEmuInfo = emuMsg; }}
+									onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); missingEmuInfo = emuMsg; } }}
+									role="button"
+									tabindex="0"
+									title={emuMsg}
+									class="text-xs text-yellow-500 ml-2 hover:text-yellow-400 cursor-pointer"
+								>
+									&#9888; Missing emulator
 								</span>
 							{/if}
-						{/if}
-						<span class="text-text-muted">{s.expanded ? '\u25B2' : '\u25BC'}</span>
-					</div>
-				</button>
-
-				<!-- Details (expanded) -->
-				{#if s.expanded}
-					<div class="p-3 space-y-3">
-						<div class="flex items-center justify-between">
-							<div>
-								<div class="text-xs text-text-muted font-mono">{s.devicePath}</div>
-								{#if s.system.isCustom}
-									<div class="text-xs text-text-muted italic">All file types</div>
-								{:else}
-									<div class="text-xs text-text-muted">
-										Formats: {s.system.supportedFormats.join(', ')}
-									</div>
-								{/if}
-							</div>
-							<div class="flex items-center gap-2">
-								{#if s.displayNameDirty}
-									<button
-										onclick={() => saveDisplayNames(s)}
-										disabled={s.savingNames}
-										class="text-sm bg-green-700 text-white px-3 py-1.5 rounded hover:bg-green-600 disabled:opacity-50"
-									>
-										{s.savingNames ? 'Saving...' : 'Save Names'}
-									</button>
-								{/if}
-								<button
-									onclick={() => uploadRoms(s)}
-									disabled={uploadingTo !== null}
-									class="text-sm bg-accent text-white px-3 py-1.5 rounded hover:bg-accent-hover disabled:opacity-50"
-								>
-									{uploadingTo === s.system.systemCode ? 'Uploading...' : 'Upload ROMs'}
-								</button>
-							</div>
 						</div>
+						<div class="flex items-center gap-3">
+							{#if s.loading}
+								<span class="text-sm text-text-muted">Counting...</span>
+							{:else if s.romCount !== null}
+								<span class="text-sm {s.romCount > 0 ? 'text-green-500' : 'text-text-muted'}">
+									{plural(s.romCount, 'ROM')}
+								</span>
+								{#if s.mediaCount > 0}
+									<span class="text-sm text-text-muted">
+										{s.mediaCount} w/art
+									</span>
+								{/if}
+							{/if}
+							<span class="text-text-muted">{s.expanded ? '\u25B2' : '\u25BC'}</span>
+						</div>
+					</button>
 
-						{#if s.error}
-							<div class="text-xs text-yellow-500">{s.error}</div>
-						{/if}
-
-						<!-- Special media images -->
-						{#if s.romsLoaded}
-							<div class="flex gap-3">
-								{#each [{ name: s.iconFileName, label: 'Icon', url: s.iconUrl }, { name: 'bg.png', label: 'bg.png', url: s.bgUrl }, { name: 'bglist.png', label: 'bglist.png', url: s.bglistUrl }] as media (media.name)}
-									<div class="w-40 border border-border rounded-lg overflow-hidden bg-bg shrink-0">
-										<!-- Preview area -->
-										{#if media.url}
-											<button
-												onclick={() => { previewSrc = media.url; previewAlt = `${s.system.systemName} — ${media.label}`; }}
-												class="h-28 w-full bg-surface cursor-pointer grid place-items-center p-1"
-											>
-												<img src={media.url} alt={media.label} class="max-w-full max-h-full object-contain" />
-											</button>
-										{:else}
-											<div class="h-28 bg-surface grid place-items-center">
-												<span class="text-text-muted text-xs">No {media.label}</span>
-											</div>
-										{/if}
-										<!-- Buttons -->
-										<div class="flex items-center justify-between px-1.5 py-1">
-											<span class="text-xs text-text-muted truncate">{media.label}</span>
-											<div class="flex items-center shrink-0">
-												<button
-													onclick={() => uploadSpecialMedia(s, media.name)}
-													disabled={uploadingBg !== null || removingBg !== null}
-													class="text-xs {media.url ? 'text-text-muted hover:bg-surface' : 'text-accent'} px-1 py-0.5 rounded disabled:opacity-50"
-												>
-													{uploadingBg === `${s.system.systemCode}/${media.name}` ? '...' : media.url ? 'Replace' : 'Add'}
-												</button>
-												{#if media.url}
-													<button
-														onclick={() => removeSpecialMedia(s, media.name)}
-														disabled={removingBg !== null || uploadingBg !== null}
-														class="text-xs text-accent hover:bg-surface px-1 py-0.5 rounded disabled:opacity-50"
-													>
-														{removingBg === `${s.system.systemCode}/${media.name}` ? '...' : 'Delete'}
-													</button>
-												{/if}
-											</div>
+					<!-- Details (expanded) -->
+					{#if s.expanded}
+						<div class="p-3 space-y-3">
+							<div class="flex items-center justify-between">
+								<div>
+									<div class="text-xs text-text-muted font-mono">{s.devicePath}</div>
+									{#if s.system.isCustom}
+										<div class="text-xs text-text-muted italic">All file types</div>
+									{:else}
+										<div class="text-xs text-text-muted">
+											Formats: {s.system.supportedFormats.join(', ')}
 										</div>
-									</div>
-								{/each}
+									{/if}
+								</div>
+								<div class="flex items-center gap-2">
+									{#if s.displayNameDirty}
+										<button
+											onclick={() => saveDisplayNames(s)}
+											disabled={s.savingNames}
+											class="text-sm bg-green-700 text-white px-3 py-1.5 rounded hover:bg-green-600 disabled:opacity-50"
+										>
+											{s.savingNames ? 'Saving...' : 'Save Names'}
+										</button>
+									{/if}
+									<button
+										onclick={() => uploadRoms(s)}
+										disabled={uploadingTo !== null}
+										class="text-sm bg-accent text-white px-3 py-1.5 rounded hover:bg-accent-hover disabled:opacity-50"
+									>
+										{uploadingTo === s.system.systemCode ? 'Uploading...' : 'Upload ROMs'}
+									</button>
+								</div>
 							</div>
-						{/if}
 
-						<!-- ROM List -->
-						{#if s.loadingRoms}
-							<div class="text-sm text-text-muted py-4 text-center">Loading ROMs...</div>
-						{:else if s.roms.length === 0 && s.romsLoaded}
-							<div class="text-sm text-text-muted py-4 text-center">No ROMs found</div>
-						{:else}
-							<div class="space-y-1 max-h-96 overflow-y-auto">
-								{#each s.roms as rom}
-									<div class="flex items-center gap-3 py-1.5 px-2 rounded hover:bg-surface-hover">
-										<!-- Thumbnail -->
-										<div class="w-10 h-10 shrink-0 rounded overflow-hidden bg-surface flex items-center justify-center">
-											{#if rom.loadingThumb}
-												<div class="w-10 h-10 bg-surface-hover animate-pulse rounded"></div>
-											{:else if rom.thumbnailUrl}
-												<button onclick={() => openPreview(rom)} class="w-full h-full cursor-pointer">
+							{#if s.error}
+								<div class="text-xs text-yellow-500">{s.error}</div>
+							{/if}
+
+							<!-- Special media images -->
+							{#if s.romsLoaded}
+								<div class="flex gap-3">
+									{#each [{ name: s.iconFileName, label: 'Icon', url: s.iconUrl }, { name: 'bg.png', label: 'bg.png', url: s.bgUrl }, { name: 'bglist.png', label: 'bglist.png', url: s.bglistUrl }] as media (media.name)}
+										<div
+											class="w-40 border border-border rounded-lg overflow-hidden bg-bg shrink-0"
+										>
+											<!-- Preview area -->
+											{#if media.url}
+												<button
+													onclick={() => {
+														previewSrc = media.url;
+														previewAlt = `${s.system.systemName} — ${media.label}`;
+													}}
+													class="h-28 w-full bg-surface cursor-pointer grid place-items-center p-1"
+												>
 													<img
-														src={rom.thumbnailUrl}
-														alt={rom.baseName}
-														class="w-10 h-10 object-cover"
+														src={media.url}
+														alt={media.label}
+														class="max-w-full max-h-full object-contain"
 													/>
 												</button>
 											{:else}
-												<span class="text-text-muted text-lg">&#127918;</span>
-											{/if}
-										</div>
-
-										<!-- ROM info -->
-										<div class="flex-1 min-w-0">
-											{#if rom.displayName}
-												<div class="text-sm text-text truncate">
-													{#if rom.displayName.startsWith('.')}
-														<span class="text-text-muted text-xs mr-1">[hidden]</span>
-													{/if}
-													{rom.displayName}
+												<div class="h-28 bg-surface grid place-items-center">
+													<span class="text-text-muted text-xs">No {media.label}</span>
 												</div>
-												<div class="text-xs text-text-muted truncate">{rom.name}</div>
-											{:else}
-												<div class="text-sm text-text truncate">{rom.name}</div>
-												{#if rom.hasMedia}
-													<div class="text-xs text-text-muted truncate">{rom.mediaFileName}</div>
-												{:else}
-													<div class="text-xs text-text-muted italic">No media</div>
-												{/if}
 											{/if}
+											<!-- Buttons -->
+											<div class="flex items-center justify-between px-1.5 py-1">
+												<span class="text-xs text-text-muted truncate">{media.label}</span>
+												<div class="flex items-center shrink-0">
+													<button
+														onclick={() => uploadSpecialMedia(s, media.name)}
+														disabled={uploadingBg !== null || removingBg !== null}
+														class="text-xs {media.url
+															? 'text-text-muted hover:bg-surface'
+															: 'text-accent'} px-1 py-0.5 rounded disabled:opacity-50"
+													>
+														{uploadingBg === `${s.system.systemCode}/${media.name}`
+															? '...'
+															: media.url
+																? 'Replace'
+																: 'Add'}
+													</button>
+													{#if media.url}
+														<button
+															onclick={() => removeSpecialMedia(s, media.name)}
+															disabled={removingBg !== null || uploadingBg !== null}
+															class="text-xs text-accent hover:bg-surface px-1 py-0.5 rounded disabled:opacity-50"
+														>
+															{removingBg === `${s.system.systemCode}/${media.name}`
+																? '...'
+																: 'Delete'}
+														</button>
+													{/if}
+												</div>
+											</div>
 										</div>
+									{/each}
+								</div>
+							{/if}
 
-										<!-- Size -->
-										<div class="text-xs text-text-muted tabular-nums shrink-0">
-											{formatSize(rom.size)}
-										</div>
-
-										<!-- Action buttons -->
-										<div class="flex items-center gap-1 shrink-0">
-											<button
-												onclick={() => renameRom(s, rom)}
-												class="text-xs px-2 py-1 rounded text-text-muted hover:bg-surface"
-												title="Set display name"
+							<!-- ROM List -->
+							{#if s.loadingRoms}
+								<div class="text-sm text-text-muted py-4 text-center">Loading ROMs...</div>
+							{:else if s.roms.length === 0 && s.romsLoaded}
+								<div class="text-sm text-text-muted py-4 text-center">No ROMs found</div>
+							{:else}
+								<div class="space-y-1 max-h-96 overflow-y-auto">
+									{#each s.roms as rom}
+										<div class="flex items-center gap-3 py-1.5 px-2 rounded hover:bg-surface-hover">
+											<!-- Thumbnail -->
+											<div
+												class="w-10 h-10 shrink-0 rounded overflow-hidden bg-surface flex items-center justify-center"
 											>
-												Rename
-											</button>
-											{#if (rom.displayName || '') !== (s.displayNameMap.get(rom.name) || '')}
+												{#if rom.loadingThumb}
+													<div class="w-10 h-10 bg-surface-hover animate-pulse rounded"></div>
+												{:else if rom.thumbnailUrl}
+													<button
+														onclick={() => openPreview(rom)}
+														class="w-full h-full cursor-pointer"
+													>
+														<img
+															src={rom.thumbnailUrl}
+															alt={rom.baseName}
+															class="w-10 h-10 object-cover"
+														/>
+													</button>
+												{:else}
+													<span class="text-text-muted text-lg">&#127918;</span>
+												{/if}
+											</div>
+
+											<!-- ROM info -->
+											<div class="flex-1 min-w-0">
+												{#if rom.displayName}
+													<div class="text-sm text-text truncate">
+														{#if rom.displayName.startsWith('.')}
+															<span class="text-text-muted text-xs mr-1">[hidden]</span>
+														{/if}
+														{rom.displayName}
+													</div>
+													<div class="text-xs text-text-muted truncate">{rom.name}</div>
+												{:else}
+													<div class="text-sm text-text truncate">{rom.name}</div>
+													{#if rom.hasMedia}
+														<div class="text-xs text-text-muted truncate">{rom.mediaFileName}</div>
+													{:else}
+														<div class="text-xs text-text-muted italic">No media</div>
+													{/if}
+												{/if}
+											</div>
+
+											<!-- Size -->
+											<div class="text-xs text-text-muted tabular-nums shrink-0">
+												{formatSize(rom.size)}
+											</div>
+
+											<!-- Action buttons -->
+											<div class="flex items-center gap-1 shrink-0">
 												<button
-													onclick={() => saveDisplayNameForRom(s, rom)}
-													disabled={savingNameFor !== null}
-													class="text-xs px-2 py-1 rounded text-green-400 hover:bg-surface disabled:opacity-50"
-													title="Save display name to device"
+													onclick={() => renameRom(s, rom)}
+													class="text-xs px-2 py-1 rounded text-text-muted hover:bg-surface"
+													title="Set display name"
 												>
-													{savingNameFor === rom.name ? 'Saving...' : 'Save name'}
+													Rename
 												</button>
-											{/if}
-											<button
-												onclick={() => uploadMedia(s, rom)}
-												disabled={uploadingMediaFor !== null || removingMediaFor !== null || removingRom !== null}
-												class="text-xs px-2 py-1 rounded
-													{rom.hasMedia
-														? 'text-text-muted hover:bg-surface'
-														: 'bg-accent text-white hover:bg-accent-hover'}
+												{#if (rom.displayName || '') !== (s.displayNameMap.get(rom.name) || '')}
+													<button
+														onclick={() => saveDisplayNameForRom(s, rom)}
+														disabled={savingNameFor !== null}
+														class="text-xs px-2 py-1 rounded text-green-400 hover:bg-surface disabled:opacity-50"
+														title="Save display name to device"
+													>
+														{savingNameFor === rom.name ? 'Saving...' : 'Save name'}
+													</button>
+												{/if}
+												<button
+													onclick={() => uploadMedia(s, rom)}
+													disabled={uploadingMediaFor !== null ||
+														removingMediaFor !== null ||
+														removingRom !== null}
+													class="text-xs px-2 py-1 rounded
+													{rom.hasMedia ? 'text-text-muted hover:bg-surface' : 'bg-accent text-white hover:bg-accent-hover'}
 													disabled:opacity-50"
-												title={rom.hasMedia ? `Replace ${rom.mediaFileName}` : `Upload art as ${rom.mediaFileName}`}
-											>
-												{#if uploadingMediaFor === rom.name}
-													Uploading...
-												{:else if rom.hasMedia}
-													Replace art
-												{:else}
-													Add art
-												{/if}
-											</button>
-											{#if rom.hasMedia}
-												<button
-													onclick={() => removeMedia(s, rom)}
-													disabled={removingMediaFor !== null || uploadingMediaFor !== null || removingRom !== null}
-													class="text-xs px-2 py-1 rounded text-text-muted hover:bg-surface disabled:opacity-50"
-													title={`Remove ${rom.mediaFileName}`}
+													title={rom.hasMedia
+														? `Replace ${rom.mediaFileName}`
+														: `Upload art as ${rom.mediaFileName}`}
 												>
-													{removingMediaFor === rom.name ? 'Removing...' : 'Remove art'}
+													{#if uploadingMediaFor === rom.name}
+														Uploading...
+													{:else if rom.hasMedia}
+														Replace art
+													{:else}
+														Add art
+													{/if}
 												</button>
-											{/if}
-											<button
-												onclick={() => removeRom(s, rom)}
-												disabled={removingRom !== null || removingMediaFor !== null || uploadingMediaFor !== null}
-												class="text-xs px-2 py-1 rounded text-accent hover:bg-surface disabled:opacity-50"
-												title={`Delete ${rom.name}`}
-											>
-												{removingRom === rom.name ? 'Deleting...' : 'Delete'}
-											</button>
+												{#if rom.hasMedia}
+													<button
+														onclick={() => removeMedia(s, rom)}
+														disabled={removingMediaFor !== null ||
+															uploadingMediaFor !== null ||
+															removingRom !== null}
+														class="text-xs px-2 py-1 rounded text-text-muted hover:bg-surface disabled:opacity-50"
+														title={`Remove ${rom.mediaFileName}`}
+													>
+														{removingMediaFor === rom.name ? 'Removing...' : 'Remove art'}
+													</button>
+												{/if}
+												<button
+													onclick={() => removeRom(s, rom)}
+													disabled={removingRom !== null ||
+														removingMediaFor !== null ||
+														uploadingMediaFor !== null}
+													class="text-xs px-2 py-1 rounded text-accent hover:bg-surface disabled:opacity-50"
+													title={`Delete ${rom.name}`}
+												>
+													{removingRom === rom.name ? 'Deleting...' : 'Delete'}
+												</button>
+											</div>
 										</div>
-									</div>
-								{/each}
-							</div>
-						{/if}
-					</div>
-				{/if}
-			</div>
-		{/each}
-	</div>
-{/if}
+									{/each}
+								</div>
+							{/if}
+						</div>
+					{/if}
+				</div>
+			{/each}
+		</div>
+	{/if}
 </div>
 
 {#if previewSrc}
@@ -935,3 +1063,20 @@
 {/if}
 
 <OverwriteDialog bind:this={overwriteDialog} />
+
+{#if missingEmuInfo}
+	<Modal onclose={() => (missingEmuInfo = null)}>
+		<div class="p-6">
+			<h3 class="text-lg font-bold text-text mb-3">Missing Emulator</h3>
+			<p class="text-sm text-text whitespace-pre-line">{missingEmuInfo}</p>
+			<div class="mt-4 flex justify-end">
+				<button
+					onclick={() => (missingEmuInfo = null)}
+					class="text-sm bg-surface hover:bg-surface-hover text-text px-3 py-1.5 rounded"
+				>
+					OK
+				</button>
+			</div>
+		</div>
+	</Modal>
+{/if}

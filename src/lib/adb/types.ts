@@ -43,6 +43,7 @@ export const DEVICE_PATHS = {
 	logs: `${NEXTUI_BASE_PATH}/.userdata/logs`,
 	system: `${NEXTUI_BASE_PATH}/.system`,
 	versionFile: `${NEXTUI_BASE_PATH}/.system/version.txt`,
+	emus: `${NEXTUI_BASE_PATH}/Emus`,
 	overlays: `${NEXTUI_BASE_PATH}/Overlays`,
 	cheats: `${NEXTUI_BASE_PATH}/Cheats`,
 	collections: `${NEXTUI_BASE_PATH}/Collections`,

@@ -1,6 +1,7 @@
 import { connectWebUSB, disconnect as adbDisconnect } from '$lib/adb/connection.js';
 import type { AdbConnection } from '$lib/adb/types.js';
 import { verifyNextUIInstallation, shell } from '$lib/adb/file-ops.js';
+import { detectPlatform } from '$lib/adb/platform.js';
 import { adbLog } from '$lib/stores/log.svelte.js';
 import { formatError } from '$lib/utils.js';
 import type { ShellCmd } from '$lib/adb/adb-utils.js';
@@ -11,6 +12,7 @@ let status: string = $state('Disconnected');
 let error: string = $state('');
 let busy: boolean = $state(false);
 let nextuiVersion: string = $state('');
+let platform: string = $state('');
 
 export function getConnection() {
 	return connection;
@@ -34,6 +36,10 @@ export function isConnected() {
 
 export function getNextUIVersion() {
 	return nextuiVersion;
+}
+
+export function getPlatform() {
+	return platform;
 }
 
 /**
@@ -78,6 +84,11 @@ export async function connect() {
 		nextuiVersion = verify.version ?? 'Unknown';
 		adbLog.info(`NextUI version: ${nextuiVersion}`);
 
+		// Detect device platform
+		platform = await detectPlatform(conn.adb);
+		adbLog.info(`Device platform: ${platform || '(unknown)'}`);
+
+
 		connection = conn;
 		status = `Connected: ${deviceName}`;
 		adbLog.info('NextUI installation verified');
@@ -91,6 +102,7 @@ export async function connect() {
 				status = 'Disconnected';
 				error = 'Device disconnected';
 				nextuiVersion = '';
+				platform = '';
 			}
 		};
 		conn.adb.disconnected.then(onDisconnect, onDisconnect);
@@ -119,6 +131,7 @@ export async function disconnect() {
 		status = 'Disconnected';
 		error = '';
 		nextuiVersion = '';
+		platform = '';
 		busy = false;
 	}
 }
