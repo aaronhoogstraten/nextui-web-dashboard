@@ -183,6 +183,27 @@ export async function shell(adb: Adb, command: string): Promise<string> {
 }
 
 /**
+ * Search for files/directories by name pattern (case-insensitive).
+ * Uses BusyBox `find` via shell.
+ *
+ * @param adb - Active ADB connection
+ * @param basePath - Directory to search from
+ * @param query - Search term (matched anywhere in filename)
+ * @param maxResults - Maximum number of results to return (default 200)
+ * @returns Array of absolute paths
+ */
+export async function searchFiles(
+	adb: Adb,
+	basePath: string,
+	query: string,
+	maxResults = 200
+): Promise<string[]> {
+	const pattern = `*${query}*`;
+	const output = await shell(adb, ShellCmd.find(basePath, pattern).toString());
+	return output.trim().split('\n').filter(Boolean).slice(0, maxResults);
+}
+
+/**
  * Get storage information for the SD card.
  *
  * @param adb - Active ADB connection

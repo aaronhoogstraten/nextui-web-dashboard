@@ -17,7 +17,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import type { Adb } from '@yume-chan/adb';
-	import { listDirectory, pullFile, pushFile, isDirectory } from '$lib/adb/file-ops.js';
+	import { listDirectory, pullFile, pushFile, isDirectory, searchFiles } from '$lib/adb/file-ops.js';
 	import { DEVICE_PATHS, type DirectoryEntry } from '$lib/adb/types.js';
 	import { adbExec } from '$lib/stores/connection.svelte.js';
 	import {
@@ -48,6 +48,9 @@
 	let uploading = $state(false);
 	let downloadingFile: string | null = $state(null);
 	let deletingEntry: string | null = $state(null);
+	let searchQuery = $state('');
+	let searchResults: string[] | null = $state(null);
+	let searching = $state(false);
 
 	const pathSegments = $derived(getPathSegments(currentPath));
 	const sortedEntries = $derived(getSortedEntries(entries, sortKey, sortAsc));
@@ -252,6 +255,34 @@
 		uploading = false;
 	}
 
+	async function doSearch() {
+		const q = searchQuery.trim();
+		if (!q) return;
+		searching = true;
+		notice = null;
+		try {
+			searchResults = await searchFiles(adb, currentPath, q);
+			if (searchResults.length === 0) {
+				notice = errorMsg(`No results for "${q}"`);
+			}
+		} catch (e) {
+			notice = errorMsg(`Search failed: ${formatError(e)}`);
+		}
+		searching = false;
+	}
+
+	function clearSearch() {
+		searchResults = null;
+		searchQuery = '';
+	}
+
+	function navigateToResult(fullPath: string) {
+		const lastSlash = fullPath.lastIndexOf('/');
+		const parentDir = lastSlash > 0 ? fullPath.substring(0, lastSlash) : '/';
+		clearSearch();
+		navigate(parentDir);
+	}
+
 	function formatDate(mtime: bigint): string {
 		const ms = Number(mtime) * 1000;
 		if (ms === 0) return '\u2014';
@@ -400,6 +431,32 @@
 		</div>
 	</div>
 
+	<!-- Search bar -->
+	<div class="flex items-center gap-2 mb-4">
+		<input
+			type="text"
+			bind:value={searchQuery}
+			placeholder="Search files..."
+			onkeydown={(e) => e.key === 'Enter' && doSearch()}
+			class="flex-1 text-sm bg-surface text-text border border-border rounded px-3 py-1.5 placeholder:text-text-muted"
+		/>
+		<button
+			onclick={doSearch}
+			disabled={searching || !searchQuery.trim()}
+			class="text-sm bg-accent text-white px-3 py-1.5 rounded hover:bg-accent-hover disabled:opacity-50"
+		>
+			{searching ? 'Searching...' : 'Search'}
+		</button>
+		{#if searchResults !== null}
+			<button
+				onclick={clearSearch}
+				class="text-sm bg-surface hover:bg-surface-hover text-text px-3 py-1.5 rounded"
+			>
+				Clear
+			</button>
+		{/if}
+	</div>
+
 	<!-- Breadcrumb -->
 	<div class="flex items-center gap-1 mb-4 text-sm flex-wrap min-h-[28px]">
 		{#each pathSegments as segment, i}
@@ -447,7 +504,43 @@
 					</tr>
 				</thead>
 				<tbody>
-					{#if loading}
+					{#if searching}
+						<tr>
+							<td colspan="4" class="py-8 text-center text-text-muted">Searching...</td>
+						</tr>
+					{:else if searchResults !== null}
+						{#if searchResults.length === 0}
+							<tr>
+								<td colspan="4" class="py-8 text-center text-text-muted">No results found</td>
+							</tr>
+						{:else}
+							{#each searchResults as result}
+								{@const lastSlash = result.lastIndexOf('/')}
+								{@const fileName = lastSlash >= 0 ? result.substring(lastSlash + 1) : result}
+								{@const dirPath = lastSlash > 0 ? result.substring(0, lastSlash) : '/'}
+								<tr class="border-t border-border hover:bg-surface-hover transition-colors">
+									<td class="py-1.5 px-3" colspan="2">
+										<button
+											onclick={() => navigateToResult(result)}
+											class="text-accent hover:underline text-left"
+										>
+											{fileName}
+										</button>
+									</td>
+									<td class="py-1.5 px-3 text-text-muted text-xs font-mono truncate" colspan="2" title={dirPath}>
+										{dirPath}
+									</td>
+								</tr>
+							{/each}
+							{#if searchResults.length >= 200}
+								<tr>
+									<td colspan="4" class="py-2 text-center text-text-muted text-xs">
+										Results capped at 200. Refine your search for more specific results.
+									</td>
+								</tr>
+							{/if}
+						{/if}
+					{:else if loading}
 						<tr>
 							<td colspan="4" class="py-8 text-center text-text-muted">Loading...</td>
 						</tr>

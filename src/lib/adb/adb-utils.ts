@@ -39,6 +39,11 @@ export class ShellCmd {
 		return new ShellCmd(`rm -rf ${shellEscape(path)}`);
 	}
 
+	/** Find files/dirs by name pattern (case-insensitive). */
+	static find(basePath: string, namePattern: string): ShellCmd {
+		return new ShellCmd(`find ${shellEscape(basePath)} -iname ${shellEscape(namePattern)} -maxdepth 8 2>/dev/null`);
+	}
+
 	/** Get filesystem disk usage info. */
 	static df(path: string): ShellCmd {
 		return new ShellCmd(`df ${shellEscape(path)}`);
