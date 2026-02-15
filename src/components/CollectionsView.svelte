@@ -316,7 +316,7 @@
 				>Replace</button>
 				<button
 					onclick={removeBg}
-					class="text-xs text-red-400 hover:text-red-300"
+					class="text-xs text-accent hover:text-accent-hover"
 				>Delete</button>
 			{:else}
 				<span class="text-xs text-text-muted">None</span>
@@ -368,7 +368,7 @@
 								<!-- Actions -->
 								<div class="flex items-center gap-2 shrink-0">
 									{#if col.iconUrl}
-										<button onclick={() => removeIcon(col)} class="text-xs text-red-400 hover:text-red-300">
+										<button onclick={() => removeIcon(col)} class="text-xs text-accent hover:text-accent-hover">
 											Remove icon
 										</button>
 									{:else}
@@ -389,7 +389,7 @@
 									<button
 										onclick={() => deleteCollection(col)}
 										disabled={deletingCollection !== null}
-										class="text-xs text-red-400 hover:text-red-300 disabled:opacity-50"
+										class="text-xs text-accent hover:text-accent-hover disabled:opacity-50"
 									>
 										{deletingCollection === col.name ? '...' : 'Delete'}
 									</button>

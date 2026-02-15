@@ -470,7 +470,7 @@
 													<button
 														onclick={() => removeOverlay(sys, file)}
 														disabled={removingFile !== null}
-														class="text-xs text-red-400 hover:text-red-300 disabled:opacity-50"
+														class="text-xs text-accent hover:text-accent-hover disabled:opacity-50"
 														title="Remove overlay"
 													>
 														{removingFile === `${sys.systemCode}/${file.name}` ? '...' : 'Delete'}

@@ -47,6 +47,7 @@
 	let sortAsc = $state(true);
 	let uploading = $state(false);
 	let downloadingFile: string | null = $state(null);
+	let deletingEntry: string | null = $state(null);
 
 	const pathSegments = $derived(getPathSegments(currentPath));
 	const sortedEntries = $derived(getSortedEntries(entries, sortKey, sortAsc));
@@ -196,6 +197,25 @@
 			notice = errorMsg(`Failed to create folder: ${formatError(e)}`);
 		}
 		creatingFolder = false;
+	}
+
+	async function deleteEntry(entry: DirectoryEntry) {
+		const kind = entry.isDirectory ? 'folder' : 'file';
+		if (!confirm(`Delete ${kind} "${entry.name}"?${entry.isDirectory ? ' This will remove all contents.' : ''}`)) return;
+		deletingEntry = entry.name;
+		notice = null;
+		try {
+			const remotePath = joinPath(currentPath, entry.name);
+			if (entry.isDirectory) {
+				await adbExec(ShellCmd.rmrf(remotePath));
+			} else {
+				await adbExec(ShellCmd.rmf(remotePath));
+			}
+			await navigate(currentPath);
+		} catch (e) {
+			notice = errorMsg(`Failed to delete: ${formatError(e)}`);
+		}
+		deletingEntry = null;
 	}
 
 	async function uploadFolder() {
@@ -485,8 +505,8 @@
 									{formatDate(entry.mtime)}
 								</td>
 								<td class="py-1.5 px-3">
-									{#if entry.isFile}
-										<div class="flex items-center gap-2">
+									<div class="flex items-center gap-2">
+										{#if entry.isFile}
 											{#if isTextFile(entry.name)}
 												<button
 													onclick={() => openEditor(joinPath(currentPath, entry.name))}
@@ -511,8 +531,15 @@
 											>
 												{downloadingFile === entry.name ? '...' : 'Download'}
 											</button>
-										</div>
-									{/if}
+										{/if}
+										<button
+											onclick={() => deleteEntry(entry)}
+											disabled={deletingEntry !== null}
+											class="text-xs text-accent hover:underline disabled:opacity-50"
+										>
+											{deletingEntry === entry.name ? '...' : 'Delete'}
+										</button>
+									</div>
 								</td>
 							</tr>
 						{/each}

@@ -385,7 +385,7 @@
 														<button
 															onclick={() => deleteCheat(sys, cheat)}
 															disabled={deletingFile !== null}
-															class="text-xs text-red-400 hover:text-red-300 disabled:opacity-50"
+															class="text-xs text-accent hover:text-accent-hover disabled:opacity-50"
 														>
 															{deletingFile === cheat.fileName ? '...' : 'Delete'}
 														</button>

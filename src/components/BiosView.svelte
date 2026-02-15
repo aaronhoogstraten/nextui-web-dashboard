@@ -351,7 +351,7 @@
 										<button
 											onclick={() => removeBiosFile(file, system)}
 											disabled={removingFile !== null || uploadingFile !== null}
-											class="text-xs px-2 py-1 rounded text-red-400 hover:bg-surface disabled:opacity-50"
+											class="text-xs px-2 py-1 rounded text-accent hover:bg-surface disabled:opacity-50"
 											title={`Delete ${file.definition.fileName}`}
 										>
 											{removingFile === `${file.definition.systemCode}/${file.definition.fileName}` ? 'Deleting...' : 'Delete'}
@@ -376,7 +376,7 @@
 											<button
 												onclick={() => removeBiosFile(file, system)}
 												disabled={removingFile !== null || uploadingFile !== null}
-												class="text-xs px-2 py-1 rounded text-red-400 hover:bg-surface disabled:opacity-50"
+												class="text-xs px-2 py-1 rounded text-accent hover:bg-surface disabled:opacity-50"
 												title={`Delete ${file.definition.fileName}`}
 											>
 												{removingFile === `${file.definition.systemCode}/${file.definition.fileName}` ? 'Deleting...' : 'Delete'}

@@ -323,7 +323,7 @@
 								>&#9660;</button>
 								<button
 									onclick={() => removeEntry(i)}
-									class="text-xs text-red-400 hover:text-red-300 px-1"
+									class="text-xs text-accent hover:text-accent-hover px-1"
 									title="Remove from collection"
 								>Remove</button>
 							</div>

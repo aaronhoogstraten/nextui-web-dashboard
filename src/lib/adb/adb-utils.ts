@@ -34,6 +34,11 @@ export class ShellCmd {
 		return new ShellCmd(`rm -f ${shellEscape(path)}`);
 	}
 
+	/** Remove a directory and all its contents recursively. */
+	static rmrf(path: string): ShellCmd {
+		return new ShellCmd(`rm -rf ${shellEscape(path)}`);
+	}
+
 	/** Get filesystem disk usage info. */
 	static df(path: string): ShellCmd {
 		return new ShellCmd(`df ${shellEscape(path)}`);

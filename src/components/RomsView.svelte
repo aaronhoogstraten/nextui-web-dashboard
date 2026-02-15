@@ -799,7 +799,7 @@
 													<button
 														onclick={() => removeSpecialMedia(s, media.name)}
 														disabled={removingBg !== null || uploadingBg !== null}
-														class="text-xs text-red-400 hover:bg-surface px-1 py-0.5 rounded disabled:opacity-50"
+														class="text-xs text-accent hover:bg-surface px-1 py-0.5 rounded disabled:opacity-50"
 													>
 														{removingBg === `${s.system.systemCode}/${media.name}` ? '...' : 'Delete'}
 													</button>
@@ -912,7 +912,7 @@
 											<button
 												onclick={() => removeRom(s, rom)}
 												disabled={removingRom !== null || removingMediaFor !== null || uploadingMediaFor !== null}
-												class="text-xs px-2 py-1 rounded text-red-400 hover:bg-surface disabled:opacity-50"
+												class="text-xs px-2 py-1 rounded text-accent hover:bg-surface disabled:opacity-50"
 												title={`Delete ${rom.name}`}
 											>
 												{removingRom === rom.name ? 'Deleting...' : 'Delete'}
