@@ -86,7 +86,7 @@
 			</button>
 			{#if !webUsbSupported}
 				<div class="text-xs text-yellow-400 mt-2">
-					WebUSB not available. Use a Chromium browser (Chrome, Edge).
+					WebUSB not available. Use Chrome, Edge, or another Chromium browser.
 				</div>
 			{/if}
 		{/if}

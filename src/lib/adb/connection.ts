@@ -25,11 +25,11 @@ export function getBrowserRecommendation(): string {
 	const ua = navigator.userAgent;
 
 	if (ua.includes('Firefox')) {
-		return 'Firefox does not support WebUSB. Please use a Chromium browser (Chrome, Edge).';
+		return 'Firefox does not support WebUSB. Please use Chrome, Edge, or another Chromium browser.';
 	}
 
 	if (ua.includes('Safari') && !ua.includes('Chrome')) {
-		return 'Safari does not support WebUSB. Please use a Chromium browser (Chrome, Edge).';
+		return 'Safari does not support WebUSB. Please use Chrome, Edge, or another Chromium browser.';
 	}
 
 	return '';

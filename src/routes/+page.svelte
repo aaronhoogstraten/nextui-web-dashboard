@@ -36,7 +36,7 @@
 					</p>
 					{#if !webUsbSupported}
 						<div class="bg-surface border border-border rounded p-4 text-sm text-yellow-500">
-							WebUSB is not available in this browser. Please use a Chromium browser (Chrome, Edge).
+							WebUSB is not available in this browser. Please use Chrome, Edge, or another Chromium browser.
 						</div>
 					{/if}
 				</div>
