@@ -32,8 +32,8 @@
 	});
 
 	const navItems: NavItem[] = [
-		{ id: 'bios', label: 'BIOS' },
 		{ id: 'roms', label: 'ROMs' },
+		{ id: 'bios', label: 'BIOS' },
 		{ id: 'overlays', label: 'Overlays' },
 		{ id: 'cheats', label: 'Cheats' },
 		{ id: 'collections', label: 'Collections' },
