@@ -56,10 +56,17 @@
 	});
 </script>
 
-<div class="bg-sidebar border-t border-border flex flex-col {collapsed ? 'h-8' : 'h-48'} transition-[height] duration-150">
+<div
+	class="bg-sidebar border-t border-border flex flex-col {collapsed
+		? 'h-8'
+		: 'h-48'} transition-[height] duration-150 shadow-[0_-2px_12px_rgba(0,0,0,0.3)] z-10"
+>
 	<!-- Header bar -->
 	<div class="flex items-center justify-between px-3 h-8 shrink-0 border-b border-border">
-		<button onclick={() => (collapsed = !collapsed)} class="flex items-center gap-2 text-xs text-text-muted hover:text-text">
+		<button
+			onclick={() => (collapsed = !collapsed)}
+			class="flex items-center gap-2 text-xs text-text-muted hover:text-text"
+		>
 			<span>{collapsed ? '\u25B6' : '\u25BC'}</span>
 			<span class="font-medium">Console</span>
 			{#if entries.length > 0}
@@ -83,7 +90,10 @@
 
 	<!-- Log entries -->
 	{#if !collapsed}
-		<div bind:this={scrollContainer} class="flex-1 overflow-y-auto font-mono text-xs leading-5 px-1">
+		<div
+			bind:this={scrollContainer}
+			class="flex-1 overflow-y-auto font-mono text-xs leading-5 px-1"
+		>
 			{#each entries as entry (entry.id)}
 				<div class="flex gap-2 px-2 hover:bg-surface">
 					<span class="text-text-muted shrink-0">{formatTime(entry.timestamp)}</span>

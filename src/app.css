@@ -1,6 +1,8 @@
 @import 'tailwindcss';
 
 @theme {
+  --font-sans: 'Raleway', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Fira Code', ui-monospace, monospace;
   --color-bg: var(--color-bg-val);
   --color-surface: var(--color-surface-val);
   --color-surface-hover: var(--color-surface-hover-val);
