@@ -113,8 +113,17 @@
 		{/each}
 	</nav>
 
-	<!-- GitHub link -->
-	<div class="p-3 border-t border-border">
+	<!-- External links -->
+	<div class="p-3 border-t border-border flex items-center gap-3">
+		<a
+			href="https://nextui.loveretro.games/"
+			target="_blank"
+			rel="noopener noreferrer"
+			class="opacity-60 hover:opacity-100 transition-opacity"
+			title="NextUI Website"
+		>
+			<img src="/favicon.png" alt="NextUI" class="w-5 h-5" />
+		</a>
 		<a
 			href="https://github.com/aaronhoogstraten/nextui-web-dashboard"
 			target="_blank"
