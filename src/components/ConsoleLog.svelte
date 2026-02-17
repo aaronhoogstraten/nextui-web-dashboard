@@ -6,6 +6,16 @@
 	let showDebug = $state(true);
 	let scrollContainer: HTMLDivElement | undefined = $state();
 	let scrollPending = false;
+	let copyLabel = $state('Copy Logs');
+
+	async function copyLogs() {
+		const text = entries
+			.map((e) => `${formatTime(e.timestamp)} ${levelLabel(e.level)} ${e.message}`)
+			.join('\n');
+		await navigator.clipboard.writeText(text);
+		copyLabel = 'Copied!';
+		setTimeout(() => (copyLabel = 'Copy Logs'), 1500);
+	}
 
 	const entries = $derived.by(() => {
 		const all = getLogEntries();
@@ -83,6 +93,7 @@
 					<input type="checkbox" bind:checked={autoScroll} class="accent-accent" />
 					Auto-scroll
 				</label>
+				<button onclick={copyLogs} class="text-text-muted hover:text-text">{copyLabel}</button>
 				<button onclick={clearLog} class="text-text-muted hover:text-text">Clear</button>
 			</div>
 		{/if}
