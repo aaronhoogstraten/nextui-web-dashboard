@@ -6,12 +6,16 @@ Requires a Chromium-based browser (Chrome, Edge, etc.).
 
 ## Features
 
-- **BIOS Management** -- View required BIOS files per system, check presence and integrity via SHA-256, upload missing files. Supports dynamically discovered custom systems.
-- **ROM Management** -- Browse ROMs per system, upload new ROMs with format validation, view file counts. Custom system folders are detected automatically.
+- **ROM Management** -- Browse ROMs per system, upload individually or sync from a local folder, manage box art and display names. Validates emulator availability per system. Custom system folders detected automatically.
+- **BIOS Management** -- View required BIOS files per system, check presence and integrity via SHA-1, upload missing files. Supports custom systems.
 - **Overlay Management** -- Preview, upload, and remove screen overlays. Browse and install community overlays from the [nextui-community-overlays](https://github.com/LoveRetro/nextui-community-overlays) repository.
-- **File Browser** -- Navigate the device filesystem, upload and download files, and edit text-based config files directly on the device.
-- **Download Logs** -- Collect all log files from the device and download them as a zip archive.
-- **Device Verification** -- Validates that the connected device is running NextUI (not a different MinUI fork) before allowing access.
+- **Cheats Management** -- Upload, download, and manage cheat files per system with ROM matching validation.
+- **Collections** -- Edit collection files: add/remove/reorder ROMs with a visual picker and path validation.
+- **Screenshots** -- Browse and download screenshots from the device.
+- **File Browser** -- Navigate the device filesystem, upload/download files, search recursively, preview images, and edit text-based config files.
+- **Download Logs** -- Collect all log files from the device and download as a zip archive.
+- **Platform Detection** -- Automatically detects the connected device platform (e.g. tg5040) for targeted emulator validation.
+- **Light/Dark Theme** -- Toggle between dark and light modes.
 
 ## Development
 
