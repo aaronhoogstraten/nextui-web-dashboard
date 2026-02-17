@@ -12,6 +12,8 @@
   --color-accent: var(--color-accent-val);
   --color-accent-hover: var(--color-accent-hover-val);
   --color-border: var(--color-border-val);
+  --color-success: var(--color-success-val);
+  --color-warning: var(--color-warning-val);
 }
 
 /* Dark theme (default) */
@@ -25,6 +27,8 @@
   --color-accent-val: #9B2256;
   --color-accent-hover-val: #b52a66;
   --color-border-val: #444444;
+  --color-success-val: #4ade80;
+  --color-warning-val: #eab308;
 }
 
 /* Light theme */
@@ -37,5 +41,7 @@
   --color-text-muted-val: #666666;
   --color-accent-val: #9B2256;
   --color-accent-hover-val: #7d1b45;
-  --color-border-val: #bbbbbb;
+  --color-border-val: #999999;
+  --color-success-val: #15803d;
+  --color-warning-val: #a16207;
 }

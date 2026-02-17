@@ -805,7 +805,7 @@
 									role="button"
 									tabindex="0"
 									title={emuMsg}
-									class="text-xs text-yellow-500 ml-2 hover:text-yellow-400 cursor-pointer"
+									class="text-xs text-warning ml-2 hover:opacity-80 cursor-pointer"
 								>
 									&#9888; Missing emulator
 								</span>
@@ -815,7 +815,7 @@
 							{#if s.loading}
 								<span class="text-sm text-text-muted">Counting...</span>
 							{:else if s.romCount !== null}
-								<span class="text-sm {s.romCount > 0 ? 'text-green-500' : 'text-text-muted'}">
+								<span class="text-sm {s.romCount > 0 ? 'text-success' : 'text-text-muted'}">
 									{plural(s.romCount, 'ROM')}
 								</span>
 								{#if s.mediaCount > 0}
@@ -863,7 +863,7 @@
 							</div>
 
 							{#if s.error}
-								<div class="text-xs text-yellow-500">{s.error}</div>
+								<div class="text-xs text-warning">{s.error}</div>
 							{/if}
 
 							<!-- Special media images -->
@@ -997,7 +997,7 @@
 													<button
 														onclick={() => saveDisplayNameForRom(s, rom)}
 														disabled={savingNameFor !== null}
-														class="text-xs px-2 py-1 rounded text-green-400 hover:bg-surface disabled:opacity-50"
+														class="text-xs px-2 py-1 rounded text-success hover:bg-surface disabled:opacity-50"
 														title="Save display name to device"
 													>
 														{savingNameFor === rom.name ? 'Saving...' : 'Save name'}

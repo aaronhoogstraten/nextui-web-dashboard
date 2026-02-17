@@ -4,6 +4,6 @@
 	let { notification }: { notification: Notification } = $props();
 </script>
 
-<div class="text-xs mb-3 {notification.type === 'success' ? 'text-green-500' : 'text-yellow-500'}">
+<div class="text-xs mb-3 {notification.type === 'success' ? 'text-success' : 'text-warning'}">
 	{notification.message}
 </div>

@@ -172,13 +172,13 @@
 	function statusColor(status: FileStatus): string {
 		switch (status) {
 			case 'valid':
-				return 'text-green-500';
+				return 'text-success';
 			case 'present':
 				return 'text-blue-500';
 			case 'missing':
 				return 'text-red-500';
 			case 'invalid':
-				return 'text-yellow-500';
+				return 'text-warning';
 			case 'checking':
 				return 'text-text-muted';
 			default:

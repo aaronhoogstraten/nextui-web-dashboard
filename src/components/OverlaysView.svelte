@@ -410,7 +410,7 @@
 						<span class="font-semibold text-text">{sys.systemCode}</span>
 						<div class="flex items-center gap-3">
 							<span
-								class="text-sm {sys.files.length > 0 ? 'text-green-500' : 'text-text-muted'}"
+								class="text-sm {sys.files.length > 0 ? 'text-success' : 'text-text-muted'}"
 							>
 								{plural(sys.files.length, 'overlay')}
 							</span>
@@ -442,7 +442,7 @@
 							</div>
 
 							{#if sys.error}
-								<div class="text-xs text-yellow-500">{sys.error}</div>
+								<div class="text-xs text-warning">{sys.error}</div>
 							{/if}
 
 							<!-- Device overlays -->
@@ -498,7 +498,7 @@
 									</div>
 
 									{#if rateLimitRemaining !== null && rateLimitRemaining <= 10}
-										<div class="text-xs text-yellow-500 mb-2">
+										<div class="text-xs text-warning mb-2">
 											GitHub API: {plural(rateLimitRemaining ?? 0, 'request')} remaining{rateLimitReset ? ` (resets in ${formatResetTime(rateLimitReset)})` : ''}
 										</div>
 									{/if}

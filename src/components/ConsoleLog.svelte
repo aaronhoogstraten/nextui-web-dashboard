@@ -17,7 +17,7 @@
 			case 'error':
 				return 'text-red-400';
 			case 'warn':
-				return 'text-yellow-400';
+				return 'text-warning';
 			case 'info':
 				return 'text-blue-400';
 			case 'debug':

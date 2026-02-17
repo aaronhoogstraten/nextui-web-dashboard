@@ -321,7 +321,7 @@
 						>
 							<span class="font-semibold text-text">{sys.systemCode}</span>
 							<div class="flex items-center gap-3">
-								<span class="text-sm text-green-500">
+								<span class="text-sm text-success">
 									{plural(sys.cheats.length, 'cheat')}
 								</span>
 								<span class="text-text-muted">{sys.expanded ? '\u25B2' : '\u25BC'}</span>
@@ -362,9 +362,9 @@
 												<td class="py-1.5 px-2">
 													<div class="flex items-center gap-1.5">
 														{#if cheat.romExists === true}
-															<span class="text-green-500" title="ROM found">&#10003;</span>
+															<span class="text-success" title="ROM found">&#10003;</span>
 														{:else if cheat.romExists === false}
-															<span class="text-yellow-500" title="ROM not found">&#9888;</span>
+															<span class="text-warning" title="ROM not found">&#9888;</span>
 														{/if}
 														<span class="text-text-muted text-xs truncate" title={cheat.romName}>
 															{cheat.romName}

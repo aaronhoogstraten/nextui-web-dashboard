@@ -688,7 +688,7 @@
 				{#if editorError}
 					<div
 						class="px-2 py-1 text-xs border-t border-border shrink-0 {editorError === 'Saved'
-							? 'text-green-500'
+							? 'text-success'
 							: 'text-red-400'}"
 					>
 						{editorError}

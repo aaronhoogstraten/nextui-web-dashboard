@@ -246,7 +246,7 @@
 		</button>
 		<h2 class="text-2xl font-bold text-text">{collection.name}</h2>
 		{#if editorDirty}
-			<span class="text-xs text-yellow-500">unsaved changes</span>
+			<span class="text-xs text-warning">unsaved changes</span>
 		{/if}
 	</div>
 	<div class="flex items-center gap-2">
@@ -299,7 +299,7 @@
 								{#if valid === false}
 									<span class="text-red-400" title="ROM not found on device">&#9888;</span>
 								{:else if valid === true}
-									<span class="text-green-500">&#10003;</span>
+									<span class="text-success">&#10003;</span>
 								{/if}
 								<span class="text-text" title={path}>{extractRomName(path)}</span>
 							</div>

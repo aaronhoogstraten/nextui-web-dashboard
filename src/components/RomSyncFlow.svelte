@@ -282,8 +282,8 @@
 	{/if}
 
 	<div class="flex items-center gap-4 mb-3 text-sm">
-		<span class="text-green-500">+{syncTotals.newCount} new</span>
-		<span class="text-yellow-500">~{syncTotals.existsCount} existing</span>
+		<span class="text-success">+{syncTotals.newCount} new</span>
+		<span class="text-warning">~{syncTotals.existsCount} existing</span>
 		<span class="text-text-muted">{syncTotals.checkedCount} selected</span>
 		<div class="flex-1"></div>
 		<button onclick={syncCheckAllNew} class="text-sm text-accent hover:underline">
@@ -309,10 +309,10 @@
 					<span class="font-semibold text-text">{sys.dirName}</span>
 					<div class="flex items-center gap-3 text-xs">
 						{#if counts.newCount > 0}
-							<span class="text-green-500">+{counts.newCount} new</span>
+							<span class="text-success">+{counts.newCount} new</span>
 						{/if}
 						{#if counts.existsCount > 0}
-							<span class="text-yellow-500">~{counts.existsCount} existing</span>
+							<span class="text-warning">~{counts.existsCount} existing</span>
 						{/if}
 						<span class="text-text-muted">{counts.checkedCount} selected</span>
 						<span class="text-text-muted">{sys.expanded ? '\u25B2' : '\u25BC'}</span>
@@ -355,9 +355,9 @@
 										</td>
 										<td class="py-1 px-2">
 											{#if file.status === 'new'}
-												<span class="text-xs text-green-500">New</span>
+												<span class="text-xs text-success">New</span>
 											{:else}
-												<span class="text-xs text-yellow-500">Exists</span>
+												<span class="text-xs text-warning">Exists</span>
 											{/if}
 										</td>
 									</tr>
@@ -385,7 +385,7 @@
 			<div class="text-xs text-text-muted mt-2 truncate text-center" title={syncCurrentFile}>{syncCurrentFile}</div>
 		</div>
 		<div class="flex gap-4 text-xs">
-			<span class="text-green-500">{syncTransferred} transferred</span>
+			<span class="text-success">{syncTransferred} transferred</span>
 			<span class="text-text-muted">{syncSkipped} skipped</span>
 			{#if syncFailed > 0}
 				<span class="text-red-400">{syncFailed} failed</span>
@@ -400,7 +400,7 @@
 			<div class="text-xl font-bold text-text">Sync Complete</div>
 			<div class="flex gap-6 justify-center text-sm">
 				<div class="text-center">
-					<div class="text-2xl font-bold text-green-500">{syncTransferred}</div>
+					<div class="text-2xl font-bold text-success">{syncTransferred}</div>
 					<div class="text-text-muted">Transferred</div>
 				</div>
 				<div class="text-center">

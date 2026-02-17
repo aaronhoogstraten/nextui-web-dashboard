@@ -62,7 +62,7 @@
 	<div class="p-4 border-b border-border">
 		<div class="text-sm text-text-muted mb-2">Device</div>
 		{#if isConnected()}
-			<div class="text-base text-green-400 truncate" title={getStatus()}>
+			<div class="text-base text-success truncate" title={getStatus()}>
 				{deviceLabel}
 			</div>
 			{#if getNextUIVersion()}
@@ -90,7 +90,7 @@
 				{isBusy() ? 'Connecting...' : 'Connect'}
 			</button>
 			{#if !webUsbSupported}
-				<div class="text-sm text-yellow-400 mt-2">
+				<div class="text-sm text-warning mt-2">
 					WebUSB not available. Use Chrome, Edge, or another Chromium browser.
 				</div>
 			{/if}
