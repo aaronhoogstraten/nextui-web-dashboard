@@ -12,6 +12,7 @@
 	} from '$lib/stores/connection.svelte.js';
 	import { hasWebUSB, getBrowserRecommendation } from '$lib/adb/connection.js';
 	import { toggleTheme, isDark } from '$lib/stores/theme.svelte.js';
+	import { base } from '$app/paths';
 
 	interface NavItem {
 		id: string;
@@ -124,7 +125,7 @@
 			class="opacity-60 hover:opacity-100 transition-opacity"
 			title="NextUI Website"
 		>
-			<img src="/favicon.png" alt="NextUI" class="w-6 h-6" />
+			<img src="{base}/favicon.png" alt="NextUI" class="w-6 h-6" />
 		</a>
 		<a
 			href="https://github.com/aaronhoogstraten/nextui-web-dashboard"
