@@ -8,6 +8,9 @@ node_modules
 /.svelte-kit
 /build
 
+# Build-time assets
+/static/developer-pak.zip
+
 # OS
 .DS_Store
 Thumbs.db

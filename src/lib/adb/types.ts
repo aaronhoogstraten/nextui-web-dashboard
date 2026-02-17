@@ -48,5 +48,6 @@ export const DEVICE_PATHS = {
 	cheats: `${NEXTUI_BASE_PATH}/Cheats`,
 	collections: `${NEXTUI_BASE_PATH}/Collections`,
 	screenshots: `${NEXTUI_BASE_PATH}/Screenshots`,
+	tools: `${NEXTUI_BASE_PATH}/Tools`,
 	minuiZip: `${NEXTUI_BASE_PATH}/MinUI.zip`
 } as const;

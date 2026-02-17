@@ -9,7 +9,8 @@
 	import LogsView from '../components/LogsView.svelte';
 	import ScreenshotsView from '../components/ScreenshotsView.svelte';
 	import ConsoleLog from '../components/ConsoleLog.svelte';
-	import { getConnection, isConnected } from '$lib/stores/connection.svelte.js';
+	import StayAwakePrompt from '../components/StayAwakePrompt.svelte';
+	import { getConnection, isConnected, isStayAwakePromptShown } from '$lib/stores/connection.svelte.js';
 	import { hasWebUSB } from '$lib/adb/connection.js';
 
 	let activeView: string = $state('welcome');
@@ -70,3 +71,7 @@
 
 	<ConsoleLog />
 </div>
+
+{#if isStayAwakePromptShown()}
+	<StayAwakePrompt />
+{/if}
