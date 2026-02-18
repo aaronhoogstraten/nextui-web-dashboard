@@ -1,11 +1,10 @@
-import type { Adb, AdbSocket } from '@yume-chan/adb';
+import type { Adb } from '@yume-chan/adb';
 import JSZip from 'jszip';
 import { base } from '$app/paths';
 import { DEVICE_PATHS } from './types.js';
 import { pathExists, pushFile, shell } from './file-ops.js';
 import { ShellCmd } from './adb-utils.js';
 import { adbLog } from '$lib/stores/log.svelte.js';
-import { formatError } from '$lib/utils.js';
 
 /** Files from the zip to push to device. Others (README, LICENSE) are skipped. */
 const PUSH_FILES: Record<string, { executable: boolean }> = {
@@ -79,108 +78,130 @@ export async function installDevPak(adb: Adb, platform: string): Promise<void> {
 }
 
 /**
- * Read all `export VAR=value` lines from the device's MinUI.pak launch.sh
- * and resolve shell variable references (e.g. $SDCARD_PATH) in order.
- * This is the authoritative source for the environment that NextUI provides
- * to paks at runtime — no hardcoded vendor paths needed.
+ * Launch Developer.pak using the device's native pak-launching mechanism.
+ * Writes the launch command to /tmp/next and kills nextui.elf, which triggers
+ * the MinUI.pak main loop to execute the pak with the full system environment.
+ * This is identical to how paks are launched from the device menu.
  */
-async function pakEnv(adb: Adb, platform: string): Promise<string> {
-	const system = `${DEVICE_PATHS.base}/.system/${platform}`;
-	const launcherPath = `${system}/paks/MinUI.pak/launch.sh`;
+export async function launchDevPakNative(adb: Adb, platform: string): Promise<void> {
+	const script = launchScript(platform);
+	adbLog.info('Launching Developer.pak via native mechanism');
 
-	try {
-		const result = await shell(adb, `grep "^export " ${launcherPath}`);
-		const resolved: Record<string, string> = {};
-
-		for (const rawLine of result.trim().split('\n')) {
-			const line = rawLine.replace(/\r$/, '');
-			// Parse: export VAR="value" or export VAR=value
-			const match = line.match(/^export\s+(\w+)=["']?(.+?)["']?$/);
-			if (!match) continue;
-
-			const [, key, raw] = match;
-
-			// Skip backtick/subshell expressions (e.g. TRIMUI_MODEL=`strings ...`)
-			if (raw.includes('`') || raw.includes('$(')) continue;
-
-			// Resolve $VAR references using previously resolved values.
-			// Self-references (e.g. $PATH in PATH=...:$PATH) are kept as-is
-			// so the shell appends to the existing value at runtime.
-			const value = raw.replace(/\$(\w+)/g, (_, ref) => {
-				if (ref === key) return `\$${ref}`;
-				return resolved[ref] ?? '';
-			});
-
-			// Strip trailing colons left from resolved-away references
-			resolved[key] = value.replace(/:+$/, '');
-		}
-
-		if (Object.keys(resolved).length > 0) {
-			adbLog.debug(`Pak env from device: ${JSON.stringify(resolved)}`);
-			return Object.entries(resolved)
-				.map(([k, v]) => `${k}=${v}`)
-				.join(' ');
-		}
-	} catch {
-		adbLog.debug('Could not read MinUI.pak launch.sh, using fallback env');
+	// Check if nextui.elf is at the menu. If /tmp/next exists, another pak is
+	// currently running (the MinUI loop deletes it only after the pak exits).
+	const nextExists = await pathExists(adb, '/tmp/next');
+	if (nextExists) {
+		throw new Error(
+			'Cannot launch Developer.pak: another pak is currently running. Return to the NextUI menu first.'
+		);
 	}
 
-	// Fallback: construct minimal env from known paths
-	const sdcard = DEVICE_PATHS.base;
-	const userdata = `${sdcard}/.userdata/${platform}`;
-	adbLog.debug('Using fallback pak environment');
-	return [
-		`PLATFORM=${platform}`,
-		`SDCARD_PATH=${sdcard}`,
-		`SYSTEM_PATH=${system}`,
-		`USERDATA_PATH=${userdata}`,
-		`LOGS_PATH=${userdata}/logs`
-	].join(' ');
+	// Write the launch command to /tmp/next (same format nextui.elf uses)
+	const expectedCmd = `sh ${script}`;
+	await shell(adb, `echo '${expectedCmd}' > /tmp/next`);
+
+	// Verify the write succeeded and nextui.elf is ready to be replaced
+	const written = (await shell(adb, 'cat /tmp/next')).trim();
+	adbLog.debug(`/tmp/next after: "${written}"`);
+	if (written !== expectedCmd) {
+		throw new Error(`Failed to write launch command to /tmp/next (got: "${written}")`);
+	}
+
+	// Use SIGKILL (-9) to terminate nextui.elf immediately.
+	// SIGTERM would trigger SDL_QUIT → PWR_powerOff() which shows "Powering off",
+	// kills daemons (keymon, batmon, audiomon), and removes /tmp/nextui_exec
+	// (which would cause the MinUI loop to exit after the pak finishes).
+	// SIGKILL bypasses all signal handlers so none of that happens.
+	await shell(adb, 'killall -9 nextui.elf');
+
+	adbLog.info('Developer.pak launched (nextui.elf will restart when pak exits)');
 }
 
 /**
- * Launch the Developer.pak's launch.sh via an ADB shell socket.
- * Sets the environment variables that NextUI's launcher normally provides.
- * Returns the open socket — keep it alive to maintain the stay-awake state.
- * When the socket is closed (or USB disconnects), the pak's trap handler cleans up.
+ * Stop the stay-awake pak by killing minui-presenter.
+ * Only acts if /tmp/stay_awake exists (written by Developer.pak while active).
+ * The pak's trap handler cleans up /tmp/stay_awake and nextui.elf restarts.
  */
-export async function launchDevPak(adb: Adb, platform: string): Promise<AdbSocket> {
-	const script = launchScript(platform);
-	const env = await pakEnv(adb, platform);
+export async function stopDevPak(adb: Adb): Promise<void> {
+	const active = await isStayAwakeActive(adb);
+	if (!active) {
+		adbLog.debug('Stay-awake not active, nothing to stop');
+		return;
+	}
 
-	// Ensure logs directory exists (launch.sh redirects output there)
-	const logsDir = `${DEVICE_PATHS.base}/.userdata/${platform}/logs`;
-	await adb.createSocketAndWait(`shell:${ShellCmd.mkdir(logsDir).toString()}`);
-
-	adbLog.info('Launching Developer.pak stay-awake');
-	const socket = await adb.createSocket(`shell:${env} sh ${script}`);
-
-	// Diagnostic: read the on-device log and check /tmp/stay_awake after launch
-	const logFile = `${DEVICE_PATHS.base}/.userdata/${platform}/logs/Developer.txt`;
-	setTimeout(async () => {
-		try {
-			const log = await shell(adb, `cat ${logFile}`);
-			if (log.trim()) adbLog.debug(`Developer.pak log:\n${log.trim()}`);
-		} catch { /* ignore */ }
-		try {
-			const sa = await shell(adb, 'cat /tmp/stay_awake');
-			adbLog.debug(`/tmp/stay_awake: "${sa.trim()}"`);
-		} catch {
-			adbLog.debug('/tmp/stay_awake: file not found');
-		}
-	}, 3000);
-
-	return socket;
+	adbLog.info('Stopping Developer.pak stay-awake');
+	await shell(adb, 'killall minui-presenter');
 }
 
 /**
- * Stop the stay-awake session by closing the shell socket.
- * This triggers the on-device trap handler which removes /tmp/stay_awake.
+ * Check if the Developer.pak is still actively running.
+ * The pak writes /tmp/stay_awake on launch and removes it via trap on exit.
+ * Note: on NextUI, actual sleep control is managed by paks themselves
+ * (the file doesn't suppress sleep), but the Developer.pak still writes it
+ * so it serves as a reliable indicator of pak state.
  */
-export async function stopStayAwake(socket: AdbSocket): Promise<void> {
+export async function isStayAwakeActive(adb: Adb): Promise<boolean> {
+	return pathExists(adb, '/tmp/stay_awake');
+}
+
+/** Remote path for the dashboard logo pushed to device. */
+const DASHBOARD_IMAGE = '/tmp/dashboard.png';
+
+/**
+ * Launch show2.elf as an overlay on top of Developer.pak.
+ * Pushes the dashboard logo to the device, then starts show2.elf in daemon mode.
+ * Must be called after Developer.pak is running (so the framebuffer is available).
+ */
+export async function launchShow2Overlay(adb: Adb, platform: string): Promise<void> {
+	adbLog.info('Launching show2.elf overlay...');
+
+	const systemDir = `${DEVICE_PATHS.system}/${platform}`;
+	const show2 = `${systemDir}/bin/show2.elf`;
+	const ldPath = `${systemDir}/lib:/usr/trimui/lib`;
+
+	// Push the dashboard logo to the device
+	const url = `${base}/dashboard.png`;
+	const res = await fetch(url);
+	if (!res.ok) throw new Error(`Failed to fetch dashboard image (${res.status})`);
+	const imageData = new Uint8Array(await res.arrayBuffer());
+	await pushFile(adb, DASHBOARD_IMAGE, imageData);
+	adbLog.debug(`Pushed dashboard image (${imageData.length} bytes)`);
+
+	// Clean up stale FIFO from previous runs
+	await shell(adb, 'rm -f /tmp/show2.fifo');
+
+	// Launch show2.elf in a single shell session — it needs the session alive
+	// while SDL initializes (~2s). The FIFO write updates the text after init,
+	// and the trailing sleep gives show2 time to render the update.
+	const result = await shell(
+		adb,
+		`LD_LIBRARY_PATH=${ldPath} ${show2} --mode=daemon --image=${DASHBOARD_IMAGE} --bgcolor=0x1a1a2e --fontcolor=0xFFFFFF --texty=75 --progressy=200 --text="Starting..." > /dev/null 2>&1 &
+sleep 2
+pidof show2.elf && echo OK || echo FAIL
+echo "TEXT:NextUI Web Dashboard in use - Press B to stop keeping the device awake" > /tmp/show2.fifo
+sleep 1`
+	);
+
+	const lines = result
+		.trim()
+		.split('\n')
+		.map((l) => l.trim());
+	if (!lines.includes('OK')) {
+		adbLog.error('show2.elf overlay failed to start');
+		return;
+	}
+	adbLog.info('show2.elf overlay active');
+}
+
+/**
+ * Stop the show2.elf overlay.
+ * Uses killall since FIFO writes don't work across ADB shell sessions.
+ */
+export async function stopShow2(adb: Adb): Promise<void> {
 	try {
-		await socket.close();
-	} catch (e) {
-		adbLog.debug(`Stay-awake socket close: ${formatError(e)}`);
+		await shell(adb, 'killall show2.elf 2>/dev/null || true');
+		await shell(adb, `rm -f ${DASHBOARD_IMAGE} /tmp/show2.fifo`);
+	} catch {
+		// Best-effort cleanup
 	}
 }

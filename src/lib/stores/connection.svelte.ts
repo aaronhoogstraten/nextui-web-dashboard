@@ -1,9 +1,16 @@
-import type { AdbSocket } from '@yume-chan/adb';
 import { connectWebUSB, disconnect as adbDisconnect } from '$lib/adb/connection.js';
 import type { AdbConnection } from '$lib/adb/types.js';
 import { verifyNextUIInstallation, shell } from '$lib/adb/file-ops.js';
 import { detectPlatform } from '$lib/adb/platform.js';
-import { isDevPakInstalled, installDevPak, launchDevPak, stopStayAwake } from '$lib/adb/stay-awake.js';
+import {
+	isDevPakInstalled,
+	installDevPak,
+	launchDevPakNative,
+	stopDevPak,
+	isStayAwakeActive as checkStayAwakeFile,
+	launchShow2Overlay,
+	stopShow2
+} from '$lib/adb/stay-awake.js';
 import { adbLog } from '$lib/stores/log.svelte.js';
 import { formatError } from '$lib/utils.js';
 import type { ShellCmd } from '$lib/adb/adb-utils.js';
@@ -17,12 +24,14 @@ let nextuiVersion: string = $state('');
 let platform: string = $state('');
 
 /** Stay-awake state */
-let stayAwakeSocket: AdbSocket | null = null;
 let stayAwakeActive: boolean = $state(false);
 let stayAwakePromptVisible: boolean = $state(false);
 let stayAwakeBusy: boolean = $state(false);
+let stayAwakeError: string = $state('');
+let stayAwakePollInterval: ReturnType<typeof setInterval> | null = null;
 
 const STAY_AWAKE_PREF_KEY = 'stayAwakePref';
+const STAY_AWAKE_POLL_MS = 5000;
 
 export function getConnection() {
 	return connection;
@@ -64,11 +73,49 @@ export function isStayAwakePromptShown() {
 	return stayAwakePromptVisible;
 }
 
+export function getStayAwakeError() {
+	return stayAwakeError;
+}
+
+export function dismissStayAwakeError() {
+	stayAwakeError = '';
+}
+
 export function getStayAwakePref(): string | null {
 	try {
 		return localStorage.getItem(STAY_AWAKE_PREF_KEY);
 	} catch {
 		return null;
+	}
+}
+
+/** Start polling /tmp/stay_awake to detect when the pak exits (user pressed B or remote stop). */
+function startStayAwakePolling(): void {
+	stopStayAwakePolling();
+	stayAwakePollInterval = setInterval(async () => {
+		if (!connection) {
+			stopStayAwakePolling();
+			return;
+		}
+		try {
+			const active = await checkStayAwakeFile(connection.adb);
+			if (!active && stayAwakeActive) {
+				adbLog.info('Stay-awake ended (pak exited on device)');
+				// Clean up show2 overlay if it's still running
+				await stopShow2(connection.adb);
+				stayAwakeActive = false;
+				stopStayAwakePolling();
+			}
+		} catch {
+			// Connection may have dropped — polling will stop on disconnect
+		}
+	}, STAY_AWAKE_POLL_MS);
+}
+
+function stopStayAwakePolling(): void {
+	if (stayAwakePollInterval !== null) {
+		clearInterval(stayAwakePollInterval);
+		stayAwakePollInterval = null;
 	}
 }
 
@@ -87,13 +134,22 @@ export async function enableStayAwake(): Promise<void> {
 			await installDevPak(connection.adb, platform);
 		}
 
-		// Launch the pak
-		stayAwakeSocket = await launchDevPak(connection.adb, platform);
+		// Launch via native mechanism (writes /tmp/next, kills nextui.elf)
+		await launchDevPakNative(connection.adb, platform);
 		stayAwakeActive = true;
+		startStayAwakePolling();
 		adbLog.info('Stay awake enabled');
+
+		// Launch show2.elf overlay with dashboard branding on top of Developer.pak
+		try {
+			await launchShow2Overlay(connection.adb, platform);
+		} catch (e) {
+			adbLog.warn(`show2 overlay failed (non-fatal): ${formatError(e)}`);
+		}
 	} catch (e) {
-		adbLog.error(`Stay-awake failed: ${formatError(e)}`);
-		stayAwakeSocket = null;
+		const msg = formatError(e);
+		adbLog.error(`Stay-awake failed: ${msg}`);
+		stayAwakeError = msg;
 		stayAwakeActive = false;
 	} finally {
 		stayAwakeBusy = false;
@@ -101,14 +157,19 @@ export async function enableStayAwake(): Promise<void> {
 }
 
 export async function disableStayAwake(): Promise<void> {
-	if (!stayAwakeSocket) {
+	stopStayAwakePolling();
+	if (!connection || !stayAwakeActive) {
 		stayAwakeActive = false;
 		return;
 	}
-	await stopStayAwake(stayAwakeSocket);
-	stayAwakeSocket = null;
+	try {
+		await stopShow2(connection.adb);
+		await stopDevPak(connection.adb);
+		adbLog.info('Stay awake disabled');
+	} catch (e) {
+		adbLog.debug(`Stop stay-awake: ${formatError(e)}`);
+	}
 	stayAwakeActive = false;
-	adbLog.info('Stay awake disabled');
 }
 
 export async function toggleStayAwake(): Promise<void> {
@@ -201,12 +262,10 @@ export async function connect() {
 		}
 
 		// Listen for unexpected disconnection (e.g. device sleep, USB unplug)
-		// The promise resolves on clean close, rejects on transport error (e.g. NetworkError)
 		const onDisconnect = () => {
 			if (connection === conn) {
 				adbLog.warn('Device disconnected unexpectedly');
-				// Clear stay-awake state (device-side cleanup happens via shell trap)
-				stayAwakeSocket = null;
+				stopStayAwakePolling();
 				stayAwakeActive = false;
 				stayAwakePromptVisible = false;
 				connection = null;
@@ -240,7 +299,7 @@ export async function disconnect() {
 	} catch (e) {
 		adbLog.warn(`Disconnect error (ignored): ${e}`);
 	} finally {
-		stayAwakeSocket = null;
+		stopStayAwakePolling();
 		stayAwakeActive = false;
 		stayAwakePromptVisible = false;
 		connection = null;

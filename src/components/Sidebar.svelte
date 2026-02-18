@@ -76,7 +76,7 @@
 				class="flex items-center justify-between text-sm text-text-muted mb-2 cursor-pointer"
 				title="Keep the device screen awake while connected"
 			>
-				<span>Stay Awake</span>
+				<span>Keep device awake</span>
 				<button
 					onclick={toggleStayAwake}
 					disabled={isStayAwakeBusy()}
@@ -85,7 +85,7 @@
 						: 'bg-surface-hover'}"
 					role="switch"
 					aria-checked={isStayAwakeActive()}
-					aria-label="Toggle stay awake"
+					aria-label="Toggle keeping the device awake"
 				>
 					<span
 						class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform {isStayAwakeActive()

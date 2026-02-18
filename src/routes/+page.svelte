@@ -10,7 +10,14 @@
 	import ScreenshotsView from '../components/ScreenshotsView.svelte';
 	import ConsoleLog from '../components/ConsoleLog.svelte';
 	import StayAwakePrompt from '../components/StayAwakePrompt.svelte';
-	import { getConnection, isConnected, isStayAwakePromptShown } from '$lib/stores/connection.svelte.js';
+	import Modal from '../components/Modal.svelte';
+	import {
+		getConnection,
+		isConnected,
+		isStayAwakePromptShown,
+		getStayAwakeError,
+		dismissStayAwakeError
+	} from '$lib/stores/connection.svelte.js';
 	import { hasWebUSB } from '$lib/adb/connection.js';
 
 	let activeView: string = $state('welcome');
@@ -37,7 +44,8 @@
 					</p>
 					{#if !webUsbSupported}
 						<div class="bg-surface border border-border rounded p-4 text-sm text-warning">
-							WebUSB is not available in this browser. Please use Chrome, Edge, or another Chromium browser.
+							WebUSB is not available in this browser. Please use Chrome, Edge, or another Chromium
+							browser.
 						</div>
 					{/if}
 				</div>
@@ -74,4 +82,21 @@
 
 {#if isStayAwakePromptShown()}
 	<StayAwakePrompt />
+{/if}
+
+{#if getStayAwakeError()}
+	<Modal onclose={dismissStayAwakeError}>
+		<div class="p-6">
+			<h3 class="text-lg font-bold text-text mb-3">Keep device awake</h3>
+			<p class="text-sm text-text whitespace-pre-line">{getStayAwakeError()}</p>
+			<div class="mt-4 flex justify-end">
+				<button
+					onclick={dismissStayAwakeError}
+					class="text-sm bg-surface hover:bg-surface-hover text-text px-3 py-1.5 rounded"
+				>
+					OK
+				</button>
+			</div>
+		</div>
+	</Modal>
 {/if}
