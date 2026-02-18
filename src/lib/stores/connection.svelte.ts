@@ -122,7 +122,8 @@ function stopStayAwakePolling(): void {
 export async function enableStayAwake(): Promise<void> {
 	if (!connection || stayAwakeActive || stayAwakeBusy) return;
 	if (!platform) {
-		adbLog.warn('Cannot enable stay-awake: platform unknown');
+		stayAwakeError = 'Cannot enable stay-awake: device platform could not be detected.';
+		adbLog.error(stayAwakeError);
 		return;
 	}
 	stayAwakeBusy = true;
