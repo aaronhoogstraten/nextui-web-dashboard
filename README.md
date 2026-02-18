@@ -24,6 +24,10 @@ npm install
 npm run dev
 ```
 
+## Acknowledgements
+
+- [minui-developer-pak](https://github.com/josegonzalez/minui-developer-pak) by @josegonzalez -- Used for the "Keep device awake" feature, which launches the Developer.pak on the device to prevent sleep during a dashboard session.
+
 ## Tech Stack
 
 - SvelteKit / Svelte 5
