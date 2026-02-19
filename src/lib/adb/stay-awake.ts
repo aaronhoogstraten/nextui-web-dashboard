@@ -15,6 +15,49 @@ const PUSH_FILES: Record<string, { executable: boolean }> = {
 /** Prefix for platform-specific binaries inside the zip. */
 const BIN_PREFIX = 'bin/';
 
+/** Device /tmp paths used by the stay-awake workflow. */
+const TMP_NEXT = '/tmp/next';
+const TMP_STAY_AWAKE = '/tmp/stay_awake';
+const SHOW2_FIFO = '/tmp/show2.fifo';
+
+/** Remote path for the dashboard logo pushed to device. */
+const DASHBOARD_IMAGE = '/tmp/dashboard.png';
+
+/** show2.elf display parameters. */
+const SHOW2_BG_COLOR = '0x1a1a2e';
+const SHOW2_FONT_COLOR = '0xFFFFFF';
+const SHOW2_TEXT_Y = 75;
+const SHOW2_PROGRESS_Y_HIDDEN = 200;
+const SHOW2_IDLE_TEXT = 'NextUI Web Dashboard in use - Press B to stop keeping the device awake';
+
+/**
+ * Read LD_LIBRARY_PATH from the device's MinUI.pak/launch.sh.
+ * The launch script exports it with shell variables like $SYSTEM_PATH which
+ * we resolve to the known system directory. Falls back to just the platform
+ * system lib dir if the file can't be parsed.
+ */
+async function readLdLibraryPath(adb: Adb, platform: string): Promise<string> {
+	const systemDir = `${DEVICE_PATHS.system}/${platform}`;
+	const launchSh = `${systemDir}/paks/MinUI.pak/launch.sh`;
+	try {
+		const content = await shell(adb, `cat ${launchSh}`);
+		// Match: export LD_LIBRARY_PATH=...
+		const match = content.match(/^export\s+LD_LIBRARY_PATH=(.+)$/m);
+		if (match) {
+			// Resolve known shell variables, strip trailing :$LD_LIBRARY_PATH
+			const resolved = match[1]
+				.replace(/\$SYSTEM_PATH/g, systemDir)
+				.replace(/:\$LD_LIBRARY_PATH/, '');
+			adbLog.debug(`LD_LIBRARY_PATH from launch.sh: ${resolved}`);
+			return resolved;
+		}
+	} catch (e) {
+		adbLog.warn(`Failed to read LD_LIBRARY_PATH from ${launchSh}: ${e}`);
+	}
+	// Fallback: platform system lib only
+	return `${systemDir}/lib`;
+}
+
 function devPakDir(platform: string): string {
 	return `${DEVICE_PATHS.tools}/${platform}/Developer.pak`;
 }
@@ -44,42 +87,47 @@ export async function installDevPak(adb: Adb, platform: string): Promise<void> {
 	if (!res.ok) throw new Error(`Failed to fetch Developer.pak zip (${res.status})`);
 
 	const zip = await JSZip.loadAsync(await res.arrayBuffer());
-	let pushed = 0;
+
+	// Collect files to push and the unique parent directories they need
+	const filesToPush: { relativePath: string; data: Uint8Array; executable: boolean }[] = [];
+	const dirsNeeded = new Set<string>([pakDir]);
 
 	for (const [relativePath, zipEntry] of Object.entries(zip.files)) {
 		if (zipEntry.dir) continue;
 
-		// Determine if this file should be pushed
 		const known = PUSH_FILES[relativePath];
 		const isBin = relativePath.startsWith(BIN_PREFIX);
-
 		if (!known && !isBin) continue; // skip README, LICENSE, etc.
 
 		const executable = known ? known.executable : true; // binaries are executable
 		const data = new Uint8Array(await zipEntry.async('arraybuffer'));
-		const remotePath = `${pakDir}/${relativePath}`;
+		filesToPush.push({ relativePath, data, executable });
 
-		// Create parent directory on device
 		const lastSlash = relativePath.lastIndexOf('/');
 		if (lastSlash > 0) {
-			const subDir = `${pakDir}/${relativePath.substring(0, lastSlash)}`;
-			await adb.createSocketAndWait(`shell:${ShellCmd.mkdir(subDir).toString()}`);
-		} else {
-			await adb.createSocketAndWait(`shell:${ShellCmd.mkdir(pakDir).toString()}`);
+			dirsNeeded.add(`${pakDir}/${relativePath.substring(0, lastSlash)}`);
 		}
+	}
 
-		await pushFile(adb, remotePath, data, executable ? 0o755 : 0o644);
-		pushed++;
+	if (filesToPush.length === 0) throw new Error('No Developer.pak files found in zip');
+
+	// Create all needed directories (one round-trip each, deduplicated)
+	for (const dir of dirsNeeded) {
+		await shell(adb, ShellCmd.mkdir(dir).toString());
+	}
+
+	// Push files
+	for (const { relativePath, data, executable } of filesToPush) {
+		await pushFile(adb, `${pakDir}/${relativePath}`, data, executable ? 0o755 : 0o644);
 		adbLog.debug(`Pushed ${relativePath} (${data.length} bytes)`);
 	}
 
-	if (pushed === 0) throw new Error('No Developer.pak files found in zip');
-	adbLog.info(`Developer.pak installed (${pushed} files)`);
+	adbLog.info(`Developer.pak installed (${filesToPush.length} files)`);
 }
 
 /**
  * Launch Developer.pak using the device's native pak-launching mechanism.
- * Writes the launch command to /tmp/next and kills nextui.elf, which triggers
+ * Writes the launch command to TMP_NEXT and kills nextui.elf, which triggers
  * the MinUI.pak main loop to execute the pak with the full system environment.
  * This is identical to how paks are launched from the device menu.
  */
@@ -87,24 +135,24 @@ export async function launchDevPakNative(adb: Adb, platform: string): Promise<vo
 	const script = launchScript(platform);
 	adbLog.info('Launching Developer.pak via native mechanism');
 
-	// Check if nextui.elf is at the menu. If /tmp/next exists, another pak is
+	// Check if nextui.elf is at the menu. If TMP_NEXT exists, another pak is
 	// currently running (the MinUI loop deletes it only after the pak exits).
-	const nextExists = await pathExists(adb, '/tmp/next');
+	const nextExists = await pathExists(adb, TMP_NEXT);
 	if (nextExists) {
 		throw new Error(
 			'Cannot launch Developer.pak: another pak is currently running. Return to the NextUI menu first.'
 		);
 	}
 
-	// Write the launch command to /tmp/next (same format nextui.elf uses)
+	// Write the launch command to TMP_NEXT (same format nextui.elf uses)
 	const expectedCmd = `sh ${script}`;
-	await shell(adb, `echo '${expectedCmd}' > /tmp/next`);
+	await shell(adb, `echo '${expectedCmd}' > ${TMP_NEXT}`);
 
 	// Verify the write succeeded and nextui.elf is ready to be replaced
-	const written = (await shell(adb, 'cat /tmp/next')).trim();
-	adbLog.debug(`/tmp/next after: "${written}"`);
+	const written = (await shell(adb, `cat ${TMP_NEXT}`)).trim();
+	adbLog.debug(`${TMP_NEXT} after: "${written}"`);
 	if (written !== expectedCmd) {
-		throw new Error(`Failed to write launch command to /tmp/next (got: "${written}")`);
+		throw new Error(`Failed to write launch command to ${TMP_NEXT} (got: "${written}")`);
 	}
 
 	// Use SIGKILL (-9) to terminate nextui.elf immediately.
@@ -119,8 +167,8 @@ export async function launchDevPakNative(adb: Adb, platform: string): Promise<vo
 
 /**
  * Stop the stay-awake pak by killing minui-presenter.
- * Only acts if /tmp/stay_awake exists (written by Developer.pak while active).
- * The pak's trap handler cleans up /tmp/stay_awake and nextui.elf restarts.
+ * Only acts if TMP_STAY_AWAKE exists (written by Developer.pak while active).
+ * The pak's trap handler cleans up TMP_STAY_AWAKE and nextui.elf restarts.
  */
 export async function stopDevPak(adb: Adb): Promise<void> {
 	const active = await isStayAwakeActive(adb);
@@ -135,17 +183,14 @@ export async function stopDevPak(adb: Adb): Promise<void> {
 
 /**
  * Check if the Developer.pak is still actively running.
- * The pak writes /tmp/stay_awake on launch and removes it via trap on exit.
+ * The pak writes TMP_STAY_AWAKE on launch and removes it via trap on exit.
  * Note: on NextUI, actual sleep control is managed by paks themselves
  * (the file doesn't suppress sleep), but the Developer.pak still writes it
  * so it serves as a reliable indicator of pak state.
  */
 export async function isStayAwakeActive(adb: Adb): Promise<boolean> {
-	return pathExists(adb, '/tmp/stay_awake');
+	return pathExists(adb, TMP_STAY_AWAKE);
 }
-
-/** Remote path for the dashboard logo pushed to device. */
-const DASHBOARD_IMAGE = '/tmp/dashboard.png';
 
 /**
  * Launch show2.elf as an overlay on top of Developer.pak.
@@ -157,7 +202,7 @@ export async function launchShow2Overlay(adb: Adb, platform: string): Promise<vo
 
 	const systemDir = `${DEVICE_PATHS.system}/${platform}`;
 	const show2 = `${systemDir}/bin/show2.elf`;
-	const ldPath = `${systemDir}/lib:/usr/trimui/lib`;
+	const ldPath = await readLdLibraryPath(adb, platform);
 
 	// Push the dashboard logo to the device
 	const url = `${base}/dashboard.png`;
@@ -168,17 +213,17 @@ export async function launchShow2Overlay(adb: Adb, platform: string): Promise<vo
 	adbLog.debug(`Pushed dashboard image (${imageData.length} bytes)`);
 
 	// Clean up stale FIFO from previous runs
-	await shell(adb, 'rm -f /tmp/show2.fifo');
+	await shell(adb, `rm -f ${SHOW2_FIFO}`);
 
 	// Launch show2.elf in a single shell session — it needs the session alive
 	// while SDL initializes (~2s). The FIFO write updates the text after init,
 	// and the trailing sleep gives show2 time to render the update.
 	const result = await shell(
 		adb,
-		`LD_LIBRARY_PATH=${ldPath} ${show2} --mode=daemon --image=${DASHBOARD_IMAGE} --bgcolor=0x1a1a2e --fontcolor=0xFFFFFF --texty=75 --progressy=200 --text="Starting..." > /dev/null 2>&1 &
+		`LD_LIBRARY_PATH=${ldPath} ${show2} --mode=daemon --image=${DASHBOARD_IMAGE} --bgcolor=${SHOW2_BG_COLOR} --fontcolor=${SHOW2_FONT_COLOR} --texty=${SHOW2_TEXT_Y} --progressy=${SHOW2_PROGRESS_Y_HIDDEN} --text="Starting..." > /dev/null 2>&1 &
 sleep 2
 pidof show2.elf && echo OK || echo FAIL
-echo "TEXT:NextUI Web Dashboard in use - Press B to stop keeping the device awake" > /tmp/show2.fifo
+echo "TEXT:${SHOW2_IDLE_TEXT}" > ${SHOW2_FIFO}
 sleep 1`
 	);
 
@@ -198,8 +243,7 @@ sleep 1`
  */
 export async function stopShow2(adb: Adb): Promise<void> {
 	try {
-		await shell(adb, 'killall show2.elf 2>/dev/null || true');
-		await shell(adb, `rm -f ${DASHBOARD_IMAGE} /tmp/show2.fifo`);
+		await shell(adb, `killall show2.elf 2>/dev/null || true; rm -f ${DASHBOARD_IMAGE} ${SHOW2_FIFO}`);
 	} catch {
 		// Best-effort cleanup
 	}

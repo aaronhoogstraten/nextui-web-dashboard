@@ -89,6 +89,16 @@ export function getStayAwakePref(): string | null {
 	}
 }
 
+function resetState() {
+	stopStayAwakePolling();
+	stayAwakeActive = false;
+	stayAwakePromptVisible = false;
+	connection = null;
+	status = 'Disconnected';
+	nextuiVersion = '';
+	platform = '';
+}
+
 /** Start polling /tmp/stay_awake to detect when the pak exits (user pressed B or remote stop). */
 function startStayAwakePolling(): void {
 	stopStayAwakePolling();
@@ -197,17 +207,14 @@ export async function toggleStayAwake(): Promise<void> {
 export async function respondToStayAwakePrompt(answer: 'yes' | 'yes-always' | 'no' | 'never'): Promise<void> {
 	stayAwakePromptVisible = false;
 	try {
-		if (answer === 'yes-always') {
-			localStorage.setItem(STAY_AWAKE_PREF_KEY, 'always');
-			await enableStayAwake();
-		} else if (answer === 'yes') {
-			await enableStayAwake();
-		} else if (answer === 'never') {
-			localStorage.setItem(STAY_AWAKE_PREF_KEY, 'never');
-		}
-		// 'no' — just dismiss for this session, don't persist
+		if (answer === 'yes-always') localStorage.setItem(STAY_AWAKE_PREF_KEY, 'always');
+		else if (answer === 'never') localStorage.setItem(STAY_AWAKE_PREF_KEY, 'never');
 	} catch {
 		// localStorage may be unavailable
+	}
+	// 'no' — just dismiss for this session, don't persist
+	if (answer === 'yes' || answer === 'yes-always') {
+		await enableStayAwake(); // errors surfaced via stayAwakeError
 	}
 }
 
@@ -275,14 +282,8 @@ export async function connect() {
 		const onDisconnect = () => {
 			if (connection === conn) {
 				adbLog.warn('Device disconnected unexpectedly');
-				stopStayAwakePolling();
-				stayAwakeActive = false;
-				stayAwakePromptVisible = false;
-				connection = null;
-				status = 'Disconnected';
+				resetState();
 				error = 'Device disconnected';
-				nextuiVersion = '';
-				platform = '';
 			}
 		};
 		conn.adb.disconnected.then(onDisconnect, onDisconnect);
@@ -309,14 +310,8 @@ export async function disconnect() {
 	} catch (e) {
 		adbLog.warn(`Disconnect error (ignored): ${e}`);
 	} finally {
-		stopStayAwakePolling();
-		stayAwakeActive = false;
-		stayAwakePromptVisible = false;
-		connection = null;
-		status = 'Disconnected';
+		resetState();
 		error = '';
-		nextuiVersion = '';
-		platform = '';
 		busy = false;
 	}
 }

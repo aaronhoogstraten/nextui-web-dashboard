@@ -31,7 +31,7 @@ export interface AdbConnection {
 	connectionMethod: 'webusb';
 }
 
-/** Base path for NextUI on TrimUI devices */
+/** Base path for NextUI on devices */
 export const NEXTUI_BASE_PATH = '/mnt/SDCARD';
 
 /** Standard paths on the NextUI device */
