@@ -125,7 +125,11 @@
 			class="opacity-60 hover:opacity-100 transition-opacity"
 			title="NextUI Website"
 		>
-			<img src="{base}/favicon.png" alt="NextUI" class="w-6 h-6" />
+			<img
+				src="{base}/{isDark() ? 'nextui_vectorized_shadow.svg' : 'nextui_vectorized_shadow_dark.svg'}"
+				alt="NextUI"
+				class="w-6 h-6"
+			/>
 		</a>
 		<a
 			href="https://github.com/aaronhoogstraten/nextui-web-dashboard"
