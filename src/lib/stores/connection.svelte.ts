@@ -92,11 +92,14 @@ export function getStayAwakePref(): string | null {
 /** Start polling /tmp/stay_awake to detect when the pak exits (user pressed B or remote stop). */
 function startStayAwakePolling(): void {
 	stopStayAwakePolling();
+	let polling = false;
 	stayAwakePollInterval = setInterval(async () => {
+		if (polling) return;
 		if (!connection) {
 			stopStayAwakePolling();
 			return;
 		}
+		polling = true;
 		try {
 			const active = await checkStayAwakeFile(connection.adb);
 			if (!active && stayAwakeActive) {
@@ -108,6 +111,8 @@ function startStayAwakePolling(): void {
 			}
 		} catch {
 			// Connection may have dropped — polling will stop on disconnect
+		} finally {
+			polling = false;
 		}
 	}, STAY_AWAKE_POLL_MS);
 }
@@ -158,17 +163,21 @@ export async function enableStayAwake(): Promise<void> {
 }
 
 export async function disableStayAwake(): Promise<void> {
+	if (stayAwakeBusy) return;
 	stopStayAwakePolling();
 	if (!connection || !stayAwakeActive) {
 		stayAwakeActive = false;
 		return;
 	}
+	stayAwakeBusy = true;
 	try {
 		await stopShow2(connection.adb);
 		await stopDevPak(connection.adb);
 		adbLog.info('Stay awake disabled');
 	} catch (e) {
 		adbLog.debug(`Stop stay-awake: ${formatError(e)}`);
+	} finally {
+		stayAwakeBusy = false;
 	}
 	stayAwakeActive = false;
 }
@@ -256,7 +265,7 @@ export async function connect() {
 		if (platform) {
 			const pref = getStayAwakePref();
 			if (pref === 'always') {
-				enableStayAwake();
+				await enableStayAwake();
 			} else if (pref !== 'never') {
 				stayAwakePromptVisible = true;
 			}

@@ -187,8 +187,7 @@ sleep 1`
 		.split('\n')
 		.map((l) => l.trim());
 	if (!lines.includes('OK')) {
-		adbLog.error('show2.elf overlay failed to start');
-		return;
+		throw new Error('show2.elf overlay failed to start');
 	}
 	adbLog.info('show2.elf overlay active');
 }
