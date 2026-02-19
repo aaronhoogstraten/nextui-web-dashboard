@@ -26,6 +26,10 @@
 		error: string;
 	}
 
+	function isValidPng(name: string): boolean {
+		return name.toLowerCase().endsWith('.png') && !name.startsWith('._');
+	}
+
 	let systems: SystemOverlays[] = $state([]);
 	let refreshing = $state(false);
 	let hideEmpty = $state(true);
@@ -67,7 +71,7 @@
 				try {
 					const files = await listDirectory(adb, devicePath);
 					entry.files = files
-						.filter((f) => f.isFile && f.name.toLowerCase().endsWith('.png'))
+						.filter((f) => f.isFile && isValidPng(f.name))
 						.sort(compareByName)
 						.map((f) => ({
 							name: f.name,
@@ -153,7 +157,7 @@
 						if (f.thumbnailUrl) URL.revokeObjectURL(f.thumbnailUrl);
 					}
 					sys.files = entries
-						.filter((f) => f.isFile && f.name.toLowerCase().endsWith('.png'))
+						.filter((f) => f.isFile && isValidPng(f.name))
 						.sort(compareByName)
 						.map((f) => ({
 							name: f.name,
@@ -322,7 +326,7 @@
 					if (f.thumbnailUrl) URL.revokeObjectURL(f.thumbnailUrl);
 				}
 				sys.files = entries
-					.filter((f) => f.isFile && f.name.toLowerCase().endsWith('.png'))
+					.filter((f) => f.isFile && isValidPng(f.name))
 					.sort(compareByName)
 					.map((f) => ({
 						name: f.name,
