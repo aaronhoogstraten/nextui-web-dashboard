@@ -339,19 +339,12 @@ export const BIOS_SYSTEMS: BiosSystem[] = [
 	{
 		systemName: 'Sony PlayStation',
 		systemCode: 'PS',
-		anyOneOf: true,
 		files: [
 			{
 				fileName: 'psxonpsp660.bin',
 				systemCode: 'PS',
 				sha1: '96880d1ca92a016ff054be5159bb06fe03cb4e14',
 				md5: 'c53ca5908936d412331790f4426c6c33'
-			},
-			{
-				fileName: 'scph5501.bin',
-				systemCode: 'PS',
-				sha1: '0555c6fae8906f3f09baf5988f00e55f88e9f30b',
-				md5: '490f666e1afb15b7362b406ed1cea246'
 			}
 		]
 	},
