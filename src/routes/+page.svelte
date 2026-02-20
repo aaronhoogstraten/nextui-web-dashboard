@@ -39,13 +39,13 @@
 				<div class="text-center max-w-md">
 					<h2 class="text-3xl font-bold mb-4">NextUI Web Dashboard</h2>
 					<p class="text-text-muted mb-6">
-						Connect your NextUI device via USB to get started. Use the Connect button in the
-						sidebar.
+						Connect your NextUI device via USB to get started<br />
+						and then click the Connect button in the sidebar.
 					</p>
 					{#if !webUsbSupported}
 						<div class="bg-surface border border-border rounded p-4 text-sm text-warning">
-							WebUSB is not available in this browser. Please use Chrome, Edge, or another Chromium
-							browser.
+							WebUSB is not available in this browser.<br />
+							Please use Chrome, Edge, or another Chromium browser.
 						</div>
 					{/if}
 				</div>
