@@ -15,10 +15,11 @@
 
 <Modal onclose={() => respond(false)}>
 	<div class="p-6">
-		<h3 class="text-lg font-bold text-text mb-3">Keep Screen Awake?</h3>
+		<h3 class="text-lg font-bold text-text mb-3">Keep Device Awake?</h3>
 		<p class="text-sm text-text-muted mb-4">
-			Keep the device screen awake while the dashboard is connected? This installs
-			and launches the
+			This will prevent the device from going to sleep and disconnecting while any file operations are in progress.<br />
+			<br />
+			Selecting 'Yes' will install and launch the
 			<a
 				href="https://github.com/josegonzalez/minui-developer-pak"
 				target="_blank"
