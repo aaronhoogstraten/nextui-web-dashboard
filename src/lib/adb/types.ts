@@ -31,23 +31,55 @@ export interface AdbConnection {
 	connectionMethod: 'webusb';
 }
 
-/** Base path for NextUI on devices */
-export const NEXTUI_BASE_PATH = '/mnt/SDCARD';
+/** Default base path — overridden at connection time via detectDevice() in platform.ts. */
+export const DEFAULT_BASE = '/mnt/SDCARD';
 
-/** Standard paths on the NextUI device */
-export const DEVICE_PATHS = {
-	base: NEXTUI_BASE_PATH,
-	bios: `${NEXTUI_BASE_PATH}/Bios`,
-	roms: `${NEXTUI_BASE_PATH}/Roms`,
-	userdata: `${NEXTUI_BASE_PATH}/.userdata`,
-	logs: `${NEXTUI_BASE_PATH}/.userdata/logs`,
-	system: `${NEXTUI_BASE_PATH}/.system`,
-	versionFile: `${NEXTUI_BASE_PATH}/.system/version.txt`,
-	emus: `${NEXTUI_BASE_PATH}/Emus`,
-	overlays: `${NEXTUI_BASE_PATH}/Overlays`,
-	cheats: `${NEXTUI_BASE_PATH}/Cheats`,
-	collections: `${NEXTUI_BASE_PATH}/Collections`,
-	screenshots: `${NEXTUI_BASE_PATH}/Screenshots`,
-	tools: `${NEXTUI_BASE_PATH}/Tools`,
-	minuiZip: `${NEXTUI_BASE_PATH}/MinUI.zip`
-} as const;
+/** Standard paths on the NextUI device. */
+export interface DevicePaths {
+	base: string;
+	bios: string;
+	roms: string;
+	userdata: string;
+	logs: string;
+	system: string;
+	versionFile: string;
+	emus: string;
+	overlays: string;
+	cheats: string;
+	collections: string;
+	screenshots: string;
+	tools: string;
+	minuiZip: string;
+}
+
+/** Build a DevicePaths object from a base SD card path. */
+export function buildDevicePaths(basePath: string): DevicePaths {
+	return {
+		base: basePath,
+		bios: `${basePath}/Bios`,
+		roms: `${basePath}/Roms`,
+		userdata: `${basePath}/.userdata`,
+		logs: `${basePath}/.userdata/logs`,
+		system: `${basePath}/.system`,
+		versionFile: `${basePath}/.system/version.txt`,
+		emus: `${basePath}/Emus`,
+		overlays: `${basePath}/Overlays`,
+		cheats: `${basePath}/Cheats`,
+		collections: `${basePath}/Collections`,
+		screenshots: `${basePath}/Screenshots`,
+		tools: `${basePath}/Tools`,
+		minuiZip: `${basePath}/MinUI.zip`
+	};
+}
+
+/**
+ * Device paths, populated at connection time from MinUI.pak/launch.sh.
+ * Initialized with bootstrap defaults; updated via setDeviceBasePath().
+ */
+// eslint-disable-next-line import/no-mutable-exports
+export let DEVICE_PATHS: DevicePaths = buildDevicePaths(DEFAULT_BASE);
+
+/** Update DEVICE_PATHS to use a new base path (called after reading launch.sh). */
+export function setDeviceBasePath(basePath: string): void {
+	DEVICE_PATHS = buildDevicePaths(basePath);
+}

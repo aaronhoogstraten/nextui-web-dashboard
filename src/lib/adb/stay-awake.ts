@@ -30,34 +30,6 @@ const SHOW2_TEXT_Y = 75;
 const SHOW2_PROGRESS_Y_HIDDEN = 200;
 const SHOW2_IDLE_TEXT = 'NextUI Web Dashboard in use - Press B to stop keeping the device awake';
 
-/**
- * Read LD_LIBRARY_PATH from the device's MinUI.pak/launch.sh.
- * The launch script exports it with shell variables like $SYSTEM_PATH which
- * we resolve to the known system directory. Falls back to just the platform
- * system lib dir if the file can't be parsed.
- */
-async function readLdLibraryPath(adb: Adb, platform: string): Promise<string> {
-	const systemDir = `${DEVICE_PATHS.system}/${platform}`;
-	const launchSh = `${systemDir}/paks/MinUI.pak/launch.sh`;
-	try {
-		const content = await shell(adb, `cat ${launchSh}`);
-		// Match: export LD_LIBRARY_PATH=...
-		const match = content.match(/^export\s+LD_LIBRARY_PATH=(.+)$/m);
-		if (match) {
-			// Resolve known shell variables, strip trailing :$LD_LIBRARY_PATH
-			const resolved = match[1]
-				.replace(/\$SYSTEM_PATH/g, systemDir)
-				.replace(/:\$LD_LIBRARY_PATH/, '');
-			adbLog.debug(`LD_LIBRARY_PATH from launch.sh: ${resolved}`);
-			return resolved;
-		}
-	} catch (e) {
-		adbLog.warn(`Failed to read LD_LIBRARY_PATH from ${launchSh}: ${e}`);
-	}
-	// Fallback: platform system lib only
-	return `${systemDir}/lib`;
-}
-
 function devPakDir(platform: string): string {
 	return `${DEVICE_PATHS.tools}/${platform}/Developer.pak`;
 }
@@ -197,12 +169,11 @@ export async function isStayAwakeActive(adb: Adb): Promise<boolean> {
  * Pushes the dashboard logo to the device, then starts show2.elf in daemon mode.
  * Must be called after Developer.pak is running (so the framebuffer is available).
  */
-export async function launchShow2Overlay(adb: Adb, platform: string): Promise<void> {
+export async function launchShow2Overlay(adb: Adb, platform: string, ldLibraryPath: string): Promise<void> {
 	adbLog.info('Launching show2.elf overlay...');
 
 	const systemDir = `${DEVICE_PATHS.system}/${platform}`;
 	const show2 = `${systemDir}/bin/show2.elf`;
-	const ldPath = await readLdLibraryPath(adb, platform);
 
 	// Push the dashboard logo to the device
 	const url = `${base}/dashboard.png`;
@@ -215,12 +186,23 @@ export async function launchShow2Overlay(adb: Adb, platform: string): Promise<vo
 	// Clean up stale FIFO from previous runs
 	await shell(adb, `rm -f ${SHOW2_FIFO}`);
 
+	// Wait for Developer.pak to be running before launching the overlay.
+	// After launchDevPakNative kills nextui.elf, the MinUI main loop needs time
+	// to detect the exit, read /tmp/next, and start Developer.pak.
+	const waitResult = await shell(
+		adb,
+		`for i in 1 2 3 4 5; do [ -f ${TMP_STAY_AWAKE} ] && echo READY && break; sleep 1; done`
+	);
+	if (!waitResult.trim().includes('READY')) {
+		throw new Error('Developer.pak did not start within 5s');
+	}
+
 	// Launch show2.elf in a single shell session — it needs the session alive
 	// while SDL initializes (~2s). The FIFO write updates the text after init,
 	// and the trailing sleep gives show2 time to render the update.
 	const result = await shell(
 		adb,
-		`LD_LIBRARY_PATH=${ldPath} ${show2} --mode=daemon --image=${DASHBOARD_IMAGE} --bgcolor=${SHOW2_BG_COLOR} --fontcolor=${SHOW2_FONT_COLOR} --texty=${SHOW2_TEXT_Y} --progressy=${SHOW2_PROGRESS_Y_HIDDEN} --text="Starting..." > /dev/null 2>&1 &
+		`LD_LIBRARY_PATH=${ldLibraryPath} ${show2} --mode=daemon --image=${DASHBOARD_IMAGE} --bgcolor=${SHOW2_BG_COLOR} --fontcolor=${SHOW2_FONT_COLOR} --texty=${SHOW2_TEXT_Y} --progressy=${SHOW2_PROGRESS_Y_HIDDEN} --text="Starting..." > /dev/null 2>&1 &
 sleep 2
 pidof show2.elf && echo OK || echo FAIL
 echo "TEXT:${SHOW2_IDLE_TEXT}" > ${SHOW2_FIFO}

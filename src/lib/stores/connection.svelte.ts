@@ -1,7 +1,8 @@
 import { connectWebUSB, disconnect as adbDisconnect } from '$lib/adb/connection.js';
 import type { AdbConnection } from '$lib/adb/types.js';
 import { verifyNextUIInstallation, shell } from '$lib/adb/file-ops.js';
-import { detectPlatform } from '$lib/adb/platform.js';
+import { detectDevice, parseMinUIEnv } from '$lib/adb/platform.js';
+import { DEFAULT_BASE, setDeviceBasePath } from '$lib/adb/types.js';
 import {
 	isDevPakInstalled,
 	installDevPak,
@@ -22,6 +23,7 @@ let error: string = $state('');
 let busy: boolean = $state(false);
 let nextuiVersion: string = $state('');
 let platform: string = $state('');
+let ldLibraryPath: string = $state('');
 
 /** Stay-awake state */
 let stayAwakeActive: boolean = $state(false);
@@ -61,6 +63,10 @@ export function getPlatform() {
 	return platform;
 }
 
+export function getLdLibraryPath() {
+	return ldLibraryPath;
+}
+
 export function isStayAwakeActive() {
 	return stayAwakeActive;
 }
@@ -93,10 +99,13 @@ function resetState() {
 	stopStayAwakePolling();
 	stayAwakeActive = false;
 	stayAwakePromptVisible = false;
+	stayAwakeError = '';
 	connection = null;
 	status = 'Disconnected';
 	nextuiVersion = '';
 	platform = '';
+	ldLibraryPath = '';
+	setDeviceBasePath(DEFAULT_BASE);
 }
 
 /** Start polling /tmp/stay_awake to detect when the pak exits (user pressed B or remote stop). */
@@ -142,6 +151,7 @@ export async function enableStayAwake(): Promise<void> {
 		return;
 	}
 	stayAwakeBusy = true;
+	stayAwakeError = '';
 	try {
 		// Check if Developer.pak is installed; install if not
 		const installed = await isDevPakInstalled(connection.adb, platform);
@@ -158,7 +168,7 @@ export async function enableStayAwake(): Promise<void> {
 
 		// Launch show2.elf overlay with dashboard branding on top of Developer.pak
 		try {
-			await launchShow2Overlay(connection.adb, platform);
+			await launchShow2Overlay(connection.adb, platform, ldLibraryPath);
 		} catch (e) {
 			adbLog.warn(`show2 overlay failed (non-fatal): ${formatError(e)}`);
 		}
@@ -167,6 +177,13 @@ export async function enableStayAwake(): Promise<void> {
 		adbLog.error(`Stay-awake failed: ${msg}`);
 		stayAwakeError = msg;
 		stayAwakeActive = false;
+		// Clear stored preference so the prompt reappears on next connect
+		// instead of silently auto-failing repeatedly
+		try {
+			localStorage.removeItem(STAY_AWAKE_PREF_KEY);
+		} catch {
+			// localStorage may be unavailable
+		}
 	} finally {
 		stayAwakeBusy = false;
 	}
@@ -188,15 +205,22 @@ export async function disableStayAwake(): Promise<void> {
 		adbLog.debug(`Stop stay-awake: ${formatError(e)}`);
 	} finally {
 		stayAwakeBusy = false;
+		stayAwakeActive = false;
 	}
-	stayAwakeActive = false;
 }
 
 export async function toggleStayAwake(): Promise<void> {
 	if (stayAwakeActive) {
 		await disableStayAwake();
 	} else {
-		await enableStayAwake();
+		const pref = getStayAwakePref();
+		if (pref === 'always') {
+			await enableStayAwake();
+		} else {
+			// No stored preference (first time, or cleared after failure) — show prompt
+			stayAwakeError = '';
+			stayAwakePromptVisible = true;
+		}
 	}
 }
 
@@ -240,7 +264,20 @@ export async function connect() {
 		const deviceName = conn.device.product ?? conn.device.serial;
 		adbLog.info(`Connected to ${deviceName} (serial=${conn.device.serial})`);
 
-		// Verify this is a NextUI device
+		// Detect device platform and base path first — DEVICE_PATHS must be
+		// set before verifyNextUIInstallation which reads paths like Bios/, Roms/.
+		status = 'Detecting device...';
+		const detection = await detectDevice(conn.adb);
+		platform = detection.platform;
+		adbLog.info(`Device platform: ${platform || '(unknown)'}`);
+
+		if (platform) {
+			const env = await parseMinUIEnv(conn.adb, platform, detection.basePath);
+			setDeviceBasePath(env.sdcardPath);
+			ldLibraryPath = env.ldLibraryPath;
+		}
+
+		// Verify this is a NextUI device (uses DEVICE_PATHS set above)
 		status = 'Verifying NextUI...';
 		const verify = await verifyNextUIInstallation(conn.adb);
 		if (!verify.ok) {
@@ -259,10 +296,6 @@ export async function connect() {
 		// Use version from MinUI.zip verification
 		nextuiVersion = verify.version ?? 'Unknown';
 		adbLog.info(`NextUI version: ${nextuiVersion}`);
-
-		// Detect device platform
-		platform = await detectPlatform(conn.adb);
-		adbLog.info(`Device platform: ${platform || '(unknown)'}`);
 
 		connection = conn;
 		status = `Connected: ${deviceName}`;

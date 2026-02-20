@@ -173,7 +173,8 @@ export async function isDirectory(adb: Adb, remotePath: string): Promise<boolean
 export async function shell(adb: Adb, command: string): Promise<string> {
 	adbLog.info(`shell → ${command}`);
 	try {
-		const result = await adb.createSocketAndWait(`shell:${command}`);
+		const raw = await adb.createSocketAndWait(`shell:${command}`);
+		const result = raw.replace(/\r\n/g, '\n');
 		adbLog.info(`shell ✓ ${command} (${result.length} chars)`);
 		return result;
 	} catch (e) {
