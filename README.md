@@ -6,16 +6,16 @@ Requires a Chromium-based browser (Chrome, Edge, etc.).
 
 ## Features
 
-- **ROM Management** -- Browse ROMs per system, upload individually or sync from a local folder, manage box art and display names. Validates emulator availability per system. Custom system folders detected automatically.
-- **BIOS Management** -- View required BIOS files per system, check presence and integrity via SHA-1, upload missing files. Supports custom systems.
-- **Overlay Management** -- Preview, upload, and remove screen overlays. Browse and install community overlays from the [nextui-community-overlays](https://github.com/LoveRetro/nextui-community-overlays) repository.
-- **Cheats Management** -- Upload, download, and manage cheat files per system with ROM matching validation.
-- **Collections** -- Edit collection files: add/remove/reorder ROMs with a visual picker and path validation.
-- **Screenshots** -- Browse and download screenshots from the device.
-- **File Browser** -- Navigate the device filesystem, upload/download files, search recursively, preview images, and edit text-based config files.
-- **Download Logs** -- Collect all log files from the device and download as a zip archive.
-- **Platform Detection** -- Automatically detects the connected device platform (e.g. tg5040) for targeted emulator validation.
-- **Light/Dark Theme** -- Toggle between dark and light modes.
+- **ROM Management** - Browse ROMs per system, upload individually or sync from a local folder, manage box art and display names. Validates emulator availability per system. Custom system folders detected automatically.
+- **BIOS Management** - View required BIOS files per system, check presence and integrity via SHA-1, upload missing files. Supports custom systems.
+- **Overlay Management** - Preview, upload, and remove screen overlays. Browse and install community overlays from the [nextui-community-overlays](https://github.com/LoveRetro/nextui-community-overlays) repository.
+- **Cheats Management** - Upload, download, and manage cheat files per system with ROM matching validation.
+- **Collections** - Edit collection files: add/remove/reorder ROMs with a visual picker and path validation.
+- **Screenshots** - Browse and download screenshots from the device.
+- **File Browser** - Navigate the device filesystem, upload/download files, search recursively, preview images, and edit text-based config files.
+- **Download Logs** - Collect all log files from the device and download as a zip archive.
+- **Platform Detection** - Automatically detects the connected device platform (e.g. tg5040) for targeted emulator validation.
+- **Light/Dark Theme** - Toggle between dark and light modes.
 
 ## Development
 
@@ -26,7 +26,8 @@ npm run dev
 
 ## Acknowledgements
 
-- [minui-developer-pak](https://github.com/josegonzalez/minui-developer-pak) by @josegonzalez -- Used for the "Keep device awake" feature, which launches the Developer.pak on the device to prevent sleep during a dashboard session.
+- [minui-developer-pak](https://github.com/josegonzalez/minui-developer-pak) by @josegonzalez - Used for the "Keep device awake" feature, which launches the Developer.pak on the device to prevent sleep during a dashboard session.
+- @frysee for providing feedback and advice.
 
 ## Tech Stack
 
