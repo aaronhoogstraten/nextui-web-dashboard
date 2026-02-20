@@ -4,7 +4,7 @@ export type {
 	DirectoryEntry,
 	AdbConnection
 } from './types.js';
-export { NEXTUI_BASE_PATH, DEVICE_PATHS } from './types.js';
+export { DEVICE_PATHS } from './types.js';
 export {
 	hasWebUSB,
 	getBrowserRecommendation,

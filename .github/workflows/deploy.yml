@@ -24,6 +24,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Fetch Developer.pak
+        run: sh scripts/fetch-developer-pak.sh
       - run: npm run build
         env:
           NODE_ENV: production
