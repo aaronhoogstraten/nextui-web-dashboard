@@ -37,7 +37,7 @@
 			<!-- Welcome / Connect prompt -->
 			<div class="flex items-center justify-center h-full">
 				<div class="text-center max-w-md">
-					<h2 class="text-3xl font-bold mb-4">NextUI Web Dashboard</h2>
+					<h2 class="text-3xl font-bold mb-4">NextUI Dashboard</h2>
 					<p class="text-text-muted mb-6">
 						Connect your NextUI device via USB to get started<br />
 						and then click the Connect button in the sidebar.

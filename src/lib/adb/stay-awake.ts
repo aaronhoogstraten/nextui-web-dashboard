@@ -28,7 +28,7 @@ const SHOW2_BG_COLOR = '0x1a1a2e';
 const SHOW2_FONT_COLOR = '0xFFFFFF';
 const SHOW2_TEXT_Y = 75;
 const SHOW2_PROGRESS_Y_HIDDEN = 200;
-const SHOW2_IDLE_TEXT = 'NextUI Web Dashboard in use - Press B to stop keeping the device awake';
+const SHOW2_IDLE_TEXT = 'NextUI Dashboard in use - Press B to stop keeping the device awake';
 
 function devPakDir(platform: string): string {
 	return `${DEVICE_PATHS.tools}/${platform}/Developer.pak`;
