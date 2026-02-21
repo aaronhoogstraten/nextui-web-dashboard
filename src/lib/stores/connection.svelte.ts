@@ -10,7 +10,8 @@ import {
 	stopDevPak,
 	isStayAwakeActive as checkStayAwakeFile,
 	launchShow2Overlay,
-	stopShow2
+	stopShow2,
+	isStayAwakeSupported
 } from '$lib/adb/stay-awake.js';
 import { adbLog } from '$lib/stores/log.svelte.js';
 import { formatError } from '$lib/utils.js';
@@ -26,6 +27,7 @@ let platform: string = $state('');
 let ldLibraryPath: string = $state('');
 
 /** Stay-awake state */
+let stayAwakeSupported: boolean = $state(false);
 let stayAwakeActive: boolean = $state(false);
 let stayAwakePromptVisible: boolean = $state(false);
 let stayAwakeBusy: boolean = $state(false);
@@ -87,6 +89,10 @@ export function dismissStayAwakeError() {
 	stayAwakeError = '';
 }
 
+export function canStayAwake(): boolean {
+	return stayAwakeSupported;
+}
+
 export function getStayAwakePref(): string | null {
 	try {
 		return localStorage.getItem(STAY_AWAKE_PREF_KEY);
@@ -97,6 +103,7 @@ export function getStayAwakePref(): string | null {
 
 function resetState() {
 	stopStayAwakePolling();
+	stayAwakeSupported = false;
 	stayAwakeActive = false;
 	stayAwakePromptVisible = false;
 	stayAwakeError = '';
@@ -301,8 +308,9 @@ export async function connect() {
 		status = `Connected: ${deviceName}`;
 		adbLog.info('NextUI installation verified');
 
-		// Stay-awake: check user preference
-		if (platform) {
+		// Stay-awake: only offer if the platform has Developer.pak support
+		stayAwakeSupported = platform ? await isStayAwakeSupported(platform) : false;
+		if (stayAwakeSupported) {
 			const pref = getStayAwakePref();
 			if (pref === 'always') {
 				await enableStayAwake();

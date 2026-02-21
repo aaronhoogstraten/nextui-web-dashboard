@@ -8,8 +8,9 @@ node_modules
 /.svelte-kit
 /build
 
-# Build-time assets
+# Build-time assets (fetched by scripts/fetch-developer-pak.sh)
 /static/developer-pak.zip
+/static/developer-pak.json
 
 # OS
 .DS_Store

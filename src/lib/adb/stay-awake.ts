@@ -6,6 +6,30 @@ import { pathExists, pushFile, shell } from './file-ops.js';
 import { ShellCmd } from './adb-utils.js';
 import { adbLog } from '$lib/stores/log.svelte.js';
 
+/** Cached supported platforms from developer-pak.json. */
+let supportedPlatforms: Set<string> | null = null;
+
+/** Fetch supported platforms from the bundled developer-pak.json. */
+async function loadSupportedPlatforms(): Promise<Set<string>> {
+	if (supportedPlatforms) return supportedPlatforms;
+	try {
+		const res = await fetch(`${base}/developer-pak.json`);
+		if (!res.ok) throw new Error(`${res.status}`);
+		const data = await res.json();
+		supportedPlatforms = new Set(data.platforms ?? []);
+	} catch (e) {
+		adbLog.warn(`Failed to load developer-pak.json: ${e}`);
+		supportedPlatforms = new Set();
+	}
+	return supportedPlatforms;
+}
+
+/** Check if the detected platform supports the stay-awake feature. */
+export async function isStayAwakeSupported(platform: string): Promise<boolean> {
+	const platforms = await loadSupportedPlatforms();
+	return platforms.has(platform);
+}
+
 /** Files from the zip to push to device. Others (README, LICENSE) are skipped. */
 const PUSH_FILES: Record<string, { executable: boolean }> = {
 	'launch.sh': { executable: true },

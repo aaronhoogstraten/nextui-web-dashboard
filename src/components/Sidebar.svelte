@@ -11,7 +11,8 @@
 		getPlatform,
 		isStayAwakeActive,
 		isStayAwakeBusy,
-		toggleStayAwake
+		toggleStayAwake,
+		canStayAwake
 	} from '$lib/stores/connection.svelte.js';
 	import { hasWebUSB, getBrowserRecommendation } from '$lib/adb/connection.js';
 	import { toggleTheme, isDark } from '$lib/stores/theme.svelte.js';
@@ -72,28 +73,30 @@
 			{#if getNextUIVersion()}
 				<div class="text-sm text-text-muted mb-2">{getNextUIVersion()}</div>
 			{/if}
-			<label
-				class="flex items-center justify-between text-sm text-text-muted mb-2 cursor-pointer"
-				title="Keep the device screen awake while connected"
-			>
-				<span>Keep device awake</span>
-				<button
-					onclick={toggleStayAwake}
-					disabled={isStayAwakeBusy()}
-					class="relative w-9 h-5 rounded-full transition-colors disabled:opacity-50 {isStayAwakeActive()
-						? 'bg-accent'
-						: 'bg-surface-hover'}"
-					role="switch"
-					aria-checked={isStayAwakeActive()}
-					aria-label="Toggle keeping the device awake"
+			{#if canStayAwake()}
+				<label
+					class="flex items-center justify-between text-sm text-text-muted mb-2 cursor-pointer"
+					title="Keep the device screen awake while connected"
 				>
-					<span
-						class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform {isStayAwakeActive()
-							? 'translate-x-4'
-							: ''}"
-					></span>
-				</button>
-			</label>
+					<span>Keep device awake</span>
+					<button
+						onclick={toggleStayAwake}
+						disabled={isStayAwakeBusy()}
+						class="relative w-9 h-5 rounded-full transition-colors disabled:opacity-50 {isStayAwakeActive()
+							? 'bg-accent'
+							: 'bg-surface-hover'}"
+						role="switch"
+						aria-checked={isStayAwakeActive()}
+						aria-label="Toggle keeping the device awake"
+					>
+						<span
+							class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform {isStayAwakeActive()
+								? 'translate-x-4'
+								: ''}"
+						></span>
+					</button>
+				</label>
+			{/if}
 			<button
 				onclick={disconnect}
 				disabled={isBusy()}
