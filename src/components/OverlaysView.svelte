@@ -3,6 +3,7 @@
 	import type { Adb } from '@yume-chan/adb';
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { listDirectory, pullFile, pushFile, pathExists } from '$lib/adb/file-ops.js';
+	import { beginTransfer, endTransfer, trackedPush } from '$lib/stores/transfer.svelte.js';
 	import { adbExec } from '$lib/stores/connection.svelte.js';
 	import { formatSize, formatError, compareByName, plural, pickFiles } from '$lib/utils.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
@@ -135,6 +136,8 @@
 
 		uploadingTo = sys.systemCode;
 		let uploaded = 0;
+		const totalBytes = Array.from(files).reduce((sum, f) => sum + f.size, 0);
+		beginTransfer('upload', files.length, totalBytes);
 
 		try {
 			const dirExists = await pathExists(adb, sys.devicePath);
@@ -145,7 +148,7 @@
 			for (const file of files) {
 				if (!file.name.toLowerCase().endsWith('.png')) continue;
 				const data = new Uint8Array(await file.arrayBuffer());
-				await pushFile(adb, `${sys.devicePath}/${file.name}`, data);
+				await trackedPush(adb, `${sys.devicePath}/${file.name}`, data);
 				uploaded++;
 			}
 
@@ -177,6 +180,7 @@
 		} catch (e) {
 			sys.error = `Upload failed: ${formatError(e)}`;
 		} finally {
+			endTransfer();
 			uploadingTo = null;
 		}
 	}
@@ -317,7 +321,8 @@
 			}
 
 			// Push to device
-			await pushFile(adb, `${sys.devicePath}/${overlay.name}`, data);
+			beginTransfer('upload', 1, data.byteLength);
+			await trackedPush(adb, `${sys.devicePath}/${overlay.name}`, data);
 
 			// Reload device overlays for this system
 			try {
@@ -345,6 +350,7 @@
 		} catch (e) {
 			sys.error = `Install failed: ${formatError(e)}`;
 		} finally {
+			endTransfer();
 			installingOverlay = null;
 		}
 	}

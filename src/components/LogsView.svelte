@@ -2,6 +2,7 @@
 	import { untrack } from 'svelte';
 	import type { Adb } from '@yume-chan/adb';
 	import { listDirectory, pullFile } from '$lib/adb/file-ops.js';
+	import { beginTransfer, endTransfer, trackedPull } from '$lib/stores/transfer.svelte.js';
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { getNextUIVersion } from '$lib/stores/connection.svelte.js';
 	import { formatSize, formatError, plural, errorMsg, successMsg, type Notification } from '$lib/utils.js';
@@ -74,13 +75,14 @@
 		notice = null;
 		progress = '';
 
+		beginTransfer('download', logFiles.length);
 		try {
 			const zip = new JSZip();
 			let completed = 0;
 
 			for (const file of logFiles) {
 				progress = `Downloading ${completed + 1}/${logFiles.length}: ${file.relativePath}`;
-				const data = await pullFile(adb, file.fullPath);
+				const data = await trackedPull(adb, file.fullPath);
 				zip.file(file.relativePath, data);
 				completed++;
 			}
@@ -107,6 +109,8 @@
 		} catch (e) {
 			notice = errorMsg(`Download failed: ${formatError(e)}`);
 			progress = '';
+		} finally {
+			endTransfer();
 		}
 		downloading = false;
 	}

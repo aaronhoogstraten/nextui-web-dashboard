@@ -5,6 +5,7 @@
 	import { validateBiosFile } from '$lib/bios/validation.js';
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { pathExists, pullFile, pushFile, listDirectory } from '$lib/adb/file-ops.js';
+	import { beginTransfer, endTransfer, trackedPush } from '$lib/stores/transfer.svelte.js';
 	import { adbExec } from '$lib/stores/connection.svelte.js';
 	import { formatError, plural, pickFile } from '$lib/utils.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
@@ -222,12 +223,14 @@
 				}
 			}
 
-			await pushFile(adb, file.devicePath, data);
+			beginTransfer('upload', 1, data.byteLength);
+			await trackedPush(adb, file.devicePath, data);
 			file.status = isCustom ? 'present' : 'valid';
 			file.detail = isCustom ? 'Uploaded' : 'Uploaded, hash OK';
 		} catch (e) {
 			file.detail = `Upload failed: ${formatError(e)}`;
 		} finally {
+			endTransfer();
 			uploadingFile = null;
 		}
 	}

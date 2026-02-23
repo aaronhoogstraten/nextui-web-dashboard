@@ -8,6 +8,9 @@ import { adbLog } from '$lib/stores/log.svelte.js';
 import { formatError } from '$lib/utils.js';
 import { ShellCmd } from './adb-utils.js';
 
+/** Progress callback for file transfers: (bytesTransferred, totalBytes). totalBytes is -1 if unknown. */
+export type TransferProgressCallback = (bytesTransferred: number, totalBytes: number) => void;
+
 /** Path inside MinUI.zip that distinguishes NextUI from other MinUI forks */
 const NEXTUI_SYSTEM_TXT = '.system/system.txt';
 
@@ -23,15 +26,24 @@ export async function pushFile(
 	adb: Adb,
 	remotePath: string,
 	content: Uint8Array,
-	permission = 0o644
+	permission = 0o644,
+	onProgress?: TransferProgressCallback
 ): Promise<void> {
 	adbLog.info(`sync.write → ${remotePath} (${content.byteLength} bytes, perm=${permission.toString(8)})`);
 	const sync = await adb.sync();
 	try {
+		const CHUNK_SIZE = 64 * 1024;
+		let offset = 0;
 		const stream = new ReadableStream<MaybeConsumable<Uint8Array>>({
-			start(controller) {
-				controller.enqueue(content);
-				controller.close();
+			pull(controller) {
+				if (offset >= content.byteLength) {
+					controller.close();
+					return;
+				}
+				const end = Math.min(offset + CHUNK_SIZE, content.byteLength);
+				controller.enqueue(content.subarray(offset, end));
+				offset = end;
+				onProgress?.(offset, content.byteLength);
 			}
 		});
 
@@ -57,7 +69,11 @@ export async function pushFile(
  * @param remotePath - Path to the file on the device
  * @returns File content as Uint8Array
  */
-export async function pullFile(adb: Adb, remotePath: string): Promise<Uint8Array<ArrayBuffer>> {
+export async function pullFile(
+	adb: Adb,
+	remotePath: string,
+	onProgress?: TransferProgressCallback
+): Promise<Uint8Array<ArrayBuffer>> {
 	adbLog.info(`sync.read → ${remotePath}`);
 	const sync = await adb.sync();
 	try {
@@ -71,6 +87,7 @@ export async function pullFile(adb: Adb, remotePath: string): Promise<Uint8Array
 			if (done) break;
 			chunks.push(value);
 			totalLength += value.byteLength;
+			onProgress?.(totalLength, -1);
 		}
 
 		// Concatenate all chunks

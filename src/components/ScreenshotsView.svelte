@@ -3,6 +3,7 @@
 	import type { Adb } from '@yume-chan/adb';
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { listDirectory, pullFile } from '$lib/adb/file-ops.js';
+	import { beginTransfer, endTransfer, trackedPull } from '$lib/stores/transfer.svelte.js';
 	import { adbExec } from '$lib/stores/connection.svelte.js';
 	import { formatSize, formatError, getMimeType, plural, errorMsg, successMsg, type Notification } from '$lib/utils.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
@@ -128,13 +129,14 @@
 		notice = null;
 		downloadProgress = '';
 
+		beginTransfer('download', screenshots.length);
 		try {
 			const zip = new JSZip();
 			let completed = 0;
 
 			for (const shot of screenshots) {
 				downloadProgress = `Downloading ${completed + 1}/${screenshots.length}: ${shot.name}`;
-				const data = await pullFile(adb, `${DEVICE_PATHS.screenshots}/${shot.name}`);
+				const data = await trackedPull(adb, `${DEVICE_PATHS.screenshots}/${shot.name}`);
 				zip.file(shot.name, data);
 				completed++;
 			}
@@ -157,6 +159,8 @@
 		} catch (e) {
 			notice = errorMsg(`Download failed: ${formatError(e)}`);
 			downloadProgress = '';
+		} finally {
+			endTransfer();
 		}
 		downloading = false;
 	}

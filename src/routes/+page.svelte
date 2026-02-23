@@ -9,6 +9,7 @@
 	import LogsView from '../components/LogsView.svelte';
 	import ScreenshotsView from '../components/ScreenshotsView.svelte';
 	import ConsoleLog from '../components/ConsoleLog.svelte';
+	import TransferProgress from '../components/TransferProgress.svelte';
 	import StayAwakePrompt from '../components/StayAwakePrompt.svelte';
 	import Modal from '../components/Modal.svelte';
 	import {
@@ -77,6 +78,7 @@
 		{/if}
 	</main>
 
+	<TransferProgress />
 	<ConsoleLog />
 </div>
 

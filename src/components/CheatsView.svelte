@@ -3,6 +3,7 @@
 	import type { Adb } from '@yume-chan/adb';
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { listDirectory, pullFile, pushFile, pathExists } from '$lib/adb/file-ops.js';
+	import { beginTransfer, endTransfer, trackedPush, trackedPull } from '$lib/stores/transfer.svelte.js';
 	import { adbExec } from '$lib/stores/connection.svelte.js';
 	import { formatSize, formatError, compareByName, plural, pickFiles, errorMsg, successMsg, type Notification } from '$lib/utils.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
@@ -160,13 +161,19 @@
 
 		uploadingTo = systemCode;
 		notice = null;
+		const totalBytes = Array.from(files).reduce((sum, f) => sum + f.size, 0);
+		beginTransfer('upload', files.length, totalBytes);
 
 		const sysPath = `${CHEATS_PATH}/${systemCode}`;
 		await adbExec(ShellCmd.mkdir(sysPath));
 
-		for (const file of files) {
-			const data = new Uint8Array(await file.arrayBuffer());
-			await pushFile(adb, `${sysPath}/${file.name}`, data);
+		try {
+			for (const file of files) {
+				const data = new Uint8Array(await file.arrayBuffer());
+				await trackedPush(adb, `${sysPath}/${file.name}`, data);
+			}
+		} finally {
+			endTransfer();
 		}
 		return files.length;
 	}
@@ -254,8 +261,9 @@
 	}
 
 	async function downloadCheat(sys: CheatSystem, cheat: CheatFile) {
+		beginTransfer('download', 1);
 		try {
-			const data = await pullFile(adb, `${CHEATS_PATH}/${sys.systemCode}/${cheat.fileName}`);
+			const data = await trackedPull(adb, `${CHEATS_PATH}/${sys.systemCode}/${cheat.fileName}`);
 			const blob = new Blob([data]);
 			const url = URL.createObjectURL(blob);
 			const a = document.createElement('a');
@@ -265,6 +273,8 @@
 			URL.revokeObjectURL(url);
 		} catch (e) {
 			notice = errorMsg(`Download failed: ${formatError(e)}`);
+		} finally {
+			endTransfer();
 		}
 	}
 

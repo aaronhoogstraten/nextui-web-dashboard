@@ -18,6 +18,7 @@
 	import { untrack } from 'svelte';
 	import type { Adb } from '@yume-chan/adb';
 	import { listDirectory, pullFile, pushFile, isDirectory, searchFiles } from '$lib/adb/file-ops.js';
+	import { beginTransfer, endTransfer, trackedPush, trackedPull } from '$lib/stores/transfer.svelte.js';
 	import { DEVICE_PATHS, type DirectoryEntry } from '$lib/adb/types.js';
 	import { adbExec } from '$lib/stores/connection.svelte.js';
 	import {
@@ -140,9 +141,10 @@
 	async function downloadFile(entry: DirectoryEntry) {
 		if (entry.isDirectory) return;
 		downloadingFile = entry.name;
+		beginTransfer('download', 1);
 		try {
 			const remotePath = joinPath(currentPath, entry.name);
-			const content = await pullFile(adb, remotePath);
+			const content = await trackedPull(adb, remotePath);
 
 			// Trigger browser download
 			const blob = new Blob([content]);
@@ -154,6 +156,8 @@
 			URL.revokeObjectURL(url);
 		} catch (e) {
 			notice = errorMsg(`Download failed: ${formatError(e)}`);
+		} finally {
+			endTransfer();
 		}
 		downloadingFile = null;
 	}
@@ -165,17 +169,21 @@
 		uploading = true;
 		notice = null;
 		let uploaded = 0;
+		const totalBytes = Array.from(files).reduce((sum, f) => sum + f.size, 0);
+		beginTransfer('upload', files.length, totalBytes);
 
 		try {
 			for (const file of files) {
 				const data = new Uint8Array(await file.arrayBuffer());
-				await pushFile(adb, joinPath(currentPath, file.name), data);
+				await trackedPush(adb, joinPath(currentPath, file.name), data);
 				uploaded++;
 			}
 			notice = successMsg(`Uploaded ${uploaded} file(s)`);
 			await navigate(currentPath);
 		} catch (e) {
 			notice = errorMsg(`Upload failed: ${formatError(e)}`);
+		} finally {
+			endTransfer();
 		}
 		uploading = false;
 	}
@@ -229,6 +237,8 @@
 		notice = null;
 		let uploaded = 0;
 		const createdDirs = new Set<string>();
+		const totalBytes = Array.from(files).reduce((sum, f) => sum + f.size, 0);
+		beginTransfer('upload', files.length, totalBytes);
 
 		try {
 			for (const file of files) {
@@ -244,13 +254,15 @@
 				}
 
 				const data = new Uint8Array(await file.arrayBuffer());
-				await pushFile(adb, joinPath(currentPath, relativePath), data);
+				await trackedPush(adb, joinPath(currentPath, relativePath), data);
 				uploaded++;
 			}
 			notice = successMsg(`Uploaded ${plural(uploaded, 'file')}`);
 			await navigate(currentPath);
 		} catch (e) {
 			notice = errorMsg(`Upload failed after ${uploaded} files: ${formatError(e)}`);
+		} finally {
+			endTransfer();
 		}
 		uploading = false;
 	}

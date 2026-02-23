@@ -11,6 +11,7 @@
 	} from '$lib/roms/index.js';
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { listDirectory, pathExists, pullFile, pushFile } from '$lib/adb/file-ops.js';
+	import { beginTransfer, endTransfer, trackedPush, skipTransferFile } from '$lib/stores/transfer.svelte.js';
 	import { adbExec, getPlatform } from '$lib/stores/connection.svelte.js';
 	import {
 		formatSize,
@@ -479,6 +480,8 @@
 		uploadingTo = state.system.systemCode;
 		let uploaded = 0;
 		let skipped = 0;
+		const totalBytes = Array.from(files).reduce((sum, f) => sum + f.size, 0);
+		beginTransfer('upload', files.length, totalBytes);
 
 		try {
 			// Build set of existing file names for conflict detection
@@ -496,6 +499,7 @@
 				const dotIndex = file.name.lastIndexOf('.');
 				const ext = dotIndex > 0 ? file.name.substring(dotIndex).toLowerCase() : '';
 				if (!isValidRomExtension(ext, state.system)) {
+					skipTransferFile(file.size);
 					continue;
 				}
 
@@ -503,16 +507,19 @@
 				if (existingNames?.has(file.name)) {
 					if (conflictPolicy === 'skip-all') {
 						skipped++;
+						skipTransferFile(file.size);
 						continue;
 					}
 					if (conflictPolicy === 'ask') {
 						const resolution = await overwriteDialog.show(file.name, files.length > 1);
 						if (resolution === 'skip') {
 							skipped++;
+							skipTransferFile(file.size);
 							continue;
 						}
 						if (resolution === 'skip-all') {
 							skipped++;
+							skipTransferFile(file.size);
 							conflictPolicy = 'skip-all';
 							continue;
 						}
@@ -522,7 +529,7 @@
 
 				const data = new Uint8Array(await file.arrayBuffer());
 				const remotePath = `${state.devicePath}/${file.name}`;
-				await pushFile(adb, remotePath, data);
+				await trackedPush(adb, remotePath, data);
 				uploaded++;
 			}
 
@@ -546,6 +553,7 @@
 		} catch (e) {
 			state.error = `Upload failed: ${formatError(e)}`;
 		} finally {
+			endTransfer();
 			uploadingTo = null;
 		}
 	}
@@ -555,6 +563,7 @@
 		if (!file) return;
 
 		uploadingMediaFor = rom.name;
+		beginTransfer('upload', 1, file.size);
 
 		try {
 			const mediaPath = getRomMediaPath(state.system);
@@ -566,7 +575,7 @@
 
 			const data = new Uint8Array(await file.arrayBuffer());
 			const remotePath = `${mediaPath}/${rom.mediaFileName}`;
-			await pushFile(adb, remotePath, data);
+			await trackedPush(adb, remotePath, data);
 
 			rom.hasMedia = true;
 			const blob = new Blob([data], { type: 'image/png' });
@@ -576,6 +585,7 @@
 		} catch (e) {
 			state.error = `Media upload failed: ${formatError(e)}`;
 		} finally {
+			endTransfer();
 			uploadingMediaFor = null;
 		}
 	}
