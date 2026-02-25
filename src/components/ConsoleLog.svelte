@@ -8,6 +8,36 @@
 	let scrollPending = false;
 	let copyLabel = $state('Copy Logs');
 
+	let panelHeight = $state(192);
+	let dragging = $state(false);
+
+	function startResize(e: MouseEvent | TouchEvent) {
+		if (collapsed) return;
+		e.preventDefault();
+		dragging = true;
+		const startY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+		const startHeight = panelHeight;
+
+		function onMove(ev: MouseEvent | TouchEvent) {
+			const clientY = 'touches' in ev ? ev.touches[0].clientY : ev.clientY;
+			const delta = startY - clientY;
+			panelHeight = Math.min(Math.max(startHeight + delta, 80), window.innerHeight * 0.9);
+		}
+
+		function onEnd() {
+			dragging = false;
+			window.removeEventListener('mousemove', onMove);
+			window.removeEventListener('mouseup', onEnd);
+			window.removeEventListener('touchmove', onMove);
+			window.removeEventListener('touchend', onEnd);
+		}
+
+		window.addEventListener('mousemove', onMove);
+		window.addEventListener('mouseup', onEnd);
+		window.addEventListener('touchmove', onMove);
+		window.addEventListener('touchend', onEnd);
+	}
+
 	async function copyLogs() {
 		const text = entries
 			.map((e) => `${formatTime(e.timestamp)} ${levelLabel(e.level)} ${e.message}`)
@@ -67,10 +97,23 @@
 </script>
 
 <div
-	class="bg-sidebar border-t border-border flex flex-col {collapsed
-		? 'h-8'
-		: 'h-48'} transition-[height] duration-150 shadow-[0_-2px_12px_rgba(0,0,0,0.3)] z-10"
+	class="bg-sidebar border-t border-border flex flex-col shadow-[0_-2px_12px_rgba(0,0,0,0.3)] z-10 shrink-0
+		{collapsed ? 'h-8' : ''} {!collapsed && !dragging ? 'transition-[height] duration-150' : ''}"
+	style:height={collapsed ? undefined : `${panelHeight}px`}
 >
+	<!-- Drag handle (only when expanded) -->
+	{#if !collapsed}
+		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+		<div
+			class="h-1 shrink-0 cursor-row-resize hover:bg-accent transition-colors"
+			role="separator"
+			aria-orientation="horizontal"
+			tabindex="-1"
+			onmousedown={startResize}
+			ontouchstart={startResize}
+		></div>
+	{/if}
+
 	<!-- Header bar -->
 	<div class="flex items-center justify-between px-3 h-8 shrink-0 border-b border-border">
 		<button
