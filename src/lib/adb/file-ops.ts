@@ -272,11 +272,9 @@ export async function getStorageInfo(adb: Adb): Promise<StorageInfo | null> {
  * @param adb - Active ADB connection
  * @returns Object with success status and error message if failed
  */
-export interface VerifyResult {
-	ok: boolean;
-	error?: string;
-	version?: string;
-}
+export type VerifyResult =
+	| { ok: true; version?: string }
+	| { ok: false; error: string };
 
 export async function verifyNextUIInstallation(
 	adb: Adb

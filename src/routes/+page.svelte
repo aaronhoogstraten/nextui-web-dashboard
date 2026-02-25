@@ -22,6 +22,7 @@
 	import { hasWebUSB } from '$lib/adb/connection.js';
 
 	let activeView: string = $state('welcome');
+	const connectedAdb = $derived(getConnection()?.adb ?? null);
 
 	function handleNavigate(view: string) {
 		activeView = view;
@@ -52,21 +53,21 @@
 				</div>
 			</div>
 		{:else if activeView === 'bios'}
-			<BiosView adb={getConnection()!.adb} />
+			<BiosView adb={connectedAdb!} />
 		{:else if activeView === 'roms'}
-			<RomsView adb={getConnection()!.adb} />
+			<RomsView adb={connectedAdb!} />
 		{:else if activeView === 'overlays'}
-			<OverlaysView adb={getConnection()!.adb} />
+			<OverlaysView adb={connectedAdb!} />
 		{:else if activeView === 'cheats'}
-			<CheatsView adb={getConnection()!.adb} />
+			<CheatsView adb={connectedAdb!} />
 		{:else if activeView === 'collections'}
-			<CollectionsView adb={getConnection()!.adb} />
+			<CollectionsView adb={connectedAdb!} />
 		{:else if activeView === 'screenshots'}
-			<ScreenshotsView adb={getConnection()!.adb} />
+			<ScreenshotsView adb={connectedAdb!} />
 		{:else if activeView === 'files'}
-			<FileBrowserView adb={getConnection()!.adb} />
+			<FileBrowserView adb={connectedAdb!} />
 		{:else if activeView === 'logs'}
-			<LogsView adb={getConnection()!.adb} />
+			<LogsView adb={connectedAdb!} />
 		{:else}
 			<!-- Default connected state -->
 			<div class="flex items-center justify-center h-full">

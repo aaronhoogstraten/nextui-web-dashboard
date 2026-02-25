@@ -32,7 +32,7 @@ let stayAwakeActive: boolean = $state(false);
 let stayAwakePromptVisible: boolean = $state(false);
 let stayAwakeBusy: boolean = $state(false);
 let stayAwakeError: string = $state('');
-let stayAwakePollInterval: ReturnType<typeof setInterval> | null = null;
+let stayAwakePollController: AbortController | null = null;
 
 const STAY_AWAKE_PREF_KEY = 'stayAwakePref';
 const STAY_AWAKE_POLL_MS = 5000;
@@ -118,36 +118,32 @@ function resetState() {
 /** Start polling /tmp/stay_awake to detect when the pak exits (user pressed B or remote stop). */
 function startStayAwakePolling(): void {
 	stopStayAwakePolling();
-	let polling = false;
-	stayAwakePollInterval = setInterval(async () => {
-		if (polling) return;
-		if (!connection) {
-			stopStayAwakePolling();
-			return;
-		}
-		polling = true;
-		try {
-			const active = await checkStayAwakeFile(connection.adb);
-			if (!active && stayAwakeActive) {
-				adbLog.info('Stay-awake ended (pak exited on device)');
-				// Clean up show2 overlay if it's still running
-				await stopShow2(connection.adb);
-				stayAwakeActive = false;
-				stopStayAwakePolling();
+	const controller = new AbortController();
+	stayAwakePollController = controller;
+
+	(async () => {
+		while (!controller.signal.aborted) {
+			await new Promise((r) => setTimeout(r, STAY_AWAKE_POLL_MS));
+			if (controller.signal.aborted || !connection) break;
+			try {
+				const active = await checkStayAwakeFile(connection.adb);
+				if (!active && stayAwakeActive) {
+					adbLog.info('Stay-awake ended (pak exited on device)');
+					// Clean up show2 overlay if it's still running
+					await stopShow2(connection.adb);
+					stayAwakeActive = false;
+					stopStayAwakePolling();
+				}
+			} catch {
+				// Connection may have dropped — polling will stop on disconnect
 			}
-		} catch {
-			// Connection may have dropped — polling will stop on disconnect
-		} finally {
-			polling = false;
 		}
-	}, STAY_AWAKE_POLL_MS);
+	})();
 }
 
 function stopStayAwakePolling(): void {
-	if (stayAwakePollInterval !== null) {
-		clearInterval(stayAwakePollInterval);
-		stayAwakePollInterval = null;
-	}
+	stayAwakePollController?.abort();
+	stayAwakePollController = null;
 }
 
 export async function enableStayAwake(): Promise<void> {

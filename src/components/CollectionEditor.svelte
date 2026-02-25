@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import type { Adb } from '@yume-chan/adb';
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { listDirectory, pushFile, pathExists } from '$lib/adb/file-ops.js';
@@ -232,7 +233,9 @@
 	}
 
 	// Validate on mount
-	validatePaths();
+	$effect(() => {
+		untrack(() => validatePaths());
+	});
 </script>
 
 <!-- Editor View -->

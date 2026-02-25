@@ -105,7 +105,7 @@
 	}
 
 	async function navigate(path: string, skipDirtyCheck = false) {
-		if (!skipDirtyCheck && editorPath && editorContent !== editorOriginal) {
+		if (!skipDirtyCheck && editorDirty) {
 			if (!confirm('Discard unsaved changes?')) return;
 		}
 		if (editorPath && !skipDirtyCheck) {
