@@ -9,8 +9,7 @@ import {
 	launchDevPakNative,
 	stopDevPak,
 	isStayAwakeActive as checkStayAwakeFile,
-	launchShow2Overlay,
-	stopShow2,
+	pushDashboardImage,
 	isStayAwakeSupported
 } from '$lib/adb/stay-awake.js';
 import { adbLog } from '$lib/stores/log.svelte.js';
@@ -24,7 +23,6 @@ let error: string = $state('');
 let busy: boolean = $state(false);
 let nextuiVersion: string = $state('');
 let platform: string = $state('');
-let ldLibraryPath: string = $state('');
 
 /** Stay-awake state */
 let stayAwakeSupported: boolean = $state(false);
@@ -63,10 +61,6 @@ export function getNextUIVersion() {
 
 export function getPlatform() {
 	return platform;
-}
-
-export function getLdLibraryPath() {
-	return ldLibraryPath;
 }
 
 export function isStayAwakeActive() {
@@ -111,7 +105,6 @@ function resetState() {
 	status = 'Disconnected';
 	nextuiVersion = '';
 	platform = '';
-	ldLibraryPath = '';
 	setDeviceBasePath(DEFAULT_BASE);
 }
 
@@ -129,8 +122,6 @@ function startStayAwakePolling(): void {
 				const active = await checkStayAwakeFile(connection.adb);
 				if (!active && stayAwakeActive) {
 					adbLog.info('Stay-awake ended (pak exited on device)');
-					// Clean up show2 overlay if it's still running
-					await stopShow2(connection.adb);
 					stayAwakeActive = false;
 					stopStayAwakePolling();
 				}
@@ -156,11 +147,19 @@ export async function enableStayAwake(): Promise<void> {
 	stayAwakeBusy = true;
 	stayAwakeError = '';
 	try {
-		// Check if Developer.pak is installed; install if not
+		// Check if DashboardDeveloper.pak is installed; install if not
 		const installed = await isDevPakInstalled(connection.adb, platform);
 		if (!installed) {
-			adbLog.info('Developer.pak not found, installing...');
+			adbLog.info('DashboardDeveloper.pak not found, installing...');
 			await installDevPak(connection.adb, platform);
+		}
+
+		// Push dashboard image BEFORE launching pak — the patched launch.sh
+		// references it directly in its minui-presenter command
+		try {
+			await pushDashboardImage(connection.adb);
+		} catch (e) {
+			adbLog.warn(`Dashboard image push failed (non-fatal): ${formatError(e)}`);
 		}
 
 		// Launch via native mechanism (writes /tmp/next, kills nextui.elf)
@@ -168,13 +167,6 @@ export async function enableStayAwake(): Promise<void> {
 		stayAwakeActive = true;
 		startStayAwakePolling();
 		adbLog.info('Stay awake enabled');
-
-		// Launch show2.elf overlay with dashboard branding on top of Developer.pak
-		try {
-			await launchShow2Overlay(connection.adb, platform, ldLibraryPath);
-		} catch (e) {
-			adbLog.warn(`show2 overlay failed (non-fatal): ${formatError(e)}`);
-		}
 	} catch (e) {
 		const msg = formatError(e);
 		adbLog.error(`Stay-awake failed: ${msg}`);
@@ -201,7 +193,6 @@ export async function disableStayAwake(): Promise<void> {
 	}
 	stayAwakeBusy = true;
 	try {
-		await stopShow2(connection.adb);
 		await stopDevPak(connection.adb);
 		adbLog.info('Stay awake disabled');
 	} catch (e) {
@@ -277,7 +268,6 @@ export async function connect() {
 		if (platform) {
 			const env = await parseMinUIEnv(conn.adb, platform, detection.basePath);
 			setDeviceBasePath(env.sdcardPath);
-			ldLibraryPath = env.ldLibraryPath;
 		}
 
 		// Verify this is a NextUI device (uses DEVICE_PATHS set above)
@@ -304,7 +294,7 @@ export async function connect() {
 		status = `Connected: ${deviceName}`;
 		adbLog.info('NextUI installation verified');
 
-		// Stay-awake: only offer if the platform has Developer.pak support
+		// Stay-awake: only offer if the platform has DashboardDeveloper.pak support
 		stayAwakeSupported = platform ? await isStayAwakeSupported(platform) : false;
 		if (stayAwakeSupported) {
 			const pref = getStayAwakePref();
