@@ -5,7 +5,7 @@ const config = {
 	kit: {
 		adapter: adapter(),
 		paths: {
-			base: process.env.NODE_ENV === 'production' ? '/nextui-web-dashboard' : ''
+			base: process.env.CUSTOM_DOMAIN ? '' : process.env.NODE_ENV === 'production' ? '/nextui-web-dashboard' : ''
 		},
 		alias: {
 			$components: 'src/components'
