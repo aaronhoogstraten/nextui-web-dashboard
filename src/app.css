@@ -14,6 +14,8 @@
   --color-border: var(--color-border-val);
   --color-success: var(--color-success-val);
   --color-warning: var(--color-warning-val);
+  --color-terminal: var(--color-terminal-val);
+  --color-terminal-text: var(--color-terminal-text-val);
 }
 
 /* Dark theme (default) */
@@ -29,6 +31,8 @@
   --color-border-val: #444444;
   --color-success-val: #4ade80;
   --color-warning-val: #eab308;
+  --color-terminal-val: #1a1a2e;
+  --color-terminal-text-val: #4ade80;
 }
 
 /* Light theme */
@@ -44,4 +48,6 @@
   --color-border-val: #999999;
   --color-success-val: #15803d;
   --color-warning-val: #a16207;
+  --color-terminal-val: #f0f0f0;
+  --color-terminal-text-val: #1a1a1a;
 }

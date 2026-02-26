@@ -44,7 +44,7 @@
 		{ id: 'collections', label: 'Collections' },
 		{ id: 'screenshots', label: 'Screenshots' },
 		{ id: 'files', label: 'File Browser' },
-		{ id: 'logs', label: 'Download Logs' }
+		{ id: 'logs', label: 'Log Viewer' }
 	];
 </script>
 

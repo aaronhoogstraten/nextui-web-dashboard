@@ -49,6 +49,11 @@ export class ShellCmd {
 		return new ShellCmd(`df ${shellEscape(path)}`);
 	}
 
+	/** Tail a file with follow, showing the last N lines. */
+	static tailFollow(path: string, lines = 200): ShellCmd {
+		return new ShellCmd(`tail -n ${lines} -f ${shellEscape(path)}`);
+	}
+
 	toString(): string {
 		return this._command;
 	}
