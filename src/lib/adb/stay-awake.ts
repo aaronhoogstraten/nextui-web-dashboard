@@ -1,7 +1,6 @@
 import type { Adb } from '@yume-chan/adb';
 import JSZip from 'jszip';
 import { base } from '$app/paths';
-import { DEVICE_PATHS } from './types.js';
 import { pathExists, pushFile, shell } from './file-ops.js';
 import { ShellCmd } from './adb-utils.js';
 import { adbLog } from '$lib/stores/log.svelte.js';
@@ -62,28 +61,22 @@ const BIN_PREFIX = 'bin/';
 const TMP_NEXT = '/tmp/next';
 const TMP_STAY_AWAKE = '/tmp/stay_awake';
 
-function devPakDir(platform: string): string {
-	return `${DEVICE_PATHS.tools}/${platform}/DashboardDeveloper.pak`;
-}
-
-function launchScript(platform: string): string {
-	return `${devPakDir(platform)}/launch.sh`;
-}
+const DEV_PAK_DIR = '/tmp/DashboardDeveloper.pak';
+const LAUNCH_SCRIPT = `${DEV_PAK_DIR}/launch.sh`;
 
 /**
  * Check if the DashboardDeveloper.pak is already installed on the device.
  */
-export async function isDevPakInstalled(adb: Adb, platform: string): Promise<boolean> {
-	return pathExists(adb, launchScript(platform));
+export async function isDevPakInstalled(adb: Adb): Promise<boolean> {
+	return pathExists(adb, LAUNCH_SCRIPT);
 }
 
 /**
  * Install the DashboardDeveloper.pak by fetching the bundled zip and extracting to device.
  * The zip is downloaded at build time by CI (see scripts/fetch-developer-pak.sh).
  */
-export async function installDevPak(adb: Adb, platform: string): Promise<void> {
-	const pakDir = devPakDir(platform);
-	adbLog.info(`Installing DashboardDeveloper.pak to ${pakDir}`);
+export async function installDevPak(adb: Adb): Promise<void> {
+	adbLog.info(`Installing DashboardDeveloper.pak to ${DEV_PAK_DIR}`);
 
 	// Fetch the zip from static assets
 	const url = `${base}/developer-pak.zip`;
@@ -94,7 +87,7 @@ export async function installDevPak(adb: Adb, platform: string): Promise<void> {
 
 	// Collect files to push and the unique parent directories they need
 	const filesToPush: { relativePath: string; data: Uint8Array; executable: boolean }[] = [];
-	const dirsNeeded = new Set<string>([pakDir]);
+	const dirsNeeded = new Set<string>([DEV_PAK_DIR]);
 
 	for (const [relativePath, zipEntry] of Object.entries(zip.files)) {
 		if (zipEntry.dir) continue;
@@ -109,7 +102,7 @@ export async function installDevPak(adb: Adb, platform: string): Promise<void> {
 
 		const lastSlash = relativePath.lastIndexOf('/');
 		if (lastSlash > 0) {
-			dirsNeeded.add(`${pakDir}/${relativePath.substring(0, lastSlash)}`);
+			dirsNeeded.add(`${DEV_PAK_DIR}/${relativePath.substring(0, lastSlash)}`);
 		}
 	}
 
@@ -134,7 +127,7 @@ export async function installDevPak(adb: Adb, platform: string): Promise<void> {
 				adbLog.warn('launch.sh: minui-presenter invocation line not found, installing unmodified');
 			}
 		}
-		await pushFile(adb, `${pakDir}/${file.relativePath}`, data, file.executable ? 0o755 : 0o644);
+		await pushFile(adb, `${DEV_PAK_DIR}/${file.relativePath}`, data, file.executable ? 0o755 : 0o644);
 		adbLog.debug(`Pushed ${file.relativePath} (${data.length} bytes)`);
 	}
 
@@ -147,8 +140,7 @@ export async function installDevPak(adb: Adb, platform: string): Promise<void> {
  * the MinUI.pak main loop to execute the pak with the full system environment.
  * This is identical to how paks are launched from the device menu.
  */
-export async function launchDevPakNative(adb: Adb, platform: string): Promise<void> {
-	const script = launchScript(platform);
+export async function launchDevPakNative(adb: Adb): Promise<void> {
 	adbLog.info('Launching DashboardDeveloper.pak via native mechanism');
 
 	// Check if nextui.elf is at the menu. If TMP_NEXT exists, another pak is
@@ -161,7 +153,7 @@ export async function launchDevPakNative(adb: Adb, platform: string): Promise<vo
 	}
 
 	// Write the launch command to TMP_NEXT (same format nextui.elf uses)
-	const expectedCmd = `sh ${script}`;
+	const expectedCmd = `sh ${LAUNCH_SCRIPT}`;
 	await shell(adb, `echo '${expectedCmd}' > ${TMP_NEXT}`);
 
 	// Verify the write succeeded and nextui.elf is ready to be replaced

@@ -148,10 +148,10 @@ export async function enableStayAwake(): Promise<void> {
 	stayAwakeError = '';
 	try {
 		// Check if DashboardDeveloper.pak is installed; install if not
-		const installed = await isDevPakInstalled(connection.adb, platform);
+		const installed = await isDevPakInstalled(connection.adb);
 		if (!installed) {
 			adbLog.info('DashboardDeveloper.pak not found, installing...');
-			await installDevPak(connection.adb, platform);
+			await installDevPak(connection.adb);
 		}
 
 		// Push dashboard image BEFORE launching pak — the patched launch.sh
@@ -163,7 +163,7 @@ export async function enableStayAwake(): Promise<void> {
 		}
 
 		// Launch via native mechanism (writes /tmp/next, kills nextui.elf)
-		await launchDevPakNative(connection.adb, platform);
+		await launchDevPakNative(connection.adb);
 		stayAwakeActive = true;
 		startStayAwakePolling();
 		adbLog.info('Stay awake enabled');
