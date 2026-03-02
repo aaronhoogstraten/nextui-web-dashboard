@@ -21,12 +21,22 @@
 	interface NavItem {
 		id: string;
 		label: string;
+		icon: string;
 	}
 
 	let {
 		activeView = 'welcome',
 		onNavigate
 	}: { activeView: string; onNavigate: (view: string) => void } = $props();
+
+	let collapsed = $state(false);
+
+	// Auto-expand when device disconnects so Connect button is always visible
+	$effect(() => {
+		if (!isConnected()) {
+			collapsed = false;
+		}
+	});
 
 	const webUsbSupported = hasWebUSB();
 	const deviceLabel = $derived.by(() => {
@@ -37,23 +47,35 @@
 	});
 
 	const navItems: NavItem[] = [
-		{ id: 'roms', label: 'ROMs' },
-		{ id: 'bios', label: 'BIOS' },
-		{ id: 'overlays', label: 'Overlays' },
-		{ id: 'cheats', label: 'Cheats' },
-		{ id: 'collections', label: 'Collections' },
-		{ id: 'screenshots', label: 'Screenshots' },
-		{ id: 'files', label: 'File Browser' },
-		{ id: 'logs', label: 'Log Viewer' }
+		{ id: 'roms', label: 'ROMs', icon: '🎮' },
+		{ id: 'bios', label: 'BIOS', icon: '⚙' },
+		{ id: 'overlays', label: 'Overlays', icon: '🎨' },
+		{ id: 'cheats', label: 'Cheats', icon: '🔑' },
+		{ id: 'collections', label: 'Collections', icon: '⭐' },
+		{ id: 'screenshots', label: 'Screenshots', icon: '📷' },
+		{ id: 'files', label: 'File Browser', icon: '📁' },
+		{ id: 'logs', label: 'Log Viewer', icon: '📋' }
 	];
 </script>
 
 <aside
-	class="w-60 bg-sidebar text-text h-screen flex flex-col shrink-0 border-r border-border shadow-[2px_0_12px_rgba(0,0,0,0.3)] z-10"
+	class="bg-sidebar text-text h-screen flex flex-col shrink-0 border-r border-border shadow-[2px_0_12px_rgba(0,0,0,0.3)] z-10 transition-[width] duration-150 overflow-hidden {collapsed ? 'w-14' : 'w-60'}"
 >
 	<!-- Header -->
-	<div class="p-4 border-b border-border flex items-center justify-between">
-		<h1 class="text-xl font-bold">NextUI Dashboard</h1>
+	<div class="p-4 border-b border-border flex items-center {collapsed ? 'flex-col gap-2 justify-center' : 'justify-between'}">
+		{#if !collapsed}
+			<h1 class="text-xl font-bold whitespace-nowrap">NextUI Dashboard</h1>
+		{/if}
+		{#if collapsed && isConnected()}
+			<button
+				onclick={disconnect}
+				disabled={isBusy()}
+				class="text-red-400 hover:text-red-300 disabled:opacity-50 p-1 rounded"
+				title="Disconnect"
+			>
+				⏏
+			</button>
+		{/if}
 		<button
 			onclick={toggleTheme}
 			class="text-text-muted hover:text-text p-1 rounded"
@@ -64,67 +86,69 @@
 	</div>
 
 	<!-- Connection -->
-	<div class="p-4 border-b border-border">
-		<div class="text-sm text-text-muted mb-2">Device</div>
-		{#if isConnected()}
-			<div class="text-base text-success truncate" title={getStatus()}>
-				{deviceLabel}
-			</div>
-			{#if getNextUIVersion()}
-				<div class="text-sm text-text-muted mb-2">{getNextUIVersion()}</div>
-			{/if}
-			{#if canStayAwake()}
-				<label
-					class="flex items-center justify-between text-sm text-text-muted mb-2 cursor-pointer"
-					title="Keep the device screen awake while connected"
-				>
-					<span>Keep device awake</span>
-					<button
-						onclick={toggleStayAwake}
-						disabled={isStayAwakeBusy()}
-						class="relative w-9 h-5 rounded-full transition-colors disabled:opacity-50 {isStayAwakeActive()
-							? 'bg-accent'
-							: 'bg-surface-hover'}"
-						role="switch"
-						aria-checked={isStayAwakeActive()}
-						aria-label="Toggle keeping the device awake"
-					>
-						<span
-							class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform {isStayAwakeActive()
-								? 'translate-x-4'
-								: ''}"
-						></span>
-					</button>
-				</label>
-			{/if}
-			<button
-				onclick={disconnect}
-				disabled={isBusy()}
-				class="w-full text-base bg-red-700 hover:bg-red-600 disabled:opacity-50 text-white px-3 py-1.5 rounded"
-			>
-				Disconnect
-			</button>
-		{:else}
-			<div class="text-base text-text-muted mb-2">
-				{isBusy() ? 'Connecting...' : 'No device'}
-			</div>
-			{#if getError()}
-				<div class="text-sm text-red-400 mb-2">{getError()}</div>
-			{/if}
-			<button
-				onclick={connect}
-				disabled={isBusy() || !webUsbSupported}
-				class="w-full text-base bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white px-3 py-1.5 rounded"
-			>
-				{isBusy() ? 'Connecting...' : 'Connect'}
-			</button>
-			{#if !webUsbSupported}
-				<div class="text-sm text-warning mt-2">
-					WebUSB not available. Use Chrome, Edge, or another Chromium browser.
+	{#if !collapsed}
+		<div class="p-4 border-b border-border">
+			<div class="text-sm text-text-muted mb-2">Device</div>
+			{#if isConnected()}
+				<div class="text-base text-success truncate" title={getStatus()}>
+					{deviceLabel}
 				</div>
+				{#if getNextUIVersion()}
+					<div class="text-sm text-text-muted mb-2">{getNextUIVersion()}</div>
+				{/if}
+				{#if canStayAwake()}
+					<label
+						class="flex items-center justify-between text-sm text-text-muted mb-2 cursor-pointer"
+						title="Keep the device screen awake while connected"
+					>
+						<span>Keep device awake</span>
+						<button
+							onclick={toggleStayAwake}
+							disabled={isStayAwakeBusy()}
+							class="relative w-9 h-5 rounded-full transition-colors disabled:opacity-50 {isStayAwakeActive()
+								? 'bg-accent'
+								: 'bg-surface-hover'}"
+							role="switch"
+							aria-checked={isStayAwakeActive()}
+							aria-label="Toggle keeping the device awake"
+						>
+							<span
+								class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform {isStayAwakeActive()
+									? 'translate-x-4'
+									: ''}"
+							></span>
+						</button>
+					</label>
+				{/if}
+				<button
+					onclick={disconnect}
+					disabled={isBusy()}
+					class="w-full text-base bg-red-700 hover:bg-red-600 disabled:opacity-50 text-white px-3 py-1.5 rounded"
+				>
+					Disconnect
+				</button>
+			{:else}
+				<div class="text-base text-text-muted mb-2">
+					{isBusy() ? 'Connecting...' : 'No device'}
+				</div>
+				{#if getError()}
+					<div class="text-sm text-red-400 mb-2">{getError()}</div>
+				{/if}
+				<button
+					onclick={connect}
+					disabled={isBusy() || !webUsbSupported}
+					class="w-full text-base bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white px-3 py-1.5 rounded"
+				>
+					{isBusy() ? 'Connecting...' : 'Connect'}
+				</button>
+				{#if !webUsbSupported}
+					<div class="text-sm text-warning mt-2">
+						WebUSB not available. Use Chrome, Edge, or another Chromium browser.
+					</div>
+				{/if}
 			{/if}
-		{/if}
-	</div>
+		</div>
+	{/if}
 
 	<!-- Navigation -->
 	<nav class="flex-1 p-2">
@@ -132,20 +156,42 @@
 			<button
 				onclick={() => onNavigate(item.id)}
 				disabled={!isConnected()}
-				class="w-full text-left px-3 py-2 rounded text-base mb-0.5 transition-colors
+				class="w-full px-3 py-2 rounded text-base mb-0.5 transition-colors flex items-center gap-2 whitespace-nowrap
+					{collapsed ? 'justify-center' : 'text-left'}
 					{activeView === item.id
 					? 'bg-surface-hover text-text'
 					: isConnected()
 						? 'text-text-muted hover:bg-surface hover:text-text'
 						: 'text-text-muted opacity-50 cursor-not-allowed'}"
+				title={collapsed ? item.label : undefined}
 			>
-				{item.label}
+				{#if collapsed}
+					<span>{item.icon}</span>
+				{:else}
+					<span>{item.label}</span>
+				{/if}
 			</button>
 		{/each}
 	</nav>
 
+	<!-- Collapse toggle -->
+	<div class="py-2 flex {collapsed ? 'px-2 justify-center' : 'px-5'}">
+		<button
+			onclick={() => (collapsed = !collapsed)}
+			disabled={!isConnected()}
+			class="text-text-muted hover:text-text rounded disabled:opacity-30 disabled:cursor-not-allowed {collapsed ? 'p-1 text-2xl leading-none' : 'text-sm'}"
+			title={collapsed ? 'Show sidebar' : 'Hide sidebar'}
+		>
+			{#if collapsed}
+				»
+			{:else}
+				<span class="flex items-center gap-1">« Hide Sidebar</span>
+			{/if}
+		</button>
+	</div>
+
 	<!-- External links -->
-	<div class="p-3 border-t border-border flex items-center gap-3">
+	<div class="p-3 border-t border-border flex items-center {collapsed ? 'flex-col gap-2 justify-center' : 'gap-3'}">
 		<a
 			href="https://nextui.loveretro.games/"
 			target="_blank"

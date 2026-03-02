@@ -119,6 +119,7 @@
 		<button
 			onclick={() => (collapsed = !collapsed)}
 			class="flex items-center gap-2 text-xs text-text-muted hover:text-text"
+			title={collapsed ? 'Show console' : 'Hide console'}
 		>
 			<span>{collapsed ? '\u25B6' : '\u25BC'}</span>
 			<span class="font-medium">Console</span>
