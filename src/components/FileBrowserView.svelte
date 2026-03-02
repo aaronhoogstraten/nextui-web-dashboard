@@ -288,11 +288,15 @@
 		searchQuery = '';
 	}
 
-	function navigateToResult(fullPath: string) {
-		const lastSlash = fullPath.lastIndexOf('/');
-		const parentDir = lastSlash > 0 ? fullPath.substring(0, lastSlash) : '/';
+	async function navigateToResult(fullPath: string) {
 		clearSearch();
-		navigate(parentDir);
+		if (await isDirectory(adb, fullPath)) {
+			navigate(fullPath);
+		} else {
+			const lastSlash = fullPath.lastIndexOf('/');
+			const parentDir = lastSlash > 0 ? fullPath.substring(0, lastSlash) : '/';
+			navigate(parentDir);
+		}
 	}
 
 	function formatDate(mtime: bigint): string {
