@@ -52,6 +52,8 @@
 	let searchQuery = $state('');
 	let searchResults: string[] | null = $state(null);
 	let searching = $state(false);
+	let dragOver = $state(false);
+	let dragCounter = $state(0);
 
 	const pathSegments = $derived(getPathSegments(currentPath));
 	const sortedEntries = $derived(getSortedEntries(entries, sortKey, sortAsc));
@@ -402,6 +404,100 @@
 		previewAlt = '';
 	}
 
+	// --- Drag-and-Drop Upload ---
+
+	function readAllEntries(entry: FileSystemEntry, basePath = ''): Promise<{ file: File; relativePath: string }[]> {
+		if (entry.isFile) {
+			return new Promise((resolve, reject) => {
+				(entry as FileSystemFileEntry).file(
+					(f) => resolve([{ file: f, relativePath: basePath + f.name }]),
+					reject
+				);
+			});
+		}
+		const reader = (entry as FileSystemDirectoryEntry).createReader();
+		return new Promise((resolve, reject) => {
+			const allEntries: FileSystemEntry[] = [];
+			const readBatch = () => {
+				reader.readEntries((batch) => {
+					if (batch.length === 0) {
+						Promise.all(
+							allEntries.map((e) => readAllEntries(e, basePath + entry.name + '/'))
+						).then((results) => resolve(results.flat()), reject);
+					} else {
+						allEntries.push(...batch);
+						readBatch();
+					}
+				}, reject);
+			};
+			readBatch();
+		});
+	}
+
+	async function handleDrop(e: DragEvent) {
+		e.preventDefault();
+		dragCounter = 0;
+		dragOver = false;
+		if (!e.dataTransfer?.items || uploading) return;
+
+		const items = Array.from(e.dataTransfer.items).filter((i) => i.kind === 'file');
+		const fsEntries = items.map((i) => i.webkitGetAsEntry()).filter((entry): entry is FileSystemEntry => entry !== null);
+		if (fsEntries.length === 0) return;
+
+		const allFiles = (await Promise.all(fsEntries.map((entry) => readAllEntries(entry)))).flat();
+		if (allFiles.length === 0) return;
+
+		uploading = true;
+		notice = null;
+		let uploaded = 0;
+		const totalBytes = allFiles.reduce((sum, { file }) => sum + file.size, 0);
+		const createdDirs = new Set<string>();
+		beginTransfer('upload', allFiles.length, totalBytes);
+
+		try {
+			for (const { file, relativePath } of allFiles) {
+				const lastSlash = relativePath.lastIndexOf('/');
+				if (lastSlash > 0) {
+					const dirPath = joinPath(currentPath, relativePath.substring(0, lastSlash));
+					if (!createdDirs.has(dirPath)) {
+						await adbExec(ShellCmd.mkdir(dirPath));
+						createdDirs.add(dirPath);
+					}
+				}
+				const data = new Uint8Array(await file.arrayBuffer());
+				await trackedPush(adb, joinPath(currentPath, relativePath), data);
+				uploaded++;
+			}
+			notice = successMsg(`Uploaded ${plural(uploaded, 'file')}`);
+			await navigate(currentPath);
+		} catch (err) {
+			notice = errorMsg(`Upload failed after ${uploaded} files: ${formatError(err)}`);
+		} finally {
+			endTransfer();
+		}
+		uploading = false;
+	}
+
+	function handleDragEnter(e: DragEvent) {
+		e.preventDefault();
+		dragCounter++;
+		dragOver = true;
+	}
+
+	function handleDragOver(e: DragEvent) {
+		e.preventDefault();
+		if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+	}
+
+	function handleDragLeave(e: DragEvent) {
+		e.preventDefault();
+		dragCounter--;
+		if (dragCounter <= 0) {
+			dragCounter = 0;
+			dragOver = false;
+		}
+	}
+
 	// Load initial directory on mount + cleanup blob URLs on unmount
 	$effect(() => {
 		untrack(() => navigate(DEVICE_PATHS.base, true));
@@ -411,7 +507,20 @@
 	});
 </script>
 
-<div class="p-6 flex flex-col h-full">
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div
+	class="p-6 flex flex-col h-full relative"
+	ondragenter={handleDragEnter}
+	ondragover={handleDragOver}
+	ondragleave={handleDragLeave}
+	ondrop={handleDrop}
+>
+	{#if dragOver}
+		<div class="absolute inset-0 z-50 bg-bg/80 border-2 border-dashed border-accent rounded-lg flex items-center justify-center pointer-events-none">
+			<span class="text-lg font-medium text-accent">Upload to {currentPath}</span>
+		</div>
+	{/if}
+
 	<!-- Header -->
 	<div class="flex items-center justify-between mb-4">
 		<h2 class="text-2xl font-bold text-text">File Browser</h2>

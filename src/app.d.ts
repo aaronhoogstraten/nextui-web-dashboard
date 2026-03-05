@@ -27,6 +27,33 @@ declare global {
 	interface Window {
 		showDirectoryPicker?(options?: { mode?: 'read' | 'readwrite' }): Promise<FileSystemDirectoryHandle>;
 	}
+
+	// Drag-and-drop File System Entry API
+	interface FileSystemEntry {
+		readonly isFile: boolean;
+		readonly isDirectory: boolean;
+		readonly name: string;
+		readonly fullPath: string;
+	}
+
+	interface FileSystemFileEntry extends FileSystemEntry {
+		file(successCallback: (file: File) => void, errorCallback?: (error: DOMException) => void): void;
+	}
+
+	interface FileSystemDirectoryEntry extends FileSystemEntry {
+		createReader(): FileSystemDirectoryReader;
+	}
+
+	interface FileSystemDirectoryReader {
+		readEntries(
+			successCallback: (entries: FileSystemEntry[]) => void,
+			errorCallback?: (error: DOMException) => void
+		): void;
+	}
+
+	interface DataTransferItem {
+		webkitGetAsEntry(): FileSystemEntry | null;
+	}
 }
 
 export {};
