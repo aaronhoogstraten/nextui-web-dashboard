@@ -9,6 +9,7 @@
 	import ImagePreview from './ImagePreview.svelte';
 	import CollectionEditor from './CollectionEditor.svelte';
 	import StatusMessage from './StatusMessage.svelte';
+	import LargeArtDialog from './LargeArtDialog.svelte';
 
 	let { adb }: { adb: Adb } = $props();
 
@@ -35,6 +36,7 @@
 
 	// --- State: Other ---
 
+	let largeArtDialog: LargeArtDialog;
 	let deletingCollection: string | null = $state(null);
 	let uploadingIcon: string | null = $state(null);
 	let previewSrc: string | null = $state(null);
@@ -184,10 +186,13 @@
 	async function uploadIcon(col: CollectionState) {
 		const file = await pickFile({ accept: '.png' });
 		if (!file) return;
+
+		const data = await largeArtDialog.check(file);
+		if (!data) return;
+
 		uploadingIcon = col.name;
 		try {
 			await adbExec(ShellCmd.mkdir(MEDIA_PATH));
-			const data = new Uint8Array(await file.arrayBuffer());
 			await pushFile(adb, `${MEDIA_PATH}/${col.name}.png`, data);
 			if (col.iconUrl) URL.revokeObjectURL(col.iconUrl);
 			const blob = new Blob([data], { type: 'image/png' });
@@ -212,9 +217,12 @@
 	async function uploadBg() {
 		const file = await pickFile({ accept: '.png' });
 		if (!file) return;
+
+		const data = await largeArtDialog.check(file);
+		if (!data) return;
+
 		try {
 			await adbExec(ShellCmd.mkdir(MEDIA_PATH));
-			const data = new Uint8Array(await file.arrayBuffer());
 			await pushFile(adb, `${MEDIA_PATH}/bg.png`, data);
 			if (bgUrl) URL.revokeObjectURL(bgUrl);
 			const blob = new Blob([data], { type: 'image/png' });
@@ -410,3 +418,5 @@
 {#if previewSrc}
 	<ImagePreview src={previewSrc} alt={previewAlt} onClose={closePreview} />
 {/if}
+
+<LargeArtDialog bind:this={largeArtDialog} />

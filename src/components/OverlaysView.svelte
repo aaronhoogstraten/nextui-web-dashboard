@@ -3,13 +3,16 @@
 	import type { Adb } from '@yume-chan/adb';
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { listDirectory, pullFile, pushFile, pathExists } from '$lib/adb/file-ops.js';
-	import { beginTransfer, endTransfer, trackedPush } from '$lib/stores/transfer.svelte.js';
+	import { beginTransfer, endTransfer, trackedPush, skipTransferFile } from '$lib/stores/transfer.svelte.js';
 	import { adbExec } from '$lib/stores/connection.svelte.js';
 	import { formatSize, formatError, compareByName, plural, pickFiles } from '$lib/utils.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
 	import ImagePreview from './ImagePreview.svelte';
+	import LargeArtDialog from './LargeArtDialog.svelte';
 
 	let { adb }: { adb: Adb } = $props();
+
+	let largeArtDialog: LargeArtDialog;
 
 	interface OverlayFile {
 		name: string;
@@ -147,7 +150,8 @@
 
 			for (const file of files) {
 				if (!file.name.toLowerCase().endsWith('.png')) continue;
-				const data = new Uint8Array(await file.arrayBuffer());
+				const data = await largeArtDialog.check(file);
+				if (!data) { skipTransferFile(file.size); continue; }
 				await trackedPush(adb, `${sys.devicePath}/${file.name}`, data);
 				uploaded++;
 			}
@@ -564,3 +568,5 @@
 {#if previewSrc}
 	<ImagePreview src={previewSrc} alt={previewAlt} onClose={closePreview} />
 {/if}
+
+<LargeArtDialog bind:this={largeArtDialog} />

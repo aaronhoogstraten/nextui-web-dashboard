@@ -25,6 +25,7 @@
 	import ImagePreview from './ImagePreview.svelte';
 	import Modal from './Modal.svelte';
 	import OverwriteDialog, { type ConflictResolution } from './OverwriteDialog.svelte';
+	import LargeArtDialog from './LargeArtDialog.svelte';
 	import RomSyncFlow from './RomSyncFlow.svelte';
 
 	let { adb }: { adb: Adb } = $props();
@@ -123,6 +124,7 @@
 	let detectedPlatform: string = $state('');
 
 	let overwriteDialog: OverwriteDialog;
+	let largeArtDialog: LargeArtDialog;
 
 	async function scanAvailableEmulators(): Promise<Set<string>> {
 		const codes = new Set<string>();
@@ -420,6 +422,9 @@
 		const file = await pickFile({ accept: '.png' });
 		if (!file) return;
 
+		const data = await largeArtDialog.check(file);
+		if (!data) return;
+
 		uploadingBg = `${state.system.systemCode}/${filename}`;
 		try {
 			const dir = getSpecialMediaDir(state, filename);
@@ -428,7 +433,6 @@
 				await adbExec(ShellCmd.mkdir(dir));
 			}
 
-			const data = new Uint8Array(await file.arrayBuffer());
 			await pushFile(adb, getSpecialMediaPath(state, filename), data);
 			const url = URL.createObjectURL(new Blob([data], { type: 'image/png' }));
 			setSpecialMedia(state, filename, url);
@@ -562,8 +566,11 @@
 		const file = await pickFile({ accept: '.png' });
 		if (!file) return;
 
+		const data = await largeArtDialog.check(file);
+		if (!data) return;
+
 		uploadingMediaFor = rom.name;
-		beginTransfer('upload', 1, file.size);
+		beginTransfer('upload', 1, data.byteLength);
 
 		try {
 			const mediaPath = getRomMediaPath(state.system);
@@ -573,7 +580,6 @@
 				await adbExec(ShellCmd.mkdir(mediaPath));
 			}
 
-			const data = new Uint8Array(await file.arrayBuffer());
 			const remotePath = `${mediaPath}/${rom.mediaFileName}`;
 			await trackedPush(adb, remotePath, data);
 
@@ -1073,6 +1079,7 @@
 {/if}
 
 <OverwriteDialog bind:this={overwriteDialog} />
+<LargeArtDialog bind:this={largeArtDialog} />
 
 {#if missingEmuInfo}
 	<Modal onclose={() => (missingEmuInfo = null)}>
