@@ -68,7 +68,7 @@ export const BIOS_SYSTEMS: BiosSystem[] = [
 			{
 				fileName: 'kick40068.A1200',
 				systemCode: 'PUAE',
-				sha1: 'ef9194ab4804aa0aa8540d846caf291b28331165',
+				sha1: 'e21545723fe8374e91342617604f1b3d703094f1',
 				md5: '646773759326fbac3b2311fd8c8793ee'
 			}
 		]
@@ -171,7 +171,7 @@ export const BIOS_SYSTEMS: BiosSystem[] = [
 			{
 				fileName: 'JiffyDOS_C128.bin',
 				systemCode: 'C128',
-				sha1: '7fd2a28c4fdaeb140f3c8c8fb90271b1472c97b9',
+				sha1: '7d1898f32beae4b2ae610d469ce578a588efaa7c',
 				md5: 'cbbd1bbcb5e4fd8046b6030ab71fc021'
 			},
 			{
@@ -196,7 +196,7 @@ export const BIOS_SYSTEMS: BiosSystem[] = [
 				fileName: 'prboom.wad',
 				systemCode: 'PRBOOM',
 				sha1: '5f4aed208301449c2e9514edfd325fe9dead76fa',
-				md5: '72ae1b47820fcc93cc0fd9c428d0face'
+				md5: '72ae1b47820fcc93cc0df9c428d0face'
 			}
 		]
 	},
