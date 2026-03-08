@@ -20,6 +20,7 @@
 		dismissStayAwakeError
 	} from '$lib/stores/connection.svelte.js';
 	import { hasWebUSB } from '$lib/adb/connection.js';
+	import { isFeatureEnabled } from '$lib/stores/features.svelte.js';
 
 	let activeView: string = $state('welcome');
 	const connectedAdb = $derived(getConnection()?.adb ?? null);
@@ -50,6 +51,13 @@
 							Please use Chrome, Edge, or another Chromium browser.
 						</div>
 					{/if}
+				</div>
+			</div>
+		{:else if !isFeatureEnabled(activeView)}
+			<div class="flex items-center justify-center h-full">
+				<div class="text-center text-text-muted">
+					<p class="text-lg">Feature Unavailable</p>
+					<p class="text-sm mt-1">This view is disabled in this build.</p>
 				</div>
 			</div>
 		{:else if activeView === 'bios'}

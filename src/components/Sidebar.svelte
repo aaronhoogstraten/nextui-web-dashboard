@@ -16,6 +16,7 @@
 	} from '$lib/stores/connection.svelte.js';
 	import { hasWebUSB, getBrowserRecommendation } from '$lib/adb/connection.js';
 	import { toggleTheme, isDark, getTheme } from '$lib/stores/theme.svelte.js';
+	import { isFeatureEnabled } from '$lib/stores/features.svelte.js';
 	import { base } from '$app/paths';
 
 	interface NavItem {
@@ -46,7 +47,7 @@
 		return p ? `${name} (${p})` : name;
 	});
 
-	const navItems: NavItem[] = [
+	const allNavItems: NavItem[] = [
 		{ id: 'roms', label: 'ROMs', icon: '🎮' },
 		{ id: 'bios', label: 'BIOS', icon: '⚙' },
 		{ id: 'overlays', label: 'Overlays', icon: '🎨' },
@@ -56,6 +57,7 @@
 		{ id: 'files', label: 'File Browser', icon: '📁' },
 		{ id: 'logs', label: 'Log Viewer', icon: '📋' }
 	];
+	const navItems = $derived(allNavItems.filter(item => isFeatureEnabled(item.id)));
 </script>
 
 {#snippet themeIcon()}
