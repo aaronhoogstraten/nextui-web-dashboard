@@ -248,7 +248,7 @@
 					class="ml-auto text-xs font-semibold text-accent animate-pulse hover:text-accent-hover transition-colors"
 					title="Click to refresh"
 				>
-					Update available
+					Refresh for new version
 				</button>
 			{:else}
 				<span class="ml-auto text-xs text-text-muted opacity-60">{APP_VERSION === 'dev' ? 'dev' : `v${APP_VERSION.replace(/^v/, '')}`}</span>
