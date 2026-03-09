@@ -14,6 +14,7 @@ import {
 } from '$lib/adb/stay-awake.js';
 import { adbLog } from '$lib/stores/log.svelte.js';
 import { formatError } from '$lib/utils.js';
+import { checkForDeviceUpdate } from '$lib/stores/device-update.svelte.js';
 import type { ShellCmd } from '$lib/adb/adb-utils.js';
 
 /** Shared reactive connection state — use $state.raw to prevent deep proxy on Adb internals */
@@ -289,6 +290,7 @@ export async function connect() {
 		// Use version from MinUI.zip verification
 		nextuiVersion = verify.version ?? 'Unknown';
 		adbLog.info(`NextUI version: ${nextuiVersion}`);
+		checkForDeviceUpdate();
 
 		connection = conn;
 		status = `Connected: ${deviceName}`;

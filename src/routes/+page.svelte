@@ -21,6 +21,7 @@
 	} from '$lib/stores/connection.svelte.js';
 	import { hasWebUSB } from '$lib/adb/connection.js';
 	import { isFeatureEnabled } from '$lib/stores/features.svelte.js';
+	import DeviceUpdateBar from '../components/DeviceUpdateBar.svelte';
 
 	let activeView: string = $state('welcome');
 	const connectedAdb = $derived(getConnection()?.adb ?? null);
@@ -35,6 +36,7 @@
 <Sidebar {activeView} onNavigate={handleNavigate} />
 
 <div class="flex-1 flex flex-col overflow-hidden">
+	<DeviceUpdateBar />
 	<main class="flex-1 overflow-y-auto bg-bg text-text">
 		{#if !isConnected()}
 			<!-- Welcome / Connect prompt -->
