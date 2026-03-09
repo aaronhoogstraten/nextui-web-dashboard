@@ -57,4 +57,4 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh workflow run deploy.yml --ref prod
+          gh workflow run deploy.yml --ref prod -f version=${{ inputs.version }}

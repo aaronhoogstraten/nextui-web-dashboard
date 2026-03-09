@@ -17,6 +17,7 @@
 	import { hasWebUSB, getBrowserRecommendation } from '$lib/adb/connection.js';
 	import { toggleTheme, isDark, getTheme } from '$lib/stores/theme.svelte.js';
 	import { isFeatureEnabled } from '$lib/stores/features.svelte.js';
+	import { APP_VERSION, isUpdateAvailable } from '$lib/stores/version.svelte.js';
 	import { base } from '$app/paths';
 
 	interface NavItem {
@@ -240,5 +241,18 @@
 				/>
 			</svg>
 		</a>
+		{#if !collapsed}
+			{#if isUpdateAvailable()}
+				<button
+					onclick={() => location.reload()}
+					class="ml-auto text-xs font-semibold text-accent animate-pulse hover:text-accent-hover transition-colors"
+					title="Click to refresh"
+				>
+					Update available
+				</button>
+			{:else}
+				<span class="ml-auto text-xs text-text-muted opacity-60">{APP_VERSION === 'dev' ? 'dev' : `v${APP_VERSION.replace(/^v/, '')}`}</span>
+			{/if}
+		{/if}
 	</div>
 </aside>

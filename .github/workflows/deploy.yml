@@ -1,9 +1,13 @@
 name: Deploy to GitHub Pages
 
 on:
-  push:
-    branches: [prod]
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'App version (e.g. v1.0.0)'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -26,10 +30,15 @@ jobs:
       - run: npm ci
       - name: Fetch Developer.pak
         run: sh scripts/fetch-developer-pak.sh
+      - name: Resolve version
+        run: echo "APP_VERSION=${{ inputs.version || 'dev' }}" >> "$GITHUB_ENV"
+      - name: Write version file
+        run: echo "{\"version\":\"$APP_VERSION\"}" > static/version.json
       - run: npm run build
         env:
           NODE_ENV: production
           CUSTOM_DOMAIN: true
+          APP_VERSION: ${{ env.APP_VERSION }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: build
