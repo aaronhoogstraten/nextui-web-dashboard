@@ -39,7 +39,8 @@ export function dismissDeviceUpdate(): void {
 }
 
 export async function checkForDeviceUpdate(): Promise<void> {
-	if (fetchStatus !== 'idle') return;
+	if (fetchStatus === 'fetching') return;
+	dismissed = false;
 	fetchStatus = 'fetching';
 	try {
 		const res = await fetch('https://api.github.com/repos/LoveRetro/NextUI/releases/latest');
