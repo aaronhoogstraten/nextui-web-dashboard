@@ -203,7 +203,7 @@ export const ROM_SYSTEMS: RomSystem[] = [
 	{
 		systemName: 'Sony PlayStation',
 		systemCode: 'PS',
-		supportedFormats: ['.cue', '.iso', '.chd', '.pbp', '.zip']
+		supportedFormats: ['.cue', '.bin', '.iso', '.chd', '.pbp', '.zip']
 	},
 	{
 		systemName: 'Super Game Boy',
