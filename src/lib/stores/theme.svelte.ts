@@ -1,3 +1,5 @@
+import { untrack } from 'svelte';
+
 export type Theme = 'dark' | 'light' | 'system';
 
 const STORAGE_KEY = 'nextui-dashboard-theme';
@@ -36,8 +38,8 @@ if (typeof window !== 'undefined') {
 	});
 }
 
-// Apply on load
-applyTheme(theme);
+// Apply on load (intentionally non-reactive)
+untrack(() => applyTheme(theme));
 
 export function getTheme(): Theme {
 	return theme;
