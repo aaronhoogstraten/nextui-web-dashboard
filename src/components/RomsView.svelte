@@ -24,7 +24,7 @@
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
 	import ImagePreview from './ImagePreview.svelte';
 	import Modal from './Modal.svelte';
-	import OverwriteDialog, { type ConflictResolution } from './OverwriteDialog.svelte';
+	import OverwriteDialog from './OverwriteDialog.svelte';
 	import LargeArtDialog from './LargeArtDialog.svelte';
 	import RomSyncFlow from './RomSyncFlow.svelte';
 
@@ -55,6 +55,7 @@
 		name: string;
 		baseName: string;
 		size: bigint;
+		isDirectory: boolean;
 		mediaFileName: string;
 		hasMedia: boolean;
 		thumbnailUrl: string | null;
@@ -184,7 +185,7 @@
 			s.error = '';
 			try {
 				const entries = await listDirectory(adb, s.devicePath);
-				s.romCount = entries.filter((e) => e.isFile && !e.name.startsWith('.')).length;
+				s.romCount = entries.filter((e) => (e.isFile || e.isDirectory) && !e.name.startsWith('.')).length;
 			} catch {
 				s.romCount = 0;
 				s.error = 'Folder not found';
@@ -212,7 +213,7 @@
 				let romCount = 0;
 				try {
 					const entries = await listDirectory(adb, devicePath);
-					romCount = entries.filter((e) => e.isFile && !e.name.startsWith('.')).length;
+					romCount = entries.filter((e) => (e.isFile || e.isDirectory) && !e.name.startsWith('.')).length;
 				} catch {
 					// ignore
 				}
@@ -262,7 +263,7 @@
 			// Get ROM files
 			const entries = await listDirectory(adb, state.devicePath);
 			const romFiles = entries
-				.filter((e) => e.isFile && !e.name.startsWith('.'))
+				.filter((e) => (e.isFile || e.isDirectory) && !e.name.startsWith('.'))
 				.sort(compareByName);
 
 			// Get media files
@@ -324,15 +325,34 @@
 			state.displayNameMap = displayNameMap;
 			state.displayNameDirty = false;
 
+			// Compute total sizes for subdirectories (disc-based games)
+			const dirSizes = new Map<string, bigint>();
+			await Promise.all(
+				romFiles
+					.filter((f) => f.isDirectory)
+					.map(async (f) => {
+						try {
+							const children = await listDirectory(adb, `${state.devicePath}/${f.name}`);
+							const total = children
+								.filter((c) => c.isFile)
+								.reduce((sum, c) => sum + c.size, 0n);
+							dirSizes.set(f.name, total);
+						} catch {
+							// unreadable — leave size as-is
+						}
+					})
+			);
+
 			// Build ROM entries with media matching
 			state.roms = romFiles.map((f) => {
-				const baseName = getBaseName(f.name);
+				const baseName = f.isDirectory ? f.name : getBaseName(f.name);
 				const mediaFileName = `${baseName}.png`;
 				const hasMedia = mediaNames.has(mediaFileName);
 				return {
 					name: f.name,
 					baseName,
-					size: f.size,
+					size: dirSizes.get(f.name) ?? f.size,
+					isDirectory: f.isDirectory,
 					mediaFileName,
 					hasMedia,
 					thumbnailUrl: null,
@@ -476,6 +496,29 @@
 		previewAlt = '';
 	}
 
+	/**
+	 * Derive a game folder name from multiple .cue file base names.
+	 * Finds the longest common prefix, then strips any trailing incomplete
+	 * parenthetical (e.g. " (Disc " from "Game (USA) (Disc 1)" / "Game (USA) (Disc 2)").
+	 */
+	function deriveGameFolderName(cueBaseNames: string[]): string {
+		if (cueBaseNames.length === 1) return cueBaseNames[0];
+		let prefix = cueBaseNames[0];
+		for (let i = 1; i < cueBaseNames.length; i++) {
+			while (!cueBaseNames[i].startsWith(prefix)) {
+				prefix = prefix.substring(0, prefix.length - 1);
+			}
+		}
+		prefix = prefix.trimEnd();
+		// Strip trailing incomplete parenthetical like " (Disc"
+		const lastOpen = prefix.lastIndexOf('(');
+		const lastClose = prefix.lastIndexOf(')');
+		if (lastOpen > lastClose) {
+			prefix = prefix.substring(0, lastOpen).trimEnd();
+		}
+		return prefix || cueBaseNames[0];
+	}
+
 	async function uploadRoms(state: SystemState) {
 		const accept = state.system.isCustom ? undefined : state.system.supportedFormats.join(',');
 		const files = await pickFiles({ accept });
@@ -484,57 +527,142 @@
 		uploadingTo = state.system.systemCode;
 		let uploaded = 0;
 		let skipped = 0;
-		const totalBytes = Array.from(files).reduce((sum, f) => sum + f.size, 0);
-		beginTransfer('upload', files.length, totalBytes);
+
+		// Partition files into disc-based (.cue/.bin/.m3u) and flat
+		const DISC_EXTS = new Set(['.cue', '.bin', '.m3u']);
+		const cueFiles: File[] = [];
+		const discFiles: File[] = [];
+		const flatFiles: File[] = [];
+		const invalidFiles: File[] = [];
+
+		for (const file of files) {
+			const dotIndex = file.name.lastIndexOf('.');
+			const ext = dotIndex > 0 ? file.name.substring(dotIndex).toLowerCase() : '';
+			if (!isValidRomExtension(ext, state.system)) {
+				invalidFiles.push(file);
+				continue;
+			}
+			if (DISC_EXTS.has(ext)) {
+				if (ext === '.cue') cueFiles.push(file);
+				discFiles.push(file);
+			} else {
+				flatFiles.push(file);
+			}
+		}
+
+		// Only create a disc folder when .cue files are present;
+		// otherwise .bin/.m3u upload as flat files (normal for other systems)
+		if (cueFiles.length === 0) {
+			flatFiles.push(...discFiles);
+			discFiles.length = 0;
+		}
+
+		const hasM3u = discFiles.some((f) => f.name.toLowerCase().endsWith('.m3u'));
+		const generateM3u = cueFiles.length > 1 && !hasM3u;
+		const totalFileCount = discFiles.length + flatFiles.length + invalidFiles.length + (generateM3u ? 1 : 0);
+		const totalBytes = files.reduce((sum, f) => sum + f.size, 0);
+
+		if (discFiles.length + flatFiles.length === 0) {
+			state.error = 'No valid files selected';
+			uploadingTo = null;
+			return;
+		}
+
+		beginTransfer('upload', totalFileCount, totalBytes);
+
+		// Skip invalid-extension files in transfer progress
+		for (const file of invalidFiles) {
+			skipTransferFile(file.size);
+		}
 
 		try {
-			// Build set of existing file names for conflict detection
-			let existingNames: Set<string> | null = null;
-			try {
-				const entries = await listDirectory(adb, state.devicePath);
-				existingNames = new Set(entries.filter((e) => e.isFile).map((e) => e.name));
-			} catch {
-				// If listing fails, skip conflict detection
+			// --- Disc-based upload: create game folder and push files into it ---
+			if (discFiles.length > 0) {
+				const m3uFile = discFiles.find((f) => f.name.toLowerCase().endsWith('.m3u'));
+				const folderName = m3uFile
+					? getBaseName(m3uFile.name)
+					: deriveGameFolderName(cueFiles.map((f) => getBaseName(f.name)));
+				const folderPath = `${state.devicePath}/${folderName}`;
+
+				// Check if folder already exists on device
+				let folderExists = false;
+				try {
+					const entries = await listDirectory(adb, state.devicePath);
+					folderExists = entries.some((e) => e.isDirectory && e.name === folderName);
+				} catch {
+					/* ignore */
+				}
+
+				if (folderExists) {
+					const resolution = await overwriteDialog.show(folderName, false);
+					if (resolution === 'skip' || resolution === 'skip-all') {
+						skipped += discFiles.length;
+						for (const file of discFiles) skipTransferFile(file.size);
+						if (generateM3u) skipTransferFile(0);
+						discFiles.length = 0;
+					}
+					// 'overwrite' / 'overwrite-all' → proceed
+				}
+
+				if (discFiles.length > 0) {
+					await adbExec(ShellCmd.mkdir(folderPath));
+
+					for (const file of discFiles) {
+						const data = new Uint8Array(await file.arrayBuffer());
+						await trackedPush(adb, `${folderPath}/${file.name}`, data);
+						uploaded++;
+					}
+
+					// Auto-generate .m3u listing all .cue files
+					if (generateM3u) {
+						const m3uContent = cueFiles.map((f) => f.name).sort().join('\n') + '\n';
+						const m3uData = new TextEncoder().encode(m3uContent);
+						await trackedPush(adb, `${folderPath}/${folderName}.m3u`, m3uData);
+						uploaded++;
+					}
+				}
 			}
 
-			let conflictPolicy: 'ask' | 'overwrite-all' | 'skip-all' = 'ask';
-
-			for (const file of files) {
-				const dotIndex = file.name.lastIndexOf('.');
-				const ext = dotIndex > 0 ? file.name.substring(dotIndex).toLowerCase() : '';
-				if (!isValidRomExtension(ext, state.system)) {
-					skipTransferFile(file.size);
-					continue;
+			// --- Flat upload: files go directly into the system directory ---
+			if (flatFiles.length > 0) {
+				let existingNames: Set<string> | null = null;
+				try {
+					const entries = await listDirectory(adb, state.devicePath);
+					existingNames = new Set(entries.filter((e) => e.isFile).map((e) => e.name));
+				} catch {
+					/* ignore */
 				}
 
-				// Check for conflict
-				if (existingNames?.has(file.name)) {
-					if (conflictPolicy === 'skip-all') {
-						skipped++;
-						skipTransferFile(file.size);
-						continue;
-					}
-					if (conflictPolicy === 'ask') {
-						const resolution = await overwriteDialog.show(file.name, files.length > 1);
-						if (resolution === 'skip') {
+				let conflictPolicy: 'ask' | 'overwrite-all' | 'skip-all' = 'ask';
+
+				for (const file of flatFiles) {
+					if (existingNames?.has(file.name)) {
+						if (conflictPolicy === 'skip-all') {
 							skipped++;
 							skipTransferFile(file.size);
 							continue;
 						}
-						if (resolution === 'skip-all') {
-							skipped++;
-							skipTransferFile(file.size);
-							conflictPolicy = 'skip-all';
-							continue;
+						if (conflictPolicy === 'ask') {
+							const resolution = await overwriteDialog.show(file.name, flatFiles.length > 1);
+							if (resolution === 'skip') {
+								skipped++;
+								skipTransferFile(file.size);
+								continue;
+							}
+							if (resolution === 'skip-all') {
+								skipped++;
+								skipTransferFile(file.size);
+								conflictPolicy = 'skip-all';
+								continue;
+							}
+							if (resolution === 'overwrite-all') conflictPolicy = 'overwrite-all';
 						}
-						if (resolution === 'overwrite-all') conflictPolicy = 'overwrite-all';
 					}
-				}
 
-				const data = new Uint8Array(await file.arrayBuffer());
-				const remotePath = `${state.devicePath}/${file.name}`;
-				await trackedPush(adb, remotePath, data);
-				uploaded++;
+					const data = new Uint8Array(await file.arrayBuffer());
+					await trackedPush(adb, `${state.devicePath}/${file.name}`, data);
+					uploaded++;
+				}
 			}
 
 			const parts: string[] = [];
@@ -549,7 +677,7 @@
 			} else {
 				try {
 					const entries = await listDirectory(adb, state.devicePath);
-					state.romCount = entries.filter((e) => e.isFile && !e.name.startsWith('.')).length;
+					state.romCount = entries.filter((e) => (e.isFile || e.isDirectory) && !e.name.startsWith('.')).length;
 				} catch {
 					// ignore
 				}
@@ -603,8 +731,9 @@
 		if (!confirm(`Delete "${rom.name}"${rom.hasMedia ? ' and its box art' : ''}?`)) return;
 		removingRom = rom.name;
 		try {
-			// Remove the ROM file
-			await adbExec(ShellCmd.rm(`${state.devicePath}/${rom.name}`));
+			const romPath = `${state.devicePath}/${rom.name}`;
+			// Remove the ROM file or game folder
+			await adbExec(rom.isDirectory ? ShellCmd.rmrf(romPath) : ShellCmd.rm(romPath));
 
 			// Also remove media art if present
 			if (rom.hasMedia) {

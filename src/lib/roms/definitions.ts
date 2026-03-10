@@ -145,7 +145,7 @@ export const ROM_SYSTEMS: RomSystem[] = [
 		systemName: 'PC Engine',
 		systemCode: 'PCE',
 		romPathSystemName: 'TurboGrafx-16',
-		supportedFormats: ['.pce', '.cue', '.iso', '.chd', '.zip']
+		supportedFormats: ['.pce', '.cue', '.bin', '.m3u', '.iso', '.chd', '.zip']
 	},
 	{
 		systemName: 'Pico-8',
@@ -166,7 +166,7 @@ export const ROM_SYSTEMS: RomSystem[] = [
 	{
 		systemName: 'Sega CD',
 		systemCode: 'SEGACD',
-		supportedFormats: ['.cue', '.iso', '.chd', '.zip']
+		supportedFormats: ['.cue', '.bin', '.m3u', '.iso', '.chd', '.zip']
 	},
 	{
 		systemName: 'Sega Game Gear',
@@ -203,7 +203,7 @@ export const ROM_SYSTEMS: RomSystem[] = [
 	{
 		systemName: 'Sony PlayStation',
 		systemCode: 'PS',
-		supportedFormats: ['.cue', '.bin', '.iso', '.chd', '.pbp', '.zip']
+		supportedFormats: ['.cue', '.bin', '.m3u', '.iso', '.chd', '.pbp', '.zip']
 	},
 	{
 		systemName: 'Super Game Boy',

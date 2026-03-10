@@ -9,7 +9,9 @@
 		'.xml',
 		'.yml',
 		'.log',
-		'.csv'
+		'.csv',
+		'.m3u',
+		'.cue'
 	]);
 	const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp', '.svg']);
 </script>
