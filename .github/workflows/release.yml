@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g. v1.0.0)'
+        description: 'Version (e.g. 1.0.0)'
         required: true
         type: string
 
@@ -15,6 +15,8 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      VERSION_TAG: v${{ inputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -23,22 +25,22 @@ jobs:
 
       - name: Validate version format
         run: |
-          if [[ ! "${{ inputs.version }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::Version must match format v1.0.0"
+          if [[ ! "${{ inputs.version }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Version must be semver format (e.g. 1.0.0)"
             exit 1
           fi
 
       - name: Check tag does not already exist
         run: |
-          if git rev-parse "${{ inputs.version }}" >/dev/null 2>&1; then
-            echo "::error::Tag ${{ inputs.version }} already exists"
+          if git rev-parse "$VERSION_TAG" >/dev/null 2>&1; then
+            echo "::error::Tag $VERSION_TAG already exists"
             exit 1
           fi
 
       - name: Create version tag on main
         run: |
-          git tag "${{ inputs.version }}"
-          git push origin "${{ inputs.version }}"
+          git tag "$VERSION_TAG"
+          git push origin "$VERSION_TAG"
 
       - name: Promote main to prod
         run: |
@@ -48,13 +50,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "${{ inputs.version }}" \
+          gh release create "$VERSION_TAG" \
             --target main \
-            --title "${{ inputs.version }}" \
+            --title "$VERSION_TAG" \
             --generate-notes
 
       - name: Trigger deploy workflow
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh workflow run deploy.yml --ref prod -f version=${{ inputs.version }}
+          gh workflow run deploy.yml --ref prod -f version=$VERSION_TAG
