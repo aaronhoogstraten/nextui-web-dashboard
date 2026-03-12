@@ -19,15 +19,23 @@
 		fullPath: string;
 		/** File size in bytes */
 		size: bigint;
+		/** Last modified time (Unix seconds) */
+		mtime: bigint;
 	}
+
+	type SortKey = 'path' | 'size' | 'mtime';
+	type SortDir = 'asc' | 'desc';
 
 	const MAX_LINES = 2000;
 
 	let logFiles: LogFile[] = $state([]);
 	let scanning = $state(false);
 	let downloading = $state(false);
+	let downloadingFile: string | null = $state(null);
 	let notice: Notification | null = $state(null);
 	let progress: string = $state('');
+	let sortKey: SortKey = $state('path');
+	let sortDir: SortDir = $state('asc');
 
 	// Tail view state
 	let viewingFile: LogFile | null = $state(null);
@@ -39,6 +47,40 @@
 	let logContainer: HTMLElement | undefined = $state();
 
 	const totalSize = $derived(logFiles.reduce((sum, f) => sum + Number(f.size), 0));
+
+	const sortedFiles = $derived.by(() => {
+		const dir = sortDir === 'asc' ? 1 : -1;
+		return [...logFiles].sort((a, b) => {
+			switch (sortKey) {
+				case 'path':
+					return dir * a.relativePath.localeCompare(b.relativePath);
+				case 'size':
+					return dir * Number(a.size - b.size);
+				case 'mtime':
+					return dir * Number(a.mtime - b.mtime);
+			}
+		});
+	});
+
+	function toggleSort(key: SortKey) {
+		if (sortKey === key) {
+			sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+		} else {
+			sortKey = key;
+			sortDir = 'asc';
+		}
+	}
+
+	function sortIndicator(key: SortKey): string {
+		if (sortKey !== key) return '';
+		return sortDir === 'asc' ? ' \u25B2' : ' \u25BC';
+	}
+
+	function formatDate(mtime: bigint): string {
+		// Treat Unix epoch (0) and FAT epoch (Jan 1 1980 = 315532800) as unset
+		if (mtime < 315619200n) return '\u2014';
+		return new Date(Number(mtime) * 1000).toLocaleString();
+	}
 
 	async function scrollToBottom() {
 		await tick();
@@ -137,7 +179,8 @@
 							found.push({
 								relativePath: `${subdir.name}/logs/${entry.name}`,
 								fullPath: `${logsPath}/${entry.name}`,
-								size: entry.size
+								size: entry.size,
+								mtime: entry.mtime
 							});
 						}
 					}
@@ -200,6 +243,28 @@
 			endTransfer();
 		}
 		downloading = false;
+	}
+
+	async function downloadSingleLog(file: LogFile) {
+		notice = null;
+		downloadingFile = file.fullPath;
+		beginTransfer('download', 1);
+		try {
+			const data = await trackedPull(adb, file.fullPath);
+			const blob = new Blob([data]);
+			const filename = file.relativePath.replace(/\//g, '_');
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = filename;
+			a.click();
+			URL.revokeObjectURL(url);
+		} catch (e) {
+			notice = errorMsg(`Failed to download ${file.relativePath}: ${formatError(e)}`);
+		} finally {
+			endTransfer();
+			downloadingFile = null;
+		}
 	}
 
 	// Scan on mount; clean up tail socket on destroy
@@ -301,34 +366,53 @@
 			<table class="w-full text-sm">
 				<thead class="bg-surface sticky top-0">
 					<tr class="text-left">
-						<th class="py-2 px-3 font-medium text-text-muted">File</th>
-						<th class="py-2 px-3 font-medium text-text-muted w-28 text-right">Size</th>
+						<th class="py-2 px-3 font-medium text-text-muted">
+							<button onclick={() => toggleSort('path')} class="hover:text-text cursor-pointer">File{sortIndicator('path')}</button>
+						</th>
+						<th class="py-2 px-3 font-medium text-text-muted w-28">
+							<button onclick={() => toggleSort('size')} class="hover:text-text cursor-pointer">Size{sortIndicator('size')}</button>
+						</th>
+						<th class="py-2 px-3 font-medium text-text-muted w-44">
+							<button onclick={() => toggleSort('mtime')} class="hover:text-text cursor-pointer">Modified{sortIndicator('mtime')}</button>
+						</th>
 						<th class="py-2 px-3 font-medium text-text-muted w-20"></th>
 					</tr>
 				</thead>
 				<tbody>
 					{#if scanning}
 						<tr>
-							<td colspan="3" class="py-8 text-center text-text-muted">Scanning for log files...</td>
+							<td colspan="4" class="py-8 text-center text-text-muted">Scanning for log files...</td>
 						</tr>
 					{:else if logFiles.length === 0}
 						<tr>
-							<td colspan="3" class="py-8 text-center text-text-muted">No log files found</td>
+							<td colspan="4" class="py-8 text-center text-text-muted">No log files found</td>
 						</tr>
 					{:else}
-						{#each logFiles as file}
+						{#each sortedFiles as file}
 							<tr class="border-t border-border hover:bg-surface-hover transition-colors">
 								<td class="py-1.5 px-3 font-mono text-text">{file.relativePath}</td>
-								<td class="py-1.5 px-3 text-right text-text-muted tabular-nums">
+								<td class="py-1.5 px-3 text-text-muted tabular-nums">
 									{formatSize(Number(file.size))}
 								</td>
+								<td class="py-1.5 px-3 text-text-muted tabular-nums">
+									{formatDate(file.mtime)}
+								</td>
 								<td class="py-1.5 px-3 text-right">
-									<button
-										onclick={() => startTail(file)}
-										class="text-xs bg-accent text-white px-2 py-1 rounded hover:bg-accent-hover"
-									>
-										View
-									</button>
+									<div class="flex justify-end gap-1.5">
+										<button
+											onclick={() => startTail(file)}
+											class="text-xs bg-accent text-white px-2 py-1 rounded hover:bg-accent-hover"
+										>
+											View
+										</button>
+										<button
+											onclick={() => downloadSingleLog(file)}
+											disabled={downloading || downloadingFile !== null}
+											class="text-xs bg-surface hover:bg-surface-hover text-text px-2 py-1 rounded border border-border disabled:opacity-50"
+										>
+											{downloadingFile === file.fullPath ? '...' : 'Download'}
+										</button>
+									</div>
 								</td>
 							</tr>
 						{/each}
