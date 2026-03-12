@@ -13,7 +13,9 @@ Requires a Chromium-based browser (Chrome, Edge, etc.).
 - **Collections** - Edit collection files: add/remove/reorder ROMs with a visual picker and path validation.
 - **Screenshots** - Browse and download screenshots from the device.
 - **File Browser** - Navigate the device filesystem, upload/download files, search recursively, preview images, and edit text-based config files.
-- **Download Logs** - Collect all log files from the device and download as a zip archive.
+- **Log Viewer** - Scan for log files across the device, live-tail logs in the browser, download individually or as a zip archive. Sortable by name, size, and modified date.
+- **Keep Device Awake** - Prevents the device from sleeping during a dashboard session.
+- **Update Notifications** - Checks for new NextUI releases and displays a notification bar when an update is available.
 - **Platform Detection** - Automatically detects the connected device platform (e.g. tg5040) for targeted emulator validation.
 - **Light/Dark Theme** - Toggle between dark and light modes.
 
