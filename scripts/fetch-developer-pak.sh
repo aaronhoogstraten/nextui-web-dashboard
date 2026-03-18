@@ -4,7 +4,7 @@
 # Pin to a known good release to ensure reproducible builds and avoid supply chain risks.
 set -e
 
-VERSION="0.9.0"
+VERSION="0.10.0"
 ZIP_URL="https://github.com/josegonzalez/minui-developer-pak/releases/download/${VERSION}/Developer.pak.zip"
 PAKJSON_URL="https://raw.githubusercontent.com/josegonzalez/minui-developer-pak/refs/tags/${VERSION}/pak.json"
 
