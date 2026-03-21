@@ -6,7 +6,7 @@
 	import { formatSize, formatError, plural, errorMsg, type Notification } from '$lib/utils.js';
 	import { adbLog } from '$lib/stores/log.svelte.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
-	import { parseRomDirectoryName } from '$lib/roms/index.js';
+	import { buildDeviceDirMap, parseRomDirectoryName } from '$lib/roms/index.js';
 	import Modal from './Modal.svelte';
 	import OverwriteDialog, { type ConflictResolution } from './OverwriteDialog.svelte';
 	import StatusMessage from './StatusMessage.svelte';
@@ -27,6 +27,7 @@
 
 	interface SyncSystem {
 		dirName: string;
+		deviceDirName: string;
 		files: SyncFile[];
 		expanded: boolean;
 	}
@@ -87,7 +88,7 @@
 		syncSystems = [];
 		syncScanStatus = 'Scanning local folder...';
 
-		const localSystems: { dirName: string; files: SyncFile[] }[] = [];
+		const localSystems: { dirName: string; deviceDirName: string; systemCode: string; files: SyncFile[] }[] = [];
 
 		for await (const entry of dirHandle.values()) {
 			if (entry.kind !== 'directory') continue;
@@ -124,7 +125,7 @@
 			} catch { /* no .media/ */ }
 
 			if (sysFiles.length > 0) {
-				localSystems.push({ dirName: entry.name, files: sysFiles });
+				localSystems.push({ dirName: entry.name, deviceDirName: entry.name, systemCode: parsed.systemCode, files: sysFiles });
 			}
 		}
 
@@ -136,9 +137,20 @@
 
 		syncScanStatus = 'Comparing with device...';
 
+		// Map systemCode → actual device directory name to handle
+		// directories with ordering prefixes like "1) Game Boy (GB)"
+		let deviceDirByCode = new Map<string, string>();
+		try {
+			deviceDirByCode = buildDeviceDirMap(await listDirectory(adb, DEVICE_PATHS.roms));
+		} catch { /* Roms directory unreadable */ }
+
 		for (const sys of localSystems) {
+			// Use the actual device directory name if it differs from local
+			const actualDir = deviceDirByCode.get(sys.systemCode);
+			if (actualDir) sys.deviceDirName = actualDir;
+
 			syncScanStatus = `Comparing ${sys.dirName}...`;
-			const devicePath = `${DEVICE_PATHS.roms}/${sys.dirName}`;
+			const devicePath = `${DEVICE_PATHS.roms}/${sys.deviceDirName}`;
 
 			const deviceFileMap = new Map<string, number>();
 			try {
@@ -198,7 +210,7 @@
 
 	async function executeSync() {
 		const filesToSync = syncSystems.flatMap((sys) =>
-			sys.files.filter((f) => f.checked).map((f) => ({ system: sys.dirName, file: f }))
+			sys.files.filter((f) => f.checked).map((f) => ({ system: sys.dirName, deviceDirName: sys.deviceDirName, file: f }))
 		);
 		if (filesToSync.length === 0) { syncNotice = errorMsg('No files selected.'); return; }
 
@@ -229,7 +241,7 @@
 			}
 
 			try {
-				const devicePath = `${DEVICE_PATHS.roms}/${item.system}`;
+				const devicePath = `${DEVICE_PATHS.roms}/${item.deviceDirName}`;
 				await adbExec(ShellCmd.mkdir(item.file.isMedia ? devicePath + '/.media' : devicePath));
 				const file = await item.file.fileHandle.getFile();
 				const data = new Uint8Array(await file.arrayBuffer());

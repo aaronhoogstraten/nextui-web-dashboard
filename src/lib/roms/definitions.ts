@@ -275,6 +275,25 @@ export function getRomDirectoryName(systemCode: string): string | null {
 }
 
 /**
+ * Build a map of systemCode → actual directory name from device directory entries.
+ * Handles directories with ordering prefixes like "1) Game Boy (GB)".
+ * Uses the first match per system code when duplicates exist.
+ */
+export function buildDeviceDirMap(
+	entries: readonly { name: string; isDirectory: boolean }[]
+): Map<string, string> {
+	const map = new Map<string, string>();
+	for (const entry of entries) {
+		if (!entry.isDirectory || entry.name.startsWith('.')) continue;
+		const parsed = parseRomDirectoryName(entry.name);
+		if (parsed && !map.has(parsed.systemCode)) {
+			map.set(parsed.systemCode, entry.name);
+		}
+	}
+	return map;
+}
+
+/**
  * Parse a ROM directory name into systemName and systemCode.
  * Pattern: "{DisplayName} ({SystemCode})"
  * Uses the last parenthesized group so display names with parens are handled correctly.

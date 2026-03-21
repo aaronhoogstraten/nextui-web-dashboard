@@ -3,8 +3,9 @@
 	import type { Adb } from '@yume-chan/adb';
 	import {
 		ROM_SYSTEMS,
+		ROM_SYSTEM_CODES,
+		buildDeviceDirMap,
 		getRomDevicePath,
-		getRomMediaPath,
 		isValidRomExtension,
 		parseRomDirectoryName,
 		type RomSystem
@@ -179,10 +180,43 @@
 		}
 		systems = systems.filter((s) => !s.system.isCustom);
 
-		// Check predefined systems
+		// Map systemCode → actual device directory name to handle
+		// directories with ordering prefixes like "1) Game Boy (GB)"
+		let deviceDirByCode = new Map<string, string>();
+		const unmatchedDirs: { dirName: string; parsed: { systemName: string; systemCode: string } }[] = [];
+		try {
+			const romDirs = await listDirectory(adb, DEVICE_PATHS.roms);
+			deviceDirByCode = buildDeviceDirMap(romDirs);
+			// Collect directories with unknown system codes for custom system discovery
+			for (const dir of romDirs) {
+				if (!dir.isDirectory || dir.name.startsWith('.')) continue;
+				const parsed = parseRomDirectoryName(dir.name);
+				if (parsed && !ROM_SYSTEM_CODES.has(parsed.systemCode)) {
+					unmatchedDirs.push({ dirName: dir.name, parsed });
+				}
+			}
+		} catch {
+			// Roms directory unreadable — skip discovery
+		}
+
+		// Check predefined systems, using actual device paths when available
 		for (const s of systems) {
 			s.loading = true;
 			s.error = '';
+
+			// If the device has a directory matching this system code (possibly with
+			// an ordering prefix like "1) "), use that path instead of the default.
+			// Always reset to the canonical path otherwise, in case a previously
+			// discovered prefixed directory was renamed or removed.
+			const actualDir = deviceDirByCode.get(s.system.systemCode);
+			if (actualDir) {
+				s.devicePath = `${DEVICE_PATHS.roms}/${actualDir}`;
+				s.iconFileName = `${actualDir}.png`;
+			} else {
+				s.devicePath = getRomDevicePath(s.system);
+				s.iconFileName = `${dirName(s.devicePath)}.png`;
+			}
+
 			try {
 				const entries = await listDirectory(adb, s.devicePath);
 				s.romCount = entries.filter((e) => (e.isFile || e.isDirectory) && !e.name.startsWith('.')).length;
@@ -200,51 +234,41 @@
 			}
 		}
 
-		// Discover custom systems from device
-		const knownCodes = new Set(ROM_SYSTEMS.map((s) => s.systemCode));
-		try {
-			const romDirs = await listDirectory(adb, DEVICE_PATHS.roms);
-			for (const dir of romDirs) {
-				if (!dir.isDirectory || dir.name.startsWith('.')) continue;
-				const parsed = parseRomDirectoryName(dir.name);
-				if (!parsed || knownCodes.has(parsed.systemCode)) continue;
-
-				const devicePath = `${DEVICE_PATHS.roms}/${dir.name}`;
-				let romCount = 0;
-				try {
-					const entries = await listDirectory(adb, devicePath);
-					romCount = entries.filter((e) => (e.isFile || e.isDirectory) && !e.name.startsWith('.')).length;
-				} catch {
-					// ignore
-				}
-
-				systems.push({
-					system: {
-						systemName: parsed.systemName,
-						systemCode: parsed.systemCode,
-						supportedFormats: [],
-						isCustom: true
-					},
-					devicePath,
-					romCount,
-					mediaCount: 0,
-					loading: false,
-					expanded: false,
-					error: '',
-					roms: [],
-					romsLoaded: false,
-					loadingRoms: false,
-					bgUrl: null,
-					bglistUrl: null,
-					iconUrl: null,
-					iconFileName: `${dirName(devicePath)}.png`,
-					displayNameMap: new Map(),
-					displayNameDirty: false,
-					savingNames: false
-				});
+		// Discover custom systems from device (directories with unknown system codes)
+		for (const { dirName: dName, parsed } of unmatchedDirs) {
+			const devicePath = `${DEVICE_PATHS.roms}/${dName}`;
+			let romCount = 0;
+			try {
+				const entries = await listDirectory(adb, devicePath);
+				romCount = entries.filter((e) => (e.isFile || e.isDirectory) && !e.name.startsWith('.')).length;
+			} catch {
+				// ignore
 			}
-		} catch {
-			// Roms directory unreadable — skip discovery
+
+			systems.push({
+				system: {
+					systemName: parsed.systemName,
+					systemCode: parsed.systemCode,
+					supportedFormats: [],
+					isCustom: true
+				},
+				devicePath,
+				romCount,
+				mediaCount: 0,
+				loading: false,
+				expanded: false,
+				error: '',
+				roms: [],
+				romsLoaded: false,
+				loadingRoms: false,
+				bgUrl: null,
+				bglistUrl: null,
+				iconUrl: null,
+				iconFileName: `${dirName(devicePath)}.png`,
+				displayNameMap: new Map(),
+				displayNameDirty: false,
+				savingNames: false
+			});
 		}
 
 		refreshing = false;
@@ -268,7 +292,7 @@
 
 			// Get media files
 			let mediaNames = new Set<string>();
-			const mediaPath = getRomMediaPath(state.system);
+			const mediaPath = `${state.devicePath}/.media`;
 			try {
 				const mediaEntries = await listDirectory(adb, mediaPath);
 				mediaNames = new Set(mediaEntries.filter((e) => e.isFile).map((e) => e.name));
@@ -375,7 +399,7 @@
 	}
 
 	async function loadThumbnails(state: SystemState) {
-		const mediaPath = getRomMediaPath(state.system);
+		const mediaPath = `${state.devicePath}/.media`;
 		for (const rom of state.roms) {
 			if (!rom.hasMedia || rom.thumbnailUrl) continue;
 			rom.loadingThumb = true;
@@ -428,14 +452,14 @@
 		if (filename === state.iconFileName) {
 			return `${DEVICE_PATHS.roms}/.media/${filename}`;
 		}
-		return `${getRomMediaPath(state.system)}/${filename}`;
+		return `${state.devicePath}/.media/${filename}`;
 	}
 
 	function getSpecialMediaDir(state: SystemState, filename: string): string {
 		if (filename === state.iconFileName) {
 			return `${DEVICE_PATHS.roms}/.media`;
 		}
-		return getRomMediaPath(state.system);
+		return `${state.devicePath}/.media`;
 	}
 
 	async function uploadSpecialMedia(state: SystemState, filename: string) {
@@ -701,7 +725,7 @@
 		beginTransfer('upload', 1, data.byteLength);
 
 		try {
-			const mediaPath = getRomMediaPath(state.system);
+			const mediaPath = `${state.devicePath}/.media`;
 
 			const mediaDirExists = await pathExists(adb, mediaPath);
 			if (!mediaDirExists) {
@@ -737,7 +761,7 @@
 
 			// Also remove media art if present
 			if (rom.hasMedia) {
-				const mediaPath = getRomMediaPath(state.system);
+				const mediaPath = `${state.devicePath}/.media`;
 				await adbExec(ShellCmd.rm(`${mediaPath}/${rom.mediaFileName}`));
 			}
 
@@ -760,7 +784,7 @@
 	async function removeMedia(state: SystemState, rom: RomEntry) {
 		removingMediaFor = rom.name;
 		try {
-			const mediaPath = getRomMediaPath(state.system);
+			const mediaPath = `${state.devicePath}/.media`;
 			const remotePath = `${mediaPath}/${rom.mediaFileName}`;
 			await adbExec(ShellCmd.rm(remotePath));
 
