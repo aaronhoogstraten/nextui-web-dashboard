@@ -825,6 +825,72 @@
 		return lines.join('\n') + (lines.length > 0 ? '\n' : '');
 	}
 
+	/** Find sibling system states (same system, different emulator — e.g. GBA/MGBA, SFC/SUPA) */
+	function getSiblingStates(state: SystemState): SystemState[] {
+		const pathName = state.system.romPathSystemName ?? state.system.systemName;
+		return systems.filter(
+			(s) =>
+				s !== state &&
+				(s.system.romPathSystemName ?? s.system.systemName) === pathName
+		);
+	}
+
+	/**
+	 * Sync map.txt to sibling emulator directories.
+	 * Workaround for NextUI bug: when a system has multiple emulator directories
+	 * (e.g. GBA + MGBA), all directories must have a consistent map.txt.
+	 * Merges entries so sibling-specific display names are preserved.
+	 */
+	async function syncMapTxtToSiblings(
+		state: SystemState,
+		mapContent: Map<string, string>,
+		deletedKeys: ReadonlySet<string>
+	) {
+		const siblings = getSiblingStates(state);
+		for (const sib of siblings) {
+			try {
+				// Read existing sibling map.txt to preserve sibling-specific entries
+				const mergedMap = new Map<string, string>();
+				try {
+					const exists = await pathExists(adb, `${sib.devicePath}/map.txt`);
+					if (exists) {
+						const raw = await pullFile(adb, `${sib.devicePath}/map.txt`);
+						const existing = parseMapTxt(new TextDecoder().decode(raw));
+						for (const [k, v] of existing) mergedMap.set(k, v);
+					}
+				} catch {
+					// No existing map — start fresh
+				}
+
+				// Layer primary system's entries on top
+				for (const [k, v] of mapContent) {
+					mergedMap.set(k, v);
+				}
+				// Remove entries that were explicitly deleted
+				for (const k of deletedKeys) {
+					mergedMap.delete(k);
+				}
+
+				if (mergedMap.size === 0) {
+					await adbExec(ShellCmd.rmf(`${sib.devicePath}/map.txt`));
+				} else {
+					const content = serializeMapTxt(mergedMap);
+					const data = new TextEncoder().encode(content);
+					await pushFile(adb, `${sib.devicePath}/map.txt`, data);
+				}
+
+				// Update sibling's in-memory state
+				sib.displayNameMap = mergedMap;
+				for (const rom of sib.roms) {
+					rom.displayName = mergedMap.get(rom.name) || '';
+				}
+				sib.displayNameDirty = false;
+			} catch {
+				// Sibling directory may not exist on device — skip
+			}
+		}
+	}
+
 	function renameRom(state: SystemState, rom: RomEntry) {
 		const current = rom.displayName || '';
 		const result = prompt('Display name for ' + rom.name + ':', current);
@@ -859,8 +925,17 @@
 				const data = new TextEncoder().encode(content);
 				await pushFile(adb, `${state.devicePath}/map.txt`, data);
 			}
+			// Compute keys removed from the map (for sibling sync)
+			const deletedKeys = new Set<string>();
+			for (const k of state.displayNameMap.keys()) {
+				if (!newMap.has(k)) deletedKeys.add(k);
+			}
+
 			state.displayNameMap = newMap;
 			state.displayNameDirty = false;
+
+			// Sync to sibling emulator directories
+			await syncMapTxtToSiblings(state, newMap, deletedKeys);
 		} catch (e) {
 			state.error = `Failed to save names: ${formatError(e)}`;
 		} finally {
@@ -894,6 +969,10 @@
 				await pushFile(adb, `${state.devicePath}/map.txt`, data);
 			}
 			state.displayNameMap = cleanMap;
+
+			// Sync to sibling emulator directories
+			const deletedKeys = rom.displayName ? new Set<string>() : new Set([rom.name]);
+			await syncMapTxtToSiblings(state, cleanMap, deletedKeys);
 
 			// Recheck system dirty state
 			state.displayNameDirty = state.roms.some(
