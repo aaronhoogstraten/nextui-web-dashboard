@@ -552,9 +552,10 @@
 		let uploaded = 0;
 		let skipped = 0;
 
-		// Partition files into disc-based (.cue/.bin/.m3u) and flat
-		const DISC_EXTS = new Set(['.cue', '.bin', '.m3u']);
+		// Partition files into disc-based (.cue/.bin/.m3u/.chd) and flat
+		const DISC_EXTS = new Set(['.cue', '.bin', '.m3u', '.chd']);
 		const cueFiles: File[] = [];
+		const chdFiles: File[] = [];
 		const discFiles: File[] = [];
 		const flatFiles: File[] = [];
 		const invalidFiles: File[] = [];
@@ -568,21 +569,23 @@
 			}
 			if (DISC_EXTS.has(ext)) {
 				if (ext === '.cue') cueFiles.push(file);
+				if (ext === '.chd') chdFiles.push(file);
 				discFiles.push(file);
 			} else {
 				flatFiles.push(file);
 			}
 		}
 
-		// Only create a disc folder when .cue files are present;
-		// otherwise .bin/.m3u upload as flat files (normal for other systems)
-		if (cueFiles.length === 0) {
+		// Create a disc folder when .cue files are present, or when .chd files
+		// are present with an .m3u (or multiple .chd); otherwise upload as flat files
+		const hasM3uFile = discFiles.some((f) => f.name.toLowerCase().endsWith('.m3u'));
+		const isDiscUpload = cueFiles.length > 0 || (chdFiles.length > 0 && (hasM3uFile || chdFiles.length > 1));
+		if (!isDiscUpload) {
 			flatFiles.push(...discFiles);
 			discFiles.length = 0;
 		}
 
-		const hasM3u = discFiles.some((f) => f.name.toLowerCase().endsWith('.m3u'));
-		const generateM3u = cueFiles.length > 1 && !hasM3u;
+		const generateM3u = isDiscUpload && (cueFiles.length > 0 ? cueFiles.length > 1 : chdFiles.length > 1) && !hasM3uFile;
 		const totalFileCount = discFiles.length + flatFiles.length + invalidFiles.length + (generateM3u ? 1 : 0);
 		const totalBytes = files.reduce((sum, f) => sum + f.size, 0);
 
@@ -602,10 +605,11 @@
 		try {
 			// --- Disc-based upload: create game folder and push files into it ---
 			if (discFiles.length > 0) {
+				const discContentFiles = cueFiles.length > 0 ? cueFiles : chdFiles;
 				const m3uFile = discFiles.find((f) => f.name.toLowerCase().endsWith('.m3u'));
 				const folderName = m3uFile
 					? getBaseName(m3uFile.name)
-					: deriveGameFolderName(cueFiles.map((f) => getBaseName(f.name)));
+					: deriveGameFolderName(discContentFiles.map((f) => getBaseName(f.name)));
 				const folderPath = `${state.devicePath}/${folderName}`;
 
 				// Check if folder already exists on device
@@ -637,9 +641,9 @@
 						uploaded++;
 					}
 
-					// Auto-generate .m3u listing all .cue files
+					// Auto-generate .m3u listing all disc content files
 					if (generateM3u) {
-						const m3uContent = cueFiles.map((f) => f.name).sort().join('\n') + '\n';
+						const m3uContent = discContentFiles.map((f) => f.name).sort().join('\n') + '\n';
 						const m3uData = new TextEncoder().encode(m3uContent);
 						await trackedPush(adb, `${folderPath}/${folderName}.m3u`, m3uData);
 						uploaded++;
