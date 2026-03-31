@@ -77,6 +77,64 @@ interface FilePickerOptions {
 	accept?: string;
 }
 
+export interface DroppedFile {
+	file: File;
+	relativePath: string;
+}
+
+function readDroppedEntries(entry: FileSystemEntry, basePath = ''): Promise<DroppedFile[]> {
+	if (entry.isFile) {
+		return new Promise((resolve, reject) => {
+			(entry as FileSystemFileEntry).file(
+				(file) => resolve([{ file, relativePath: basePath + file.name }]),
+				reject
+			);
+		});
+	}
+
+	const reader = (entry as FileSystemDirectoryEntry).createReader();
+	return new Promise((resolve, reject) => {
+		const allEntries: FileSystemEntry[] = [];
+		const readBatch = () => {
+			reader.readEntries((batch) => {
+				if (batch.length === 0) {
+					Promise.all(
+						allEntries.map((child) => readDroppedEntries(child, basePath + entry.name + '/'))
+					).then((results) => resolve(results.flat()), reject);
+				} else {
+					allEntries.push(...batch);
+					readBatch();
+				}
+			}, reject);
+		};
+		readBatch();
+	});
+}
+
+export function hasDraggedFiles(event: DragEvent): boolean {
+	const items = event.dataTransfer?.items;
+	if (items) {
+		return Array.from(items).some((item) => item.kind === 'file');
+	}
+	return (event.dataTransfer?.files.length ?? 0) > 0;
+}
+
+export async function getDroppedFiles(event: DragEvent): Promise<DroppedFile[]> {
+	const items = Array.from(event.dataTransfer?.items ?? []).filter((item) => item.kind === 'file');
+	const fsEntries = items
+		.map((item) => item.webkitGetAsEntry?.() ?? null)
+		.filter((entry): entry is FileSystemEntry => entry !== null);
+
+	if (fsEntries.length > 0) {
+		return (await Promise.all(fsEntries.map((entry) => readDroppedEntries(entry)))).flat();
+	}
+
+	return Array.from(event.dataTransfer?.files ?? []).map((file) => ({
+		file,
+		relativePath: file.name
+	}));
+}
+
 /**
  * Open a file picker dialog and return the selected files.
  * Returns an empty array if the user cancels.

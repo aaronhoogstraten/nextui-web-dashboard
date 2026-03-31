@@ -2,12 +2,12 @@
 	import { untrack } from 'svelte';
 	import type { Adb } from '@yume-chan/adb';
 	import { BIOS_SYSTEMS, getBiosDevicePath, type BiosFileDefinition } from '$lib/bios/index.js';
-	import { validateBiosFile } from '$lib/bios/validation.js';
+	import { sha1, validateBiosFile } from '$lib/bios/validation.js';
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
-	import { pathExists, pullFile, pushFile, listDirectory } from '$lib/adb/file-ops.js';
+	import { pathExists, pullFile, listDirectory } from '$lib/adb/file-ops.js';
 	import { beginTransfer, endTransfer, trackedPush } from '$lib/stores/transfer.svelte.js';
 	import { adbExec } from '$lib/stores/connection.svelte.js';
-	import { formatError, plural, pickFile } from '$lib/utils.js';
+	import { formatError, getDroppedFiles, hasDraggedFiles, plural, pickFile } from '$lib/utils.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
 
 	let { adb }: { adb: Adb } = $props();
@@ -28,6 +28,7 @@
 		isCustom: boolean;
 		files: BiosFileState[];
 		expanded: boolean;
+		notice: { type: 'error' | 'success'; message: string } | null;
 	}
 
 	let systems: SystemState[] = $state(
@@ -42,7 +43,8 @@
 				status: 'unknown' as FileStatus,
 				detail: ''
 			})),
-			expanded: false
+			expanded: false,
+			notice: null
 		}))
 	);
 
@@ -50,6 +52,56 @@
 	let hideComplete = $state(false);
 	let uploadingFile: string | null = $state(null);
 	let removingFile: string | null = $state(null);
+	let dragTargetKey: string | null = $state(null);
+	let dragCounter = $state(0);
+
+	function getFileKey(file: BiosFileState): string {
+		return `${file.definition.systemCode}/${file.definition.fileName}`;
+	}
+
+	function getSystemDragKey(system: SystemState): string {
+		return `${system.systemCode}:${system.files[0]?.devicePath ?? system.systemName}`;
+	}
+
+	function getSystemDirectory(system: SystemState): string | null {
+		const devicePath = system.files[0]?.devicePath;
+		if (!devicePath) return null;
+		return devicePath.substring(0, devicePath.lastIndexOf('/'));
+	}
+
+	function resetDragTarget() {
+		dragTargetKey = null;
+		dragCounter = 0;
+	}
+
+	function handleSystemDragEnter(event: DragEvent, system: SystemState) {
+		if (!hasDraggedFiles(event) || uploadingFile !== null || removingFile !== null) return;
+		event.preventDefault();
+		const key = getSystemDragKey(system);
+		if (dragTargetKey !== key) {
+			dragTargetKey = key;
+			dragCounter = 0;
+		}
+		dragCounter++;
+	}
+
+	function handleSystemDragOver(event: DragEvent, system: SystemState) {
+		if (!hasDraggedFiles(event) || uploadingFile !== null || removingFile !== null) return;
+		event.preventDefault();
+		const key = getSystemDragKey(system);
+		if (dragTargetKey !== key) {
+			dragTargetKey = key;
+			dragCounter = 1;
+		}
+		if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+	}
+
+	function handleSystemDragLeave(event: DragEvent, system: SystemState) {
+		if (dragTargetKey !== getSystemDragKey(system)) return;
+		event.preventDefault();
+		dragCounter--;
+		if (dragCounter <= 0) resetDragTarget();
+	}
 
 	async function checkAllSystems() {
 		checking = true;
@@ -59,6 +111,7 @@
 
 		// Check predefined systems
 		for (const system of systems) {
+			system.notice = null;
 			for (const file of system.files) {
 				file.status = 'checking';
 				file.detail = '';
@@ -89,9 +142,7 @@
 		// Discover custom BIOS systems from device
 		const knownCodes = new Set(
 			BIOS_SYSTEMS.flatMap((s) => {
-				// Collect all system codes referenced by files (e.g. "GBA" and "MGBA" for GBA system)
 				const codes = s.files.map((f) => f.systemCode);
-				// Also include the system-level code (may contain " / " separator like "GBA / MGBA")
 				codes.push(...s.systemCode.split(/\s*\/\s*/));
 				return codes;
 			})
@@ -132,7 +183,8 @@
 						anyOneOf: false,
 						isCustom: true,
 						files: customFiles,
-						expanded: false
+						expanded: false,
+						notice: null
 					});
 				}
 			}
@@ -204,47 +256,199 @@
 		}
 	}
 
-	async function uploadBiosFile(file: BiosFileState, isCustom: boolean) {
-		const ext = file.definition.fileName.substring(file.definition.fileName.lastIndexOf('.'));
-		const selected = await pickFile({ accept: isCustom ? undefined : ext });
-		if (!selected) return;
+	async function writeBiosFile(
+		file: BiosFileState,
+		system: SystemState,
+		data: Uint8Array<ArrayBuffer>,
+		detail: string
+	) {
+		await trackedPush(adb, file.devicePath, data);
+		file.status = system.isCustom ? 'present' : 'valid';
+		file.detail = detail;
+	}
 
-		uploadingFile = `${file.definition.systemCode}/${file.definition.fileName}`;
+	async function uploadBiosFile(file: BiosFileState, system: SystemState, selected?: File) {
+		const ext = file.definition.fileName.substring(file.definition.fileName.lastIndexOf('.'));
+		const source = selected ?? (await pickFile({ accept: system.isCustom ? undefined : ext }));
+		if (!source) return;
+
+		system.notice = null;
+		uploadingFile = getFileKey(file);
 
 		try {
-			const data = new Uint8Array(await selected.arrayBuffer());
+			const data = new Uint8Array(await source.arrayBuffer());
 
-			if (!isCustom) {
+			if (!system.isCustom) {
 				const result = await validateBiosFile(data, file.definition);
 				if (!result.valid) {
 					file.status = 'invalid';
 					file.detail = `Selected file hash doesn't match expected. Got: ${result.actualSha1.substring(0, 16)}...`;
+					system.notice = {
+						type: 'error',
+						message: `Validation failed for ${file.definition.fileName}`
+					};
 					return;
 				}
 			}
 
 			beginTransfer('upload', 1, data.byteLength);
-			await trackedPush(adb, file.devicePath, data);
-			file.status = isCustom ? 'present' : 'valid';
-			file.detail = isCustom ? 'Uploaded' : 'Uploaded, hash OK';
+			await writeBiosFile(file, system, data, system.isCustom ? 'Uploaded' : 'Uploaded, hash OK');
+			system.notice = { type: 'success', message: `Uploaded ${file.definition.fileName}` };
 		} catch (e) {
 			file.detail = `Upload failed: ${formatError(e)}`;
+			system.notice = { type: 'error', message: `Upload failed: ${formatError(e)}` };
 		} finally {
 			endTransfer();
 			uploadingFile = null;
 		}
 	}
 
+	async function uploadDroppedBiosFiles(system: SystemState, droppedFiles: File[]) {
+		system.notice = null;
+
+		if (system.isCustom) {
+			const systemDir = getSystemDirectory(system);
+			if (!systemDir) {
+				system.notice = { type: 'error', message: 'Could not determine custom BIOS directory' };
+				return;
+			}
+
+			beginTransfer(
+				'upload',
+				droppedFiles.length,
+				droppedFiles.reduce((sum, file) => sum + file.size, 0)
+			);
+
+			let uploaded = 0;
+			try {
+				for (const source of droppedFiles) {
+					const key = source.name.toLowerCase();
+					let target = system.files.find((file) => file.definition.fileName.toLowerCase() === key);
+					if (!target) {
+						target = {
+							definition: {
+								fileName: source.name,
+								systemCode: system.systemCode,
+								sha1: '',
+								md5: ''
+							},
+							devicePath: `${systemDir}/${source.name}`,
+							status: 'present',
+							detail: ''
+						};
+						system.files = [...system.files, target];
+					}
+
+					uploadingFile = getFileKey(target);
+					const data = new Uint8Array(await source.arrayBuffer());
+					await writeBiosFile(target, system, data, 'Uploaded');
+					uploaded++;
+				}
+				system.notice = { type: 'success', message: `Uploaded ${plural(uploaded, 'file')}` };
+			} catch (e) {
+				system.notice = { type: 'error', message: `Upload failed: ${formatError(e)}` };
+			} finally {
+				endTransfer();
+				uploadingFile = null;
+			}
+			return;
+		}
+
+		const filenameMatches = new Map<string, BiosFileState[]>();
+		for (const file of system.files) {
+			const key = file.definition.fileName.toLowerCase();
+			const matches = filenameMatches.get(key);
+			if (matches) matches.push(file);
+			else filenameMatches.set(key, [file]);
+		}
+
+		const prepared = await Promise.all(
+			droppedFiles.map(async (source) => {
+				const data = new Uint8Array(await source.arrayBuffer());
+				const hash = await sha1(data);
+				return {
+					source,
+					data,
+					hash,
+					fileNameMatches: filenameMatches.get(source.name.toLowerCase()) ?? [],
+					hashMatches: system.files.filter((file) => file.definition.sha1 === hash)
+				};
+			})
+		);
+
+		let invalid = 0;
+		let skipped = 0;
+		const uploadJobs = prepared.flatMap((entry) => {
+			if (entry.hashMatches.length > 0) {
+				return entry.hashMatches.map((file) => ({ file, data: entry.data }));
+			}
+			if (entry.fileNameMatches.length > 0) {
+				invalid++;
+				for (const file of entry.fileNameMatches) {
+					file.status = 'invalid';
+					file.detail = `Selected file hash doesn't match expected. Got: ${entry.hash.substring(0, 16)}...`;
+				}
+				return [];
+			}
+			skipped++;
+			return [];
+		});
+
+		if (uploadJobs.length === 0) {
+			const parts: string[] = [];
+			if (invalid > 0) parts.push(`${plural(invalid, 'file')} failed validation`);
+			if (skipped > 0) parts.push(`skipped ${skipped}`);
+			system.notice = {
+				type: 'error',
+				message: parts.join(', ') || 'No matching BIOS files found in drop'
+			};
+			return;
+		}
+
+		beginTransfer(
+			'upload',
+			uploadJobs.length,
+			uploadJobs.reduce((sum, job) => sum + job.data.byteLength, 0)
+		);
+
+		let uploaded = 0;
+		try {
+			for (const job of uploadJobs) {
+				uploadingFile = getFileKey(job.file);
+				await writeBiosFile(job.file, system, job.data, 'Uploaded, hash OK');
+				uploaded++;
+			}
+
+			const parts: string[] = [`Uploaded ${plural(uploaded, 'file')}`];
+			if (invalid > 0) parts.push(`${plural(invalid, 'file')} failed validation`);
+			if (skipped > 0) parts.push(`skipped ${skipped}`);
+			system.notice = { type: invalid === 0 ? 'success' : 'error', message: parts.join(', ') };
+		} catch (e) {
+			system.notice = { type: 'error', message: `Upload failed: ${formatError(e)}` };
+		} finally {
+			endTransfer();
+			uploadingFile = null;
+		}
+	}
+
+	async function handleSystemDrop(event: DragEvent, system: SystemState) {
+		event.preventDefault();
+		const isActiveTarget = dragTargetKey === getSystemDragKey(system);
+		resetDragTarget();
+		if (!isActiveTarget || uploadingFile !== null || removingFile !== null) return;
+
+		const droppedFiles = (await getDroppedFiles(event)).map(({ file }) => file);
+		if (droppedFiles.length === 0) return;
+		await uploadDroppedBiosFiles(system, droppedFiles);
+	}
+
 	async function removeBiosFile(file: BiosFileState, system: SystemState) {
 		if (!confirm(`Delete "${file.definition.fileName}" from ${system.systemName}?`)) return;
-		const key = `${file.definition.systemCode}/${file.definition.fileName}`;
-		removingFile = key;
+		removingFile = getFileKey(file);
 		try {
 			await adbExec(ShellCmd.rm(file.devicePath));
 			if (system.isCustom) {
-				// Remove from the custom system's file list
 				system.files = system.files.filter((f) => f !== file);
-				// If no files left, remove the whole custom system
 				if (system.files.length === 0) {
 					systems = systems.filter((s) => s !== system);
 				}
@@ -254,6 +458,7 @@
 			}
 		} catch (e) {
 			file.detail = `Remove failed: ${formatError(e)}`;
+			system.notice = { type: 'error', message: `Remove failed: ${formatError(e)}` };
 		} finally {
 			removingFile = null;
 		}
@@ -289,7 +494,24 @@
 
 	<div class="space-y-3">
 		{#each filteredSystems as system}
-			<div class="border border-border rounded-lg overflow-hidden">
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div
+				class="relative border border-border rounded-lg overflow-hidden"
+				ondragenter={(event) => handleSystemDragEnter(event, system)}
+				ondragover={(event) => handleSystemDragOver(event, system)}
+				ondragleave={(event) => handleSystemDragLeave(event, system)}
+				ondrop={(event) => handleSystemDrop(event, system)}
+			>
+				{#if dragTargetKey === getSystemDragKey(system)}
+					<div
+						class="absolute inset-0 z-10 bg-bg/80 border-2 border-dashed border-accent rounded-lg flex items-center justify-center pointer-events-none"
+					>
+						<span class="text-sm font-medium text-accent">
+							Upload BIOS to {system.systemName}
+						</span>
+					</div>
+				{/if}
+
 				<!-- System Header -->
 				<button
 					onclick={() => (system.expanded = !system.expanded)}
@@ -324,6 +546,13 @@
 				<!-- File Details (expanded) -->
 				{#if system.expanded}
 					<div class="p-3 space-y-2">
+						{#if system.notice}
+							<div
+								class="text-xs {system.notice.type === 'error' ? 'text-warning' : 'text-success'}"
+							>
+								{system.notice.message}
+							</div>
+						{/if}
 						{#if system.isCustom}
 							<div class="text-xs text-text-muted italic mb-1">Custom system — no validation</div>
 						{:else if system.anyOneOf}
@@ -357,7 +586,7 @@
 											class="text-xs px-2 py-1 rounded text-accent hover:bg-surface disabled:opacity-50"
 											title={`Delete ${file.definition.fileName}`}
 										>
-											{removingFile === `${file.definition.systemCode}/${file.definition.fileName}` ? 'Deleting...' : 'Delete'}
+											{removingFile === getFileKey(file) ? 'Deleting...' : 'Delete'}
 										</button>
 									{:else}
 										<span class="text-sm font-medium {effectiveStatusColor(file, system)}">
@@ -365,24 +594,21 @@
 										</span>
 										{#if file.status === 'missing' || file.status === 'invalid' || file.status === 'unknown'}
 											<button
-												onclick={() => uploadBiosFile(file, system.isCustom)}
+												onclick={() => uploadBiosFile(file, system)}
 												disabled={uploadingFile !== null || removingFile !== null}
 												class="text-xs bg-accent text-white px-2 py-1 rounded hover:bg-accent-hover disabled:opacity-50"
 											>
-												{uploadingFile ===
-												`${file.definition.systemCode}/${file.definition.fileName}`
-													? 'Uploading...'
-													: 'Upload'}
+												{uploadingFile === getFileKey(file) ? 'Uploading...' : 'Upload'}
 											</button>
-									{/if}
-									{#if file.status !== 'missing' && file.status !== 'unknown' && file.status !== 'checking'}
+										{/if}
+										{#if file.status !== 'missing' && file.status !== 'unknown' && file.status !== 'checking'}
 											<button
 												onclick={() => removeBiosFile(file, system)}
 												disabled={removingFile !== null || uploadingFile !== null}
 												class="text-xs px-2 py-1 rounded text-accent hover:bg-surface disabled:opacity-50"
 												title={`Delete ${file.definition.fileName}`}
 											>
-												{removingFile === `${file.definition.systemCode}/${file.definition.fileName}` ? 'Deleting...' : 'Delete'}
+												{removingFile === getFileKey(file) ? 'Deleting...' : 'Delete'}
 											</button>
 										{/if}
 									{/if}

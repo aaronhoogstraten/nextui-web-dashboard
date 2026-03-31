@@ -12,15 +12,24 @@
 	} from '$lib/roms/index.js';
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { listDirectory, pathExists, pullFile, pushFile } from '$lib/adb/file-ops.js';
-	import { beginTransfer, endTransfer, trackedPush, skipTransferFile } from '$lib/stores/transfer.svelte.js';
+	import {
+		beginTransfer,
+		endTransfer,
+		trackedPush,
+		skipTransferFile
+	} from '$lib/stores/transfer.svelte.js';
 	import { adbExec, getPlatform } from '$lib/stores/connection.svelte.js';
 	import {
 		formatSize,
 		formatError,
 		compareByName,
+		getDroppedFiles,
+		hasDraggedFiles,
+		joinPath,
 		plural,
 		pickFile,
-		pickFiles
+		pickFiles,
+		type DroppedFile
 	} from '$lib/utils.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
 	import ImagePreview from './ImagePreview.svelte';
@@ -121,6 +130,8 @@
 	let uploadingBg: string | null = $state(null);
 	let removingBg: string | null = $state(null);
 	let uploadingMediaFor: string | null = $state(null);
+	let dragTargetPath: string | null = $state(null);
+	let dragCounter = $state(0);
 	let previewSrc: string | null = $state(null);
 	let previewAlt: string = $state('');
 	let detectedPlatform: string = $state('');
@@ -183,7 +194,8 @@
 		// Map systemCode → actual device directory name to handle
 		// directories with ordering prefixes like "1) Game Boy (GB)"
 		let deviceDirByCode = new Map<string, string>();
-		const unmatchedDirs: { dirName: string; parsed: { systemName: string; systemCode: string } }[] = [];
+		const unmatchedDirs: { dirName: string; parsed: { systemName: string; systemCode: string } }[] =
+			[];
 		try {
 			const romDirs = await listDirectory(adb, DEVICE_PATHS.roms);
 			deviceDirByCode = buildDeviceDirMap(romDirs);
@@ -219,7 +231,9 @@
 
 			try {
 				const entries = await listDirectory(adb, s.devicePath);
-				s.romCount = entries.filter((e) => (e.isFile || e.isDirectory) && !e.name.startsWith('.')).length;
+				s.romCount = entries.filter(
+					(e) => (e.isFile || e.isDirectory) && !e.name.startsWith('.')
+				).length;
 			} catch {
 				s.romCount = 0;
 				s.error = 'Folder not found';
@@ -240,7 +254,9 @@
 			let romCount = 0;
 			try {
 				const entries = await listDirectory(adb, devicePath);
-				romCount = entries.filter((e) => (e.isFile || e.isDirectory) && !e.name.startsWith('.')).length;
+				romCount = entries.filter(
+					(e) => (e.isFile || e.isDirectory) && !e.name.startsWith('.')
+				).length;
 			} catch {
 				// ignore
 			}
@@ -357,9 +373,7 @@
 					.map(async (f) => {
 						try {
 							const children = await listDirectory(adb, `${state.devicePath}/${f.name}`);
-							const total = children
-								.filter((c) => c.isFile)
-								.reduce((sum, c) => sum + c.size, 0n);
+							const total = children.filter((c) => c.isFile).reduce((sum, c) => sum + c.size, 0n);
 							dirSizes.set(f.name, total);
 						} catch {
 							// unreadable — leave size as-is
@@ -543,16 +557,167 @@
 		return prefix || cueBaseNames[0];
 	}
 
-	async function uploadRoms(state: SystemState) {
-		const accept = state.system.isCustom ? undefined : state.system.supportedFormats.join(',');
-		const files = await pickFiles({ accept });
-		if (files.length === 0) return;
+	function getLeafName(relativePath: string): string {
+		const lastSlash = relativePath.lastIndexOf('/');
+		return lastSlash >= 0 ? relativePath.substring(lastSlash + 1) : relativePath;
+	}
 
-		uploadingTo = state.system.systemCode;
+	async function refreshSystemAfterUpload(state: SystemState) {
+		cleanupThumbnails(state);
+		state.roms = [];
+		state.romsLoaded = false;
+		if (state.expanded) {
+			await loadRomDetails(state);
+		} else {
+			try {
+				const entries = await listDirectory(adb, state.devicePath);
+				state.romCount = entries.filter(
+					(e) => (e.isFile || e.isDirectory) && !e.name.startsWith('.')
+				).length;
+			} catch {
+				// ignore
+			}
+		}
+	}
+
+	interface StructuredRomUploadPlan {
+		validEntries: DroppedFile[];
+		invalidEntries: DroppedFile[];
+		totalFileCount: number;
+		totalBytes: number;
+	}
+
+	type DiscGroup = {
+		files: File[];
+		contentFiles: File[];
+		m3uFile?: File;
+		generateM3u: boolean;
+	};
+
+	interface FlatRomUploadPlan {
+		discGroups: DiscGroup[];
+		flatFiles: File[];
+		invalidFiles: File[];
+		totalFileCount: number;
+		totalBytes: number;
+		workCount: number;
+	}
+
+	function buildStructuredRomUploadPlan(
+		state: SystemState,
+		entries: DroppedFile[]
+	): StructuredRomUploadPlan {
+		const validEntries: DroppedFile[] = [];
+		const invalidEntries: DroppedFile[] = [];
+		for (const entry of entries) {
+			const leafName = getLeafName(entry.relativePath);
+			const dotIndex = leafName.lastIndexOf('.');
+			const ext = dotIndex > 0 ? leafName.substring(dotIndex).toLowerCase() : '';
+			if (!isValidRomExtension(ext, state.system)) {
+				invalidEntries.push(entry);
+				continue;
+			}
+			validEntries.push(entry);
+		}
+
+		return {
+			validEntries,
+			invalidEntries,
+			totalFileCount: entries.length,
+			totalBytes: entries.reduce((sum, entry) => sum + entry.file.size, 0)
+		};
+	}
+
+	async function executeStructuredRomUpload(
+		state: SystemState,
+		plan: StructuredRomUploadPlan
+	): Promise<{ uploaded: number; skipped: number }> {
 		let uploaded = 0;
 		let skipped = 0;
+		const createdDirs = new Set<string>();
+		const topLevelDecision = new Map<string, 'upload' | 'skip'>();
+		const clearedTopLevelConflicts = new Set<string>();
+		let conflictPolicy: 'ask' | 'overwrite-all' | 'skip-all' = 'ask';
 
-		// Partition files into disc-based (.cue/.bin/.m3u/.chd) and flat
+		let existingEntries = new Map<string, { isFile: boolean; isDirectory: boolean }>();
+		try {
+			existingEntries = new Map(
+				(await listDirectory(adb, state.devicePath)).map((entry) => [
+					entry.name,
+					{ isFile: entry.isFile, isDirectory: entry.isDirectory }
+				])
+			);
+		} catch {
+			/* ignore */
+		}
+
+		const sortedEntries = [...plan.validEntries].sort((a, b) =>
+			a.relativePath.localeCompare(b.relativePath)
+		);
+		for (const entry of sortedEntries) {
+			const relativePath = entry.relativePath.replaceAll('\\', '/');
+			const pathParts = relativePath.split('/').filter(Boolean);
+			if (pathParts.length === 0) {
+				skipped++;
+				skipTransferFile(entry.file.size);
+				continue;
+			}
+
+			const topLevelName = pathParts[0];
+			const hasNestedPath = pathParts.length > 1;
+			const existingTopLevel = existingEntries.get(topLevelName);
+			if (!topLevelDecision.has(topLevelName)) {
+				if (existingTopLevel) {
+					if (conflictPolicy === 'skip-all') {
+						topLevelDecision.set(topLevelName, 'skip');
+					} else if (conflictPolicy === 'overwrite-all') {
+						topLevelDecision.set(topLevelName, 'upload');
+					} else {
+						const resolution = await overwriteDialog.show(topLevelName, sortedEntries.length > 1);
+						if (resolution === 'skip' || resolution === 'skip-all') {
+							topLevelDecision.set(topLevelName, 'skip');
+							if (resolution === 'skip-all') conflictPolicy = 'skip-all';
+						} else {
+							topLevelDecision.set(topLevelName, 'upload');
+							if (resolution === 'overwrite-all') conflictPolicy = 'overwrite-all';
+						}
+					}
+				} else {
+					topLevelDecision.set(topLevelName, 'upload');
+				}
+			}
+
+			if (topLevelDecision.get(topLevelName) !== 'upload') {
+				skipped++;
+				skipTransferFile(entry.file.size);
+				continue;
+			}
+
+			if (existingTopLevel?.isFile && !clearedTopLevelConflicts.has(topLevelName)) {
+				await adbExec(ShellCmd.rm(joinPath(state.devicePath, topLevelName)));
+				clearedTopLevelConflicts.add(topLevelName);
+				existingEntries.set(topLevelName, { isFile: false, isDirectory: true });
+			}
+
+			const lastSlash = relativePath.lastIndexOf('/');
+			if (lastSlash > 0) {
+				const dirPath = joinPath(state.devicePath, relativePath.substring(0, lastSlash));
+				if (!createdDirs.has(dirPath)) {
+					await adbExec(ShellCmd.mkdir(dirPath));
+					createdDirs.add(dirPath);
+				}
+			}
+
+			const data = new Uint8Array(await entry.file.arrayBuffer());
+			await trackedPush(adb, joinPath(state.devicePath, relativePath), data);
+			uploaded++;
+		}
+
+		return { uploaded, skipped };
+	}
+
+	function buildFlatRomUploadPlan(state: SystemState, entries: DroppedFile[]): FlatRomUploadPlan {
+		const files = entries.map((entry) => entry.file);
 		const DISC_EXTS = new Set(['.cue', '.bin', '.m3u', '.chd']);
 		const cueFiles: File[] = [];
 		const chdFiles: File[] = [];
@@ -576,15 +741,15 @@
 			}
 		}
 
-		// Build disc groups: each group becomes a separate game folder with optional .m3u
 		const hasM3uFile = discFiles.some((f) => f.name.toLowerCase().endsWith('.m3u'));
-		const stripParens = (name: string) => getBaseName(name).replace(/\s*\([^)]*\)/g, '').trim();
+		const stripParens = (name: string) =>
+			getBaseName(name)
+				.replace(/\s*\([^)]*\)/g, '')
+				.trim();
 
-		type DiscGroup = { files: File[]; contentFiles: File[]; m3uFile?: File; generateM3u: boolean };
 		const discGroups: DiscGroup[] = [];
 
 		if (hasM3uFile) {
-			// m3u-provided: all disc files form one group (m3u defines the grouping)
 			const m3uFile = discFiles.find((f) => f.name.toLowerCase().endsWith('.m3u'))!;
 			const contentFiles = cueFiles.length > 0 ? cueFiles : chdFiles;
 			discGroups.push({
@@ -594,7 +759,6 @@
 				generateM3u: false
 			});
 		} else if (cueFiles.length > 0) {
-			// cue-based: group .cue files by title, associate .bin files by stripped title match
 			const binFiles = discFiles.filter((f) => f.name.toLowerCase().endsWith('.bin'));
 			const cueGrouped = new Map<string, File[]>();
 			for (const f of cueFiles) {
@@ -613,12 +777,10 @@
 					generateM3u: cues.length > 1
 				});
 			}
-			// Unmatched .bin files → flat upload
 			for (const bin of binFiles) {
 				if (!matchedBins.has(bin)) flatFiles.push(bin);
 			}
 		} else if (chdFiles.length > 0) {
-			// CHD-only, no m3u: group by title (ignoring parenthetical substrings)
 			const grouped = new Map<string, File[]>();
 			for (const f of chdFiles) {
 				const key = stripParens(f.name);
@@ -633,145 +795,246 @@
 				}
 			}
 		} else {
-			// Remaining disc files (e.g. lone .bin files without .cue) → flat upload
 			flatFiles.push(...discFiles);
 		}
 
 		const discGroupFileCount = discGroups.reduce((sum, g) => sum + g.files.length, 0);
 		const generatedM3uCount = discGroups.filter((g) => g.generateM3u).length;
-		const totalFileCount = discGroupFileCount + flatFiles.length + invalidFiles.length + generatedM3uCount;
-		const totalBytes = files.reduce((sum, f) => sum + f.size, 0);
 
-		if (discGroupFileCount + flatFiles.length === 0) {
-			state.error = 'No valid files selected';
-			uploadingTo = null;
-			return;
-		}
+		return {
+			discGroups,
+			flatFiles,
+			invalidFiles,
+			totalFileCount:
+				discGroupFileCount + flatFiles.length + invalidFiles.length + generatedM3uCount,
+			totalBytes: files.reduce((sum, f) => sum + f.size, 0),
+			workCount: discGroupFileCount + flatFiles.length
+		};
+	}
 
-		beginTransfer('upload', totalFileCount, totalBytes);
+	async function executeFlatRomUpload(
+		state: SystemState,
+		plan: FlatRomUploadPlan
+	): Promise<{ uploaded: number; skipped: number }> {
+		let uploaded = 0;
+		let skipped = 0;
 
-		// Skip invalid-extension files in transfer progress
-		for (const file of invalidFiles) {
-			skipTransferFile(file.size);
-		}
-
-		try {
-			// --- Disc-based upload: create game folder(s) and push files into them ---
-			let existingDirs: Set<string> | null = null;
-			if (discGroups.length > 0) {
-				try {
-					const entries = await listDirectory(adb, state.devicePath);
-					existingDirs = new Set(entries.filter((e) => e.isDirectory).map((e) => e.name));
-				} catch {
-					/* ignore */
-				}
+		// --- Disc-based upload: create game folder(s) and push files into them ---
+		let existingDirs: Set<string> | null = null;
+		if (plan.discGroups.length > 0) {
+			try {
+				const entries = await listDirectory(adb, state.devicePath);
+				existingDirs = new Set(entries.filter((e) => e.isDirectory).map((e) => e.name));
+			} catch {
+				/* ignore */
 			}
+		}
 
-			let discConflictPolicy: 'ask' | 'overwrite-all' | 'skip-all' = 'ask';
+		let discConflictPolicy: 'ask' | 'overwrite-all' | 'skip-all' = 'ask';
 
-			for (const group of discGroups) {
-				const folderName = group.m3uFile
-					? getBaseName(group.m3uFile.name)
-					: deriveGameFolderName(group.contentFiles.map((f) => getBaseName(f.name)));
-				const folderPath = `${state.devicePath}/${folderName}`;
+		for (const group of plan.discGroups) {
+			const folderName = group.m3uFile
+				? getBaseName(group.m3uFile.name)
+				: deriveGameFolderName(group.contentFiles.map((f) => getBaseName(f.name)));
+			const folderPath = `${state.devicePath}/${folderName}`;
 
-				if (existingDirs?.has(folderName)) {
-					if (discConflictPolicy === 'skip-all') {
+			if (existingDirs?.has(folderName)) {
+				if (discConflictPolicy === 'skip-all') {
+					skipped += group.files.length;
+					for (const file of group.files) skipTransferFile(file.size);
+					if (group.generateM3u) skipTransferFile(0);
+					continue;
+				}
+				if (discConflictPolicy === 'ask') {
+					const resolution = await overwriteDialog.show(folderName, plan.discGroups.length > 1);
+					if (resolution === 'skip' || resolution === 'skip-all') {
 						skipped += group.files.length;
 						for (const file of group.files) skipTransferFile(file.size);
 						if (group.generateM3u) skipTransferFile(0);
+						if (resolution === 'skip-all') discConflictPolicy = 'skip-all';
 						continue;
 					}
-					if (discConflictPolicy === 'ask') {
-						const resolution = await overwriteDialog.show(folderName, discGroups.length > 1);
-						if (resolution === 'skip' || resolution === 'skip-all') {
-							skipped += group.files.length;
-							for (const file of group.files) skipTransferFile(file.size);
-							if (group.generateM3u) skipTransferFile(0);
-							if (resolution === 'skip-all') discConflictPolicy = 'skip-all';
-							continue;
-						}
-						if (resolution === 'overwrite-all') discConflictPolicy = 'overwrite-all';
-					}
-					// 'overwrite' / 'overwrite-all' → proceed
-				}
-
-				await adbExec(ShellCmd.mkdir(folderPath));
-
-				for (const file of group.files) {
-					const data = new Uint8Array(await file.arrayBuffer());
-					await trackedPush(adb, `${folderPath}/${file.name}`, data);
-					uploaded++;
-				}
-
-				// Auto-generate .m3u listing all disc content files
-				if (group.generateM3u) {
-					const m3uContent = group.contentFiles.map((f) => f.name).sort().join('\n') + '\n';
-					const m3uData = new TextEncoder().encode(m3uContent);
-					await trackedPush(adb, `${folderPath}/${folderName}.m3u`, m3uData);
-					uploaded++;
+					if (resolution === 'overwrite-all') discConflictPolicy = 'overwrite-all';
 				}
 			}
 
-			// --- Flat upload: files go directly into the system directory ---
-			if (flatFiles.length > 0) {
-				let existingNames: Set<string> | null = null;
-				try {
-					const entries = await listDirectory(adb, state.devicePath);
-					existingNames = new Set(entries.filter((e) => e.isFile).map((e) => e.name));
-				} catch {
-					/* ignore */
-				}
+			await adbExec(ShellCmd.mkdir(folderPath));
 
-				let conflictPolicy: 'ask' | 'overwrite-all' | 'skip-all' = 'ask';
+			for (const file of group.files) {
+				const data = new Uint8Array(await file.arrayBuffer());
+				await trackedPush(adb, `${folderPath}/${file.name}`, data);
+				uploaded++;
+			}
 
-				for (const file of flatFiles) {
-					if (existingNames?.has(file.name)) {
-						if (conflictPolicy === 'skip-all') {
+			if (group.generateM3u) {
+				const m3uContent =
+					group.contentFiles
+						.map((f) => f.name)
+						.sort()
+						.join('\n') + '\n';
+				const m3uData = new TextEncoder().encode(m3uContent);
+				await trackedPush(adb, `${folderPath}/${folderName}.m3u`, m3uData);
+				uploaded++;
+			}
+		}
+
+		// --- Flat upload: files go directly into the system directory ---
+		if (plan.flatFiles.length > 0) {
+			let existingEntries = new Map<string, { isFile: boolean; isDirectory: boolean }>();
+			try {
+				existingEntries = new Map(
+					(await listDirectory(adb, state.devicePath)).map((entry) => [
+						entry.name,
+						{ isFile: entry.isFile, isDirectory: entry.isDirectory }
+					])
+				);
+			} catch {
+				/* ignore */
+			}
+
+			let conflictPolicy: 'ask' | 'overwrite-all' | 'skip-all' = 'ask';
+
+			for (const file of plan.flatFiles) {
+				const existingEntry = existingEntries.get(file.name);
+				if (existingEntry) {
+					if (conflictPolicy === 'skip-all') {
+						skipped++;
+						skipTransferFile(file.size);
+						continue;
+					}
+					if (conflictPolicy === 'ask') {
+						const resolution = await overwriteDialog.show(file.name, plan.flatFiles.length > 1);
+						if (resolution === 'skip') {
 							skipped++;
 							skipTransferFile(file.size);
 							continue;
 						}
-						if (conflictPolicy === 'ask') {
-							const resolution = await overwriteDialog.show(file.name, flatFiles.length > 1);
-							if (resolution === 'skip') {
-								skipped++;
-								skipTransferFile(file.size);
-								continue;
-							}
-							if (resolution === 'skip-all') {
-								skipped++;
-								skipTransferFile(file.size);
-								conflictPolicy = 'skip-all';
-								continue;
-							}
-							if (resolution === 'overwrite-all') conflictPolicy = 'overwrite-all';
+						if (resolution === 'skip-all') {
+							skipped++;
+							skipTransferFile(file.size);
+							conflictPolicy = 'skip-all';
+							continue;
 						}
+						if (resolution === 'overwrite-all') conflictPolicy = 'overwrite-all';
 					}
 
-					const data = new Uint8Array(await file.arrayBuffer());
-					await trackedPush(adb, `${state.devicePath}/${file.name}`, data);
-					uploaded++;
+					if (existingEntry.isDirectory) {
+						await adbExec(ShellCmd.rmrf(`${state.devicePath}/${file.name}`));
+						existingEntries.set(file.name, { isFile: true, isDirectory: false });
+					}
 				}
+
+				const data = new Uint8Array(await file.arrayBuffer());
+				await trackedPush(adb, `${state.devicePath}/${file.name}`, data);
+				uploaded++;
+			}
+		}
+
+		return { uploaded, skipped };
+	}
+
+	function resetDragTarget() {
+		dragTargetPath = null;
+		dragCounter = 0;
+	}
+
+	function handleSystemDragEnter(event: DragEvent, state: SystemState) {
+		if (!hasDraggedFiles(event) || uploadingTo !== null) return;
+		event.preventDefault();
+		if (dragTargetPath !== state.devicePath) {
+			dragTargetPath = state.devicePath;
+			dragCounter = 0;
+		}
+		dragCounter++;
+	}
+
+	function handleSystemDragOver(event: DragEvent, state: SystemState) {
+		if (!hasDraggedFiles(event) || uploadingTo !== null) return;
+		event.preventDefault();
+		if (dragTargetPath !== state.devicePath) {
+			dragTargetPath = state.devicePath;
+			dragCounter = 1;
+		}
+		if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+	}
+
+	function handleSystemDragLeave(event: DragEvent, state: SystemState) {
+		if (dragTargetPath !== state.devicePath) return;
+		event.preventDefault();
+		dragCounter--;
+		if (dragCounter <= 0) resetDragTarget();
+	}
+
+	async function handleSystemDrop(event: DragEvent, state: SystemState) {
+		event.preventDefault();
+		const isActiveTarget = dragTargetPath === state.devicePath;
+		resetDragTarget();
+		if (!isActiveTarget || uploadingTo !== null) return;
+
+		const droppedFiles = await getDroppedFiles(event);
+		if (droppedFiles.length === 0) return;
+		await uploadRoms(state, droppedFiles);
+	}
+
+	async function uploadRoms(state: SystemState, selectedFiles?: File[] | DroppedFile[]) {
+		const accept = state.system.isCustom ? undefined : state.system.supportedFormats.join(',');
+		const entries: DroppedFile[] = selectedFiles
+			? selectedFiles.map((entry) =>
+					entry instanceof File ? { file: entry, relativePath: entry.name } : entry
+				)
+			: (await pickFiles({ accept })).map((file) => ({ file, relativePath: file.name }));
+		if (entries.length === 0) return;
+
+		uploadingTo = state.system.systemCode;
+		try {
+			const structuredEntries = entries.filter((entry) => entry.relativePath.includes('/'));
+			const flatEntries = entries.filter((entry) => !entry.relativePath.includes('/'));
+			const structuredPlan =
+				structuredEntries.length > 0
+					? buildStructuredRomUploadPlan(state, structuredEntries)
+					: null;
+			const flatPlan = flatEntries.length > 0 ? buildFlatRomUploadPlan(state, flatEntries) : null;
+
+			const totalWorkCount =
+				(structuredPlan?.validEntries.length ?? 0) + (flatPlan?.workCount ?? 0);
+			if (totalWorkCount === 0) {
+				state.error = 'No valid files selected';
+				return;
+			}
+
+			beginTransfer(
+				'upload',
+				(structuredPlan?.totalFileCount ?? 0) + (flatPlan?.totalFileCount ?? 0),
+				(structuredPlan?.totalBytes ?? 0) + (flatPlan?.totalBytes ?? 0)
+			);
+
+			for (const entry of structuredPlan?.invalidEntries ?? []) {
+				skipTransferFile(entry.file.size);
+			}
+			for (const file of flatPlan?.invalidFiles ?? []) {
+				skipTransferFile(file.size);
+			}
+
+			let uploaded = 0;
+			let skipped = 0;
+
+			if (structuredPlan && structuredPlan.validEntries.length > 0) {
+				const result = await executeStructuredRomUpload(state, structuredPlan);
+				uploaded += result.uploaded;
+				skipped += result.skipped;
+			}
+
+			if (flatPlan && flatPlan.workCount > 0) {
+				const result = await executeFlatRomUpload(state, flatPlan);
+				uploaded += result.uploaded;
+				skipped += result.skipped;
 			}
 
 			const parts: string[] = [];
 			if (uploaded > 0) parts.push(`Uploaded ${plural(uploaded, 'file')}`);
 			if (skipped > 0) parts.push(`skipped ${skipped}`);
 			state.error = parts.length > 0 ? parts.join(', ') : 'No valid files selected';
-			cleanupThumbnails(state);
-			state.roms = [];
-			state.romsLoaded = false;
-			if (state.expanded) {
-				await loadRomDetails(state);
-			} else {
-				try {
-					const entries = await listDirectory(adb, state.devicePath);
-					state.romCount = entries.filter((e) => (e.isFile || e.isDirectory) && !e.name.startsWith('.')).length;
-				} catch {
-					// ignore
-				}
-			}
+			await refreshSystemAfterUpload(state);
 		} catch (e) {
 			state.error = `Upload failed: ${formatError(e)}`;
 		} finally {
@@ -895,9 +1158,7 @@
 	function getSiblingStates(state: SystemState): SystemState[] {
 		const pathName = state.system.romPathSystemName ?? state.system.systemName;
 		return systems.filter(
-			(s) =>
-				s !== state &&
-				(s.system.romPathSystemName ?? s.system.systemName) === pathName
+			(s) => s !== state && (s.system.romPathSystemName ?? s.system.systemName) === pathName
 		);
 	}
 
@@ -1098,7 +1359,23 @@
 
 		<div class="space-y-2">
 			{#each filteredSystems as s}
-				<div class="border border-border rounded-lg overflow-hidden">
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<div
+					class="relative border border-border rounded-lg overflow-hidden"
+					ondragenter={(event) => handleSystemDragEnter(event, s)}
+					ondragover={(event) => handleSystemDragOver(event, s)}
+					ondragleave={(event) => handleSystemDragLeave(event, s)}
+					ondrop={(event) => handleSystemDrop(event, s)}
+				>
+					{#if dragTargetPath === s.devicePath}
+						<div
+							class="absolute inset-0 z-10 bg-bg/80 border-2 border-dashed border-accent rounded-lg flex items-center justify-center pointer-events-none"
+						>
+							<span class="text-sm font-medium text-accent">
+								Upload ROMs to {s.system.systemName}
+							</span>
+						</div>
+					{/if}
 					<!-- System Header -->
 					<button
 						onclick={() => toggleExpand(s)}
@@ -1114,8 +1391,17 @@
 								{@const emuMsg = `No emulator found at Emus/${detectedPlatform}/${s.system.systemCode}.pak\n\nUse the Pak Store on your device to download more emulators.`}
 								<!-- svelte-ignore a11y_no_static_element_interactions -->
 								<span
-									onclick={(e: MouseEvent) => { e.stopPropagation(); missingEmuInfo = emuMsg; }}
-									onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); missingEmuInfo = emuMsg; } }}
+									onclick={(e: MouseEvent) => {
+										e.stopPropagation();
+										missingEmuInfo = emuMsg;
+									}}
+									onkeydown={(e: KeyboardEvent) => {
+										if (e.key === 'Enter' || e.key === ' ') {
+											e.stopPropagation();
+											e.preventDefault();
+											missingEmuInfo = emuMsg;
+										}
+									}}
 									role="button"
 									tabindex="0"
 									title={emuMsg}
