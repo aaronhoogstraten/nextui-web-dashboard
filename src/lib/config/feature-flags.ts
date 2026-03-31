@@ -1,4 +1,4 @@
-export type FeatureId = 'roms' | 'bios' | 'overlays' | 'cheats' | 'collections' | 'screenshots' | 'files' | 'logs';
+export type FeatureId = 'roms' | 'bios' | 'overlays' | 'cheats' | 'collections' | 'screenshots' | 'files' | 'logs' | 'adb-shell';
 
 export const FEATURE_FLAGS: Record<FeatureId, boolean> = {
 	roms: true,
@@ -9,4 +9,5 @@ export const FEATURE_FLAGS: Record<FeatureId, boolean> = {
 	screenshots: true,
 	files: true,
 	logs: true,
+	'adb-shell': false,
 };

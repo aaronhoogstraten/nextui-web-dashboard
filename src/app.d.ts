@@ -28,6 +28,7 @@ declare global {
 
 	interface Window {
 		showDirectoryPicker?(options?: { mode?: 'read' | 'readwrite' }): Promise<FileSystemDirectoryHandle>;
+		readonly thisisunsafe: string;
 		__nextui?: {
 			readonly flags: Record<string, boolean>;
 			enableFeature(id: string): void;

@@ -1,5 +1,9 @@
 <script lang="ts">
-	import { getLogEntries, clearLog, type LogLevel } from '$lib/stores/log.svelte.js';
+	import { getLogEntries, clearLog, adbLog, type LogLevel } from '$lib/stores/log.svelte.js';
+	import { shell } from '$lib/adb/file-ops.js';
+	import { getConnection, isConnected } from '$lib/stores/connection.svelte.js';
+	import { isFeatureEnabled } from '$lib/stores/features.svelte.js';
+	import { formatError } from '$lib/utils.js';
 
 	let collapsed = $state(false);
 	let autoScroll = $state(true);
@@ -7,6 +11,94 @@
 	let scrollContainer: HTMLDivElement | undefined = $state();
 	let scrollPending = false;
 	let copyLabel = $state('Copy Logs');
+
+	// ADB Console input (feature-flagged)
+	const consoleEnabled = $derived(isFeatureEnabled('adb-shell') && isConnected());
+	let currentInput = $state('');
+	let running = $state(false);
+	let commandHistory: string[] = $state(loadHistory());
+	let historyIndex = $state(-1);
+	let savedInput = '';
+
+	const HISTORY_KEY = 'adbConsoleHistory';
+	const MAX_HISTORY = 100;
+
+	function loadHistory(): string[] {
+		try {
+			const raw = localStorage.getItem(HISTORY_KEY);
+			return raw ? JSON.parse(raw) : [];
+		} catch {
+			return [];
+		}
+	}
+
+	function saveHistory() {
+		try {
+			localStorage.setItem(HISTORY_KEY, JSON.stringify(commandHistory.slice(-MAX_HISTORY)));
+		} catch {
+			// localStorage may be unavailable
+		}
+	}
+
+	async function executeCommand(command: string) {
+		const trimmed = command.trim();
+		if (!trimmed) return;
+
+		commandHistory = [...commandHistory, trimmed];
+		historyIndex = -1;
+		savedInput = '';
+		saveHistory();
+
+		if (trimmed === 'clear') {
+			clearLog();
+			currentInput = '';
+			return;
+		}
+
+		adbLog.info(`$ ${trimmed}`);
+		currentInput = '';
+		running = true;
+
+		try {
+			const conn = getConnection();
+			if (!conn) throw new Error('Not connected');
+			const result = await shell(conn.adb, trimmed);
+			if (result.trim()) {
+				adbLog.info(result.trimEnd());
+			}
+		} catch (e) {
+			adbLog.error(formatError(e));
+		} finally {
+			running = false;
+		}
+	}
+
+	function handleInputKeyDown(e: KeyboardEvent) {
+		if (e.key === 'Enter') {
+			e.preventDefault();
+			executeCommand(currentInput);
+		} else if (e.key === 'ArrowUp') {
+			e.preventDefault();
+			if (commandHistory.length === 0) return;
+			if (historyIndex === -1) {
+				savedInput = currentInput;
+				historyIndex = commandHistory.length - 1;
+			} else if (historyIndex > 0) {
+				historyIndex--;
+			}
+			currentInput = commandHistory[historyIndex];
+		} else if (e.key === 'ArrowDown') {
+			e.preventDefault();
+			if (historyIndex === -1) return;
+			if (historyIndex < commandHistory.length - 1) {
+				historyIndex++;
+				currentInput = commandHistory[historyIndex];
+			} else {
+				historyIndex = -1;
+				currentInput = savedInput;
+			}
+		}
+	}
 
 	let panelHeight = $state(192);
 	let dragging = $state(false);
@@ -158,6 +250,24 @@
 			{/each}
 			{#if entries.length === 0}
 				<div class="text-text-muted px-2 py-2">No log entries yet.</div>
+			{/if}
+		</div>
+	{/if}
+
+	{#if consoleEnabled && !collapsed}
+		<div class="flex items-center gap-2 px-2 py-1.5 border-t border-border font-mono text-xs shrink-0">
+			<span class="text-accent shrink-0">$</span>
+			<input
+				bind:value={currentInput}
+				onkeydown={handleInputKeyDown}
+				disabled={running}
+				class="flex-1 bg-transparent text-text font-mono text-xs focus:outline-none disabled:opacity-50"
+				placeholder="Shell command..."
+				spellcheck="false"
+				autocomplete="off"
+			/>
+			{#if running}
+				<span class="text-text-muted animate-pulse text-xs">...</span>
 			{/if}
 		</div>
 	{/if}
