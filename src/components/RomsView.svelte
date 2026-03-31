@@ -576,20 +576,73 @@
 			}
 		}
 
-		// Create a disc folder when .cue files are present, or when .chd files
-		// are present with an .m3u (or multiple .chd); otherwise upload as flat files
+		// Build disc groups: each group becomes a separate game folder with optional .m3u
 		const hasM3uFile = discFiles.some((f) => f.name.toLowerCase().endsWith('.m3u'));
-		const isDiscUpload = cueFiles.length > 0 || (chdFiles.length > 0 && (hasM3uFile || chdFiles.length > 1));
-		if (!isDiscUpload) {
+		const stripParens = (name: string) => getBaseName(name).replace(/\s*\([^)]*\)/g, '').trim();
+
+		type DiscGroup = { files: File[]; contentFiles: File[]; m3uFile?: File; generateM3u: boolean };
+		const discGroups: DiscGroup[] = [];
+
+		if (hasM3uFile) {
+			// m3u-provided: all disc files form one group (m3u defines the grouping)
+			const m3uFile = discFiles.find((f) => f.name.toLowerCase().endsWith('.m3u'))!;
+			const contentFiles = cueFiles.length > 0 ? cueFiles : chdFiles;
+			discGroups.push({
+				files: [...discFiles],
+				contentFiles,
+				m3uFile,
+				generateM3u: false
+			});
+		} else if (cueFiles.length > 0) {
+			// cue-based: group .cue files by title, associate .bin files by stripped title match
+			const binFiles = discFiles.filter((f) => f.name.toLowerCase().endsWith('.bin'));
+			const cueGrouped = new Map<string, File[]>();
+			for (const f of cueFiles) {
+				const key = stripParens(f.name);
+				if (!cueGrouped.has(key)) cueGrouped.set(key, []);
+				cueGrouped.get(key)!.push(f);
+			}
+			const matchedBins = new Set<File>();
+			for (const [, cues] of cueGrouped) {
+				const cueStrippedTitles = new Set(cues.map((f) => stripParens(f.name)));
+				const associatedBins = binFiles.filter((b) => cueStrippedTitles.has(stripParens(b.name)));
+				for (const b of associatedBins) matchedBins.add(b);
+				discGroups.push({
+					files: [...cues, ...associatedBins],
+					contentFiles: cues,
+					generateM3u: cues.length > 1
+				});
+			}
+			// Unmatched .bin files → flat upload
+			for (const bin of binFiles) {
+				if (!matchedBins.has(bin)) flatFiles.push(bin);
+			}
+		} else if (chdFiles.length > 0) {
+			// CHD-only, no m3u: group by title (ignoring parenthetical substrings)
+			const grouped = new Map<string, File[]>();
+			for (const f of chdFiles) {
+				const key = stripParens(f.name);
+				if (!grouped.has(key)) grouped.set(key, []);
+				grouped.get(key)!.push(f);
+			}
+			for (const [, group] of grouped) {
+				if (group.length > 1) {
+					discGroups.push({ files: group, contentFiles: group, generateM3u: true });
+				} else {
+					flatFiles.push(group[0]);
+				}
+			}
+		} else {
+			// Remaining disc files (e.g. lone .bin files without .cue) → flat upload
 			flatFiles.push(...discFiles);
-			discFiles.length = 0;
 		}
 
-		const generateM3u = isDiscUpload && (cueFiles.length > 0 ? cueFiles.length > 1 : chdFiles.length > 1) && !hasM3uFile;
-		const totalFileCount = discFiles.length + flatFiles.length + invalidFiles.length + (generateM3u ? 1 : 0);
+		const discGroupFileCount = discGroups.reduce((sum, g) => sum + g.files.length, 0);
+		const generatedM3uCount = discGroups.filter((g) => g.generateM3u).length;
+		const totalFileCount = discGroupFileCount + flatFiles.length + invalidFiles.length + generatedM3uCount;
 		const totalBytes = files.reduce((sum, f) => sum + f.size, 0);
 
-		if (discFiles.length + flatFiles.length === 0) {
+		if (discGroupFileCount + flatFiles.length === 0) {
 			state.error = 'No valid files selected';
 			uploadingTo = null;
 			return;
@@ -603,51 +656,60 @@
 		}
 
 		try {
-			// --- Disc-based upload: create game folder and push files into it ---
-			if (discFiles.length > 0) {
-				const discContentFiles = cueFiles.length > 0 ? cueFiles : chdFiles;
-				const m3uFile = discFiles.find((f) => f.name.toLowerCase().endsWith('.m3u'));
-				const folderName = m3uFile
-					? getBaseName(m3uFile.name)
-					: deriveGameFolderName(discContentFiles.map((f) => getBaseName(f.name)));
-				const folderPath = `${state.devicePath}/${folderName}`;
-
-				// Check if folder already exists on device
-				let folderExists = false;
+			// --- Disc-based upload: create game folder(s) and push files into them ---
+			let existingDirs: Set<string> | null = null;
+			if (discGroups.length > 0) {
 				try {
 					const entries = await listDirectory(adb, state.devicePath);
-					folderExists = entries.some((e) => e.isDirectory && e.name === folderName);
+					existingDirs = new Set(entries.filter((e) => e.isDirectory).map((e) => e.name));
 				} catch {
 					/* ignore */
 				}
+			}
 
-				if (folderExists) {
-					const resolution = await overwriteDialog.show(folderName, false);
-					if (resolution === 'skip' || resolution === 'skip-all') {
-						skipped += discFiles.length;
-						for (const file of discFiles) skipTransferFile(file.size);
-						if (generateM3u) skipTransferFile(0);
-						discFiles.length = 0;
+			let discConflictPolicy: 'ask' | 'overwrite-all' | 'skip-all' = 'ask';
+
+			for (const group of discGroups) {
+				const folderName = group.m3uFile
+					? getBaseName(group.m3uFile.name)
+					: deriveGameFolderName(group.contentFiles.map((f) => getBaseName(f.name)));
+				const folderPath = `${state.devicePath}/${folderName}`;
+
+				if (existingDirs?.has(folderName)) {
+					if (discConflictPolicy === 'skip-all') {
+						skipped += group.files.length;
+						for (const file of group.files) skipTransferFile(file.size);
+						if (group.generateM3u) skipTransferFile(0);
+						continue;
+					}
+					if (discConflictPolicy === 'ask') {
+						const resolution = await overwriteDialog.show(folderName, discGroups.length > 1);
+						if (resolution === 'skip' || resolution === 'skip-all') {
+							skipped += group.files.length;
+							for (const file of group.files) skipTransferFile(file.size);
+							if (group.generateM3u) skipTransferFile(0);
+							if (resolution === 'skip-all') discConflictPolicy = 'skip-all';
+							continue;
+						}
+						if (resolution === 'overwrite-all') discConflictPolicy = 'overwrite-all';
 					}
 					// 'overwrite' / 'overwrite-all' → proceed
 				}
 
-				if (discFiles.length > 0) {
-					await adbExec(ShellCmd.mkdir(folderPath));
+				await adbExec(ShellCmd.mkdir(folderPath));
 
-					for (const file of discFiles) {
-						const data = new Uint8Array(await file.arrayBuffer());
-						await trackedPush(adb, `${folderPath}/${file.name}`, data);
-						uploaded++;
-					}
+				for (const file of group.files) {
+					const data = new Uint8Array(await file.arrayBuffer());
+					await trackedPush(adb, `${folderPath}/${file.name}`, data);
+					uploaded++;
+				}
 
-					// Auto-generate .m3u listing all disc content files
-					if (generateM3u) {
-						const m3uContent = discContentFiles.map((f) => f.name).sort().join('\n') + '\n';
-						const m3uData = new TextEncoder().encode(m3uContent);
-						await trackedPush(adb, `${folderPath}/${folderName}.m3u`, m3uData);
-						uploaded++;
-					}
+				// Auto-generate .m3u listing all disc content files
+				if (group.generateM3u) {
+					const m3uContent = group.contentFiles.map((f) => f.name).sort().join('\n') + '\n';
+					const m3uData = new TextEncoder().encode(m3uContent);
+					await trackedPush(adb, `${folderPath}/${folderName}.m3u`, m3uData);
+					uploaded++;
 				}
 			}
 
