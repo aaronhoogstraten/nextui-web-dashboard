@@ -1388,29 +1388,6 @@
 							{#if s.system.isCustom}
 								<span class="text-xs text-text-muted ml-1 italic">Custom</span>
 							{/if}
-							{#if availableEmus.size > 0 && !availableEmus.has(s.system.systemCode)}
-								{@const emuMsg = `No emulator found at Emus/${detectedPlatform}/${s.system.systemCode}.pak\n\nUse the Pak Store on your device to download more emulators.`}
-								<!-- svelte-ignore a11y_no_static_element_interactions -->
-								<span
-									onclick={(e: MouseEvent) => {
-										e.stopPropagation();
-										missingEmuInfo = emuMsg;
-									}}
-									onkeydown={(e: KeyboardEvent) => {
-										if (e.key === 'Enter' || e.key === ' ') {
-											e.stopPropagation();
-											e.preventDefault();
-											missingEmuInfo = emuMsg;
-										}
-									}}
-									role="button"
-									tabindex="0"
-									title={emuMsg}
-									class="text-xs text-warning ml-2 hover:opacity-80 cursor-pointer"
-								>
-									&#9888; Missing emulator
-								</span>
-							{/if}
 						</div>
 						<div class="flex items-center gap-3">
 							{#if s.loading}
@@ -1428,6 +1405,18 @@
 							<span class="text-text-muted">{s.expanded ? '\u25B2' : '\u25BC'}</span>
 						</div>
 					</button>
+					{#if availableEmus.size > 0 && !availableEmus.has(s.system.systemCode)}
+						{@const emuMsg = `No emulator found at Emus/${detectedPlatform}/${s.system.systemCode}.pak\n\nUse the Pak Store on your device to download more emulators.`}
+						<div class="px-3 pb-2 bg-surface">
+							<button
+								onclick={() => (missingEmuInfo = emuMsg)}
+								title={emuMsg}
+								class="text-xs text-warning hover:opacity-80 cursor-pointer"
+							>
+								&#9888; Missing emulator
+							</button>
+						</div>
+					{/if}
 
 					<!-- Details (expanded) -->
 					{#if s.expanded}
