@@ -6,6 +6,7 @@
 	import { adbExec } from '$lib/stores/connection.svelte.js';
 	import { formatError, compareByName, plural, pickFile, errorMsg, type Notification } from '$lib/utils.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
+	import ActionButton from './ActionButton.svelte';
 	import ImagePreview from './ImagePreview.svelte';
 	import CollectionEditor from './CollectionEditor.svelte';
 	import StatusMessage from './StatusMessage.svelte';
@@ -287,19 +288,19 @@
 		<div class="flex items-center justify-between mb-4">
 			<h2 class="text-2xl font-bold text-text">Collections</h2>
 			<div class="flex items-center gap-2">
-				<button
+				<ActionButton
 					onclick={createCollection}
-					class="text-sm bg-accent text-white px-3 py-1.5 rounded hover:bg-accent-hover"
+					variant="primary"
 				>
 					New Collection
-				</button>
-				<button
+				</ActionButton>
+				<ActionButton
 					onclick={refresh}
 					disabled={loading}
-					class="text-sm bg-surface hover:bg-surface-hover text-text disabled:opacity-50 px-3 py-1.5 rounded"
+					variant="secondary"
 				>
 					{loading ? 'Loading...' : 'Refresh'}
-				</button>
+				</ActionButton>
 			</div>
 		</div>
 
@@ -315,23 +316,20 @@
 		<div class="mb-4 flex items-center gap-3">
 			<span class="text-sm text-text-muted">List Background:</span>
 			{#if bgUrl}
-				<button onclick={() => openPreview(bgUrl!, 'Collections background')} class="h-10 cursor-pointer">
+				<button
+					onclick={() => openPreview(bgUrl!, 'Collections background')}
+					class="h-10 cursor-pointer"
+				>
 					<img src={bgUrl} alt="Collections bg" class="h-10 rounded border border-border object-contain" />
 				</button>
-				<button
-					onclick={uploadBg}
-					class="text-xs text-accent hover:underline"
-				>Replace</button>
-				<button
-					onclick={removeBg}
-					class="text-xs text-accent hover:text-accent-hover"
-				>Delete</button>
+				<ActionButton onclick={() => openPreview(bgUrl!, 'Collections background')} variant="subtle" size="xs">
+					View
+				</ActionButton>
+				<ActionButton onclick={uploadBg} variant="subtle" size="xs">Replace</ActionButton>
+				<ActionButton onclick={removeBg} variant="danger" size="xs">Delete</ActionButton>
 			{:else}
 				<span class="text-xs text-text-muted">None</span>
-				<button
-					onclick={uploadBg}
-					class="text-xs text-accent hover:underline"
-				>Upload</button>
+				<ActionButton onclick={uploadBg} variant="primary" size="xs">Add Background</ActionButton>
 			{/if}
 		</div>
 
@@ -352,8 +350,11 @@
 									{#if col.loadingIcon}
 										<div class="w-full h-full bg-surface-hover animate-pulse rounded"></div>
 									{:else if col.iconUrl}
-										<button onclick={() => openPreview(col.iconUrl!, col.name + ' icon')} class="w-full h-full cursor-pointer">
-											<img src={col.iconUrl} alt="{col.name} icon" class="w-full h-full object-contain rounded" />
+										<button
+											onclick={() => openPreview(col.iconUrl!, col.name + ' icon')}
+											class="w-full h-full cursor-pointer"
+										>
+											<img src={col.iconUrl} alt={col.name + ' icon'} class="w-full h-full object-contain rounded" />
 										</button>
 									{:else}
 										<span class="text-text-muted text-lg">&#128194;</span>
@@ -362,12 +363,9 @@
 
 								<!-- Info -->
 								<div class="flex-1 min-w-0">
-									<button
-										onclick={() => openEditor(col)}
-										class="text-text font-semibold hover:text-accent text-left truncate block"
-									>
+									<div class="text-text font-semibold truncate">
 										{col.name}
-									</button>
+									</div>
 									<div class="text-xs text-text-muted">
 										{plural(col.romPaths.length, 'ROM')}
 									</div>
@@ -376,31 +374,39 @@
 								<!-- Actions -->
 								<div class="flex items-center gap-2 shrink-0">
 									{#if col.iconUrl}
-										<button onclick={() => removeIcon(col)} class="text-xs text-accent hover:text-accent-hover">
+										<ActionButton
+											onclick={() => openPreview(col.iconUrl!, col.name + ' icon')}
+											variant="subtle"
+											size="xs"
+										>
+											View
+										</ActionButton>
+									{/if}
+									{#if col.iconUrl}
+										<ActionButton onclick={() => removeIcon(col)} variant="danger" size="xs">
 											Remove icon
-										</button>
+										</ActionButton>
 									{:else}
-										<button
+										<ActionButton
 											onclick={() => uploadIcon(col)}
 											disabled={uploadingIcon !== null}
-											class="text-xs text-accent hover:underline disabled:opacity-50"
+											variant="primary"
+											size="xs"
 										>
 											{uploadingIcon === col.name ? 'Uploading...' : 'Add icon'}
-										</button>
+										</ActionButton>
 									{/if}
-									<button
-										onclick={() => openEditor(col)}
-										class="text-xs text-accent hover:underline"
-									>
+									<ActionButton onclick={() => openEditor(col)} variant="subtle" size="xs">
 										Edit
-									</button>
-									<button
+									</ActionButton>
+									<ActionButton
 										onclick={() => deleteCollection(col)}
 										disabled={deletingCollection !== null}
-										class="text-xs text-accent hover:text-accent-hover disabled:opacity-50"
+										variant="danger"
+										size="xs"
 									>
 										{deletingCollection === col.name ? '...' : 'Delete'}
-									</button>
+									</ActionButton>
 								</div>
 							</div>
 						</div>

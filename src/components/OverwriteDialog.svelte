@@ -4,6 +4,7 @@
 
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import ActionButton from './ActionButton.svelte';
 	import Modal from './Modal.svelte';
 
 	let { detail }: { detail?: Snippet<[string]> } = $props();
@@ -40,11 +41,11 @@
 				{/if}
 			</div>
 			<div class="grid grid-cols-2 gap-2">
-				<button onclick={() => resolve('overwrite')} class="text-sm bg-accent text-white px-3 py-2 rounded hover:bg-accent-hover">Overwrite</button>
-				<button onclick={() => resolve('skip')} class="text-sm bg-surface text-text px-3 py-2 rounded hover:bg-surface-hover">Skip</button>
+				<ActionButton onclick={() => resolve('overwrite')} variant="primary">Overwrite</ActionButton>
+				<ActionButton onclick={() => resolve('skip')} variant="secondary">Skip</ActionButton>
 				{#if multiple}
-					<button onclick={() => resolve('overwrite-all')} class="text-sm bg-accent/70 text-white px-3 py-2 rounded hover:bg-accent">Overwrite All</button>
-					<button onclick={() => resolve('skip-all')} class="text-sm bg-surface text-text-muted px-3 py-2 rounded hover:bg-surface-hover">Skip All</button>
+					<ActionButton onclick={() => resolve('overwrite-all')} variant="primary">Overwrite All</ActionButton>
+					<ActionButton onclick={() => resolve('skip-all')} variant="secondary">Skip All</ActionButton>
 				{/if}
 			</div>
 		</div>

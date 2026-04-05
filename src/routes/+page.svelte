@@ -12,6 +12,7 @@
 	import TransferProgress from '../components/TransferProgress.svelte';
 	import StayAwakePrompt from '../components/StayAwakePrompt.svelte';
 	import Modal from '../components/Modal.svelte';
+	import ActionButton from '../components/ActionButton.svelte';
 	import {
 		getConnection,
 		isConnected,
@@ -103,12 +104,12 @@
 			<h3 class="text-lg font-bold text-text mb-3">Keep device awake</h3>
 			<p class="text-sm text-text whitespace-pre-line">{getStayAwakeError()}</p>
 			<div class="mt-4 flex justify-end">
-				<button
+				<ActionButton
 					onclick={dismissStayAwakeError}
-					class="text-sm bg-surface hover:bg-surface-hover text-text px-3 py-1.5 rounded"
+					variant="secondary"
 				>
 					OK
-				</button>
+				</ActionButton>
 			</div>
 		</div>
 	</Modal>

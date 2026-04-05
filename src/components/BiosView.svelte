@@ -9,6 +9,7 @@
 	import { adbExec } from '$lib/stores/connection.svelte.js';
 	import { formatError, getDroppedFiles, hasDraggedFiles, plural, pickFile } from '$lib/utils.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
+	import ActionButton from './ActionButton.svelte';
 
 	let { adb }: { adb: Adb } = $props();
 
@@ -482,13 +483,13 @@
 				<input type="checkbox" bind:checked={hideComplete} class="accent-accent" />
 				Show missing only
 			</label>
-			<button
+			<ActionButton
 				onclick={checkAllSystems}
 				disabled={checking}
-				class="text-sm bg-surface hover:bg-surface-hover text-text disabled:opacity-50 px-3 py-1.5 rounded"
+				variant="secondary"
 			>
 				{checking ? 'Checking...' : 'Refresh'}
-			</button>
+			</ActionButton>
 		</div>
 	</div>
 
@@ -580,36 +581,39 @@
 								<div class="flex items-center gap-2 ml-4">
 									{#if system.isCustom}
 										<span class="text-sm font-medium text-blue-500">Present</span>
-										<button
+										<ActionButton
 											onclick={() => removeBiosFile(file, system)}
 											disabled={removingFile !== null || uploadingFile !== null}
-											class="text-xs px-2 py-1 rounded text-accent hover:bg-surface disabled:opacity-50"
+											variant="danger"
+											size="xs"
 											title={`Delete ${file.definition.fileName}`}
 										>
 											{removingFile === getFileKey(file) ? 'Deleting...' : 'Delete'}
-										</button>
+										</ActionButton>
 									{:else}
 										<span class="text-sm font-medium {effectiveStatusColor(file, system)}">
 											{effectiveStatusLabel(file, system)}
 										</span>
 										{#if file.status === 'missing' || file.status === 'invalid' || file.status === 'unknown'}
-											<button
+											<ActionButton
 												onclick={() => uploadBiosFile(file, system)}
 												disabled={uploadingFile !== null || removingFile !== null}
-												class="text-xs bg-accent text-white px-2 py-1 rounded hover:bg-accent-hover disabled:opacity-50"
+												variant="primary"
+												size="xs"
 											>
 												{uploadingFile === getFileKey(file) ? 'Uploading...' : 'Upload'}
-											</button>
+											</ActionButton>
 										{/if}
 										{#if file.status !== 'missing' && file.status !== 'unknown' && file.status !== 'checking'}
-											<button
+											<ActionButton
 												onclick={() => removeBiosFile(file, system)}
 												disabled={removingFile !== null || uploadingFile !== null}
-												class="text-xs px-2 py-1 rounded text-accent hover:bg-surface disabled:opacity-50"
+												variant="danger"
+												size="xs"
 												title={`Delete ${file.definition.fileName}`}
 											>
 												{removingFile === getFileKey(file) ? 'Deleting...' : 'Delete'}
-											</button>
+											</ActionButton>
 										{/if}
 									{/if}
 								</div>

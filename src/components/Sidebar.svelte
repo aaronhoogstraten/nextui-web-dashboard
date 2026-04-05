@@ -19,6 +19,7 @@
 	import { isFeatureEnabled } from '$lib/stores/features.svelte.js';
 	import { APP_VERSION, isUpdateAvailable } from '$lib/stores/version.svelte.js';
 	import { base } from '$app/paths';
+	import ActionButton from './ActionButton.svelte';
 
 	interface NavItem {
 		id: string;
@@ -143,13 +144,14 @@
 						</button>
 					</label>
 				{/if}
-				<button
+				<ActionButton
 					onclick={disconnect}
 					disabled={isBusy()}
-					class="w-full text-base bg-red-700 hover:bg-red-600 disabled:opacity-50 text-white px-3 py-1.5 rounded"
+					variant="danger"
+					class="w-full"
 				>
 					Disconnect
-				</button>
+				</ActionButton>
 			{:else}
 				<div class="text-base text-text-muted mb-2">
 					{isBusy() ? 'Connecting...' : 'No device'}
@@ -157,13 +159,14 @@
 				{#if getError()}
 					<div class="text-sm text-red-400 mb-2">{getError()}</div>
 				{/if}
-				<button
+				<ActionButton
 					onclick={connect}
 					disabled={isBusy() || !webUsbSupported}
-					class="w-full text-base bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white px-3 py-1.5 rounded"
+					variant="primary"
+					class="w-full"
 				>
 					{isBusy() ? 'Connecting...' : 'Connect'}
-				</button>
+				</ActionButton>
 				{#if !webUsbSupported}
 					<div class="text-sm text-warning mt-2">
 						WebUSB not available. Use Chrome, Edge, or another Chromium browser.

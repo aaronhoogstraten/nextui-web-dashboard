@@ -7,6 +7,7 @@
 	import { adbExec } from '$lib/stores/connection.svelte.js';
 	import { formatSize, formatError, getMimeType, plural, errorMsg, successMsg, type Notification } from '$lib/utils.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
+	import ActionButton from './ActionButton.svelte';
 	import ImagePreview from './ImagePreview.svelte';
 	import StatusMessage from './StatusMessage.svelte';
 	import JSZip from 'jszip';
@@ -180,20 +181,20 @@
 	<div class="flex items-center justify-between mb-4">
 		<h2 class="text-2xl font-bold text-text">Screenshots</h2>
 		<div class="flex items-center gap-2">
-			<button
+			<ActionButton
 				onclick={refresh}
 				disabled={loading || downloading}
-				class="text-sm bg-surface hover:bg-surface-hover text-text disabled:opacity-50 px-3 py-1.5 rounded"
+				variant="secondary"
 			>
 				{loading ? 'Loading...' : 'Refresh'}
-			</button>
-			<button
+			</ActionButton>
+			<ActionButton
 				onclick={downloadAll}
 				disabled={loading || downloading || screenshots.length === 0}
-				class="text-sm bg-accent text-white px-3 py-1.5 rounded hover:bg-accent-hover disabled:opacity-50"
+				variant="primary"
 			>
 				{downloading ? 'Downloading...' : 'Download All as Zip'}
-			</button>
+			</ActionButton>
 		</div>
 	</div>
 
@@ -222,7 +223,10 @@
 							{#if shot.loadingThumb}
 								<div class="w-full h-full bg-surface-hover animate-pulse"></div>
 							{:else if shot.thumbnailUrl}
-								<button onclick={() => openPreview(shot)} class="w-full h-full cursor-pointer">
+								<button
+									onclick={() => openPreview(shot)}
+									class="w-full h-full cursor-pointer"
+								>
 									<img src={shot.thumbnailUrl} alt={shot.name} class="w-full h-full object-contain" />
 								</button>
 							{:else}
@@ -231,21 +235,27 @@
 						</div>
 						<div class="p-2">
 							<div class="text-xs text-text truncate" title={shot.name}>{shot.name}</div>
-							<div class="flex items-center justify-between mt-1">
+							<div class="flex items-center justify-between gap-2 mt-1">
 								<span class="text-xs text-text-muted">
 									{formatSize(Number(shot.size))}
 									{#if formatDate(shot.mtime)}
 										&middot; {formatDate(shot.mtime)}
 									{/if}
 								</span>
-								<button
-									onclick={() => removeScreenshot(shot)}
-									disabled={removingFile !== null}
-									class="text-xs text-accent hover:text-accent-hover disabled:opacity-50"
-									title="Delete screenshot"
-								>
-									{removingFile === shot.name ? '...' : 'Delete'}
-								</button>
+								<div class="flex items-center gap-2">
+									<ActionButton onclick={() => openPreview(shot)} variant="subtle" size="xs">
+										View
+									</ActionButton>
+									<ActionButton
+										onclick={() => removeScreenshot(shot)}
+										disabled={removingFile !== null}
+										variant="danger"
+										size="xs"
+										title="Delete screenshot"
+									>
+										{removingFile === shot.name ? '...' : 'Delete'}
+									</ActionButton>
+								</div>
 							</div>
 						</div>
 					</div>

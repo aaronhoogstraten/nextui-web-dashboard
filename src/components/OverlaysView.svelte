@@ -7,6 +7,7 @@
 	import { adbExec } from '$lib/stores/connection.svelte.js';
 	import { formatSize, formatError, compareByName, plural, pickFiles } from '$lib/utils.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
+	import ActionButton from './ActionButton.svelte';
 	import ImagePreview from './ImagePreview.svelte';
 	import LargeArtDialog from './LargeArtDialog.svelte';
 
@@ -398,13 +399,13 @@
 				<input type="checkbox" bind:checked={hideEmpty} class="accent-accent" />
 				Show systems with overlays only
 			</label>
-			<button
+			<ActionButton
 				onclick={refreshAll}
 				disabled={refreshing}
-				class="text-sm bg-surface hover:bg-surface-hover text-text disabled:opacity-50 px-3 py-1.5 rounded"
+				variant="secondary"
 			>
 				{refreshing ? 'Refreshing...' : 'Refresh'}
-			</button>
+			</ActionButton>
 		</div>
 	</div>
 
@@ -438,20 +439,20 @@
 							<div class="flex items-center justify-between">
 								<div class="text-xs text-text-muted font-mono">{sys.devicePath}</div>
 								<div class="flex items-center gap-2">
-									<button
+									<ActionButton
 										onclick={() => openCommunityBrowser(sys.systemCode)}
 										disabled={communityLoading}
-										class="text-sm border border-border text-text px-3 py-1.5 rounded hover:bg-surface-hover disabled:opacity-50"
+										variant="secondary"
 									>
 										{communityOpen === sys.systemCode ? 'Close Community' : 'Browse Community'}
-									</button>
-									<button
+									</ActionButton>
+									<ActionButton
 										onclick={() => uploadOverlays(sys)}
 										disabled={uploadingTo !== null}
-										class="text-sm bg-accent text-white px-3 py-1.5 rounded hover:bg-accent-hover disabled:opacity-50"
+										variant="primary"
 									>
 										{uploadingTo === sys.systemCode ? 'Uploading...' : 'Upload Overlays'}
-									</button>
+									</ActionButton>
 								</div>
 							</div>
 
@@ -470,7 +471,10 @@
 												{#if file.loadingThumb}
 													<div class="w-full h-full bg-surface-hover animate-pulse"></div>
 												{:else if file.thumbnailUrl}
-													<button onclick={() => openPreview(file, sys.systemCode)} class="w-full h-full cursor-pointer">
+													<button
+														onclick={() => openPreview(file, sys.systemCode)}
+														class="w-full h-full cursor-pointer"
+													>
 														<img src={file.thumbnailUrl} alt={file.name} class="w-full h-full object-contain" />
 													</button>
 												{:else}
@@ -479,16 +483,26 @@
 											</div>
 											<div class="p-2">
 												<div class="text-xs text-text truncate" title={file.name}>{file.name}</div>
-												<div class="flex items-center justify-between mt-1">
+												<div class="flex items-center justify-between gap-2 mt-1">
 													<span class="text-xs text-text-muted">{formatSize(file.size)}</span>
-													<button
-														onclick={() => removeOverlay(sys, file)}
-														disabled={removingFile !== null}
-														class="text-xs text-accent hover:text-accent-hover disabled:opacity-50"
-														title="Remove overlay"
-													>
-														{removingFile === `${sys.systemCode}/${file.name}` ? '...' : 'Delete'}
-													</button>
+													<div class="flex items-center gap-2">
+														<ActionButton
+															onclick={() => openPreview(file, sys.systemCode)}
+															variant="subtle"
+															size="xs"
+														>
+															View
+														</ActionButton>
+														<ActionButton
+															onclick={() => removeOverlay(sys, file)}
+															disabled={removingFile !== null}
+															variant="danger"
+															size="xs"
+															title="Remove overlay"
+														>
+															{removingFile === `${sys.systemCode}/${file.name}` ? '...' : 'Delete'}
+														</ActionButton>
+													</div>
 												</div>
 											</div>
 										</div>
@@ -528,7 +542,10 @@
 											{#each communityOverlays as overlay}
 												<div class="border border-border rounded-lg overflow-hidden bg-bg">
 													<div class="aspect-[4/3] bg-surface flex items-center justify-center">
-														<button onclick={() => openCommunityPreview(overlay)} class="w-full h-full cursor-pointer">
+														<button
+															onclick={() => openCommunityPreview(overlay)}
+															class="w-full h-full cursor-pointer"
+														>
 															<img
 																src={overlay.rawUrl}
 																alt={overlay.name}
@@ -540,15 +557,25 @@
 													<div class="p-2">
 														<div class="text-xs text-text truncate" title={overlay.name}>{overlay.name}</div>
 														<div class="text-xs text-text-muted truncate">by {overlay.author}</div>
-														<div class="flex items-center justify-between mt-1">
+														<div class="flex items-center justify-between gap-2 mt-1">
 															<span class="text-xs text-text-muted">{overlay.resolution}</span>
-															<button
-																onclick={() => installCommunityOverlay(sys, overlay)}
-																disabled={installingOverlay !== null}
-																class="text-xs bg-accent text-white px-2 py-0.5 rounded hover:bg-accent-hover disabled:opacity-50"
-															>
-																{installingOverlay === overlay.path ? 'Downloading...' : 'Download'}
-															</button>
+															<div class="flex items-center gap-2">
+																<ActionButton
+																	onclick={() => openCommunityPreview(overlay)}
+																	variant="subtle"
+																	size="xs"
+																>
+																	View
+																</ActionButton>
+																<ActionButton
+																	onclick={() => installCommunityOverlay(sys, overlay)}
+																	disabled={installingOverlay !== null}
+																	variant="primary"
+																	size="xs"
+																>
+																	{installingOverlay === overlay.path ? 'Downloading...' : 'Download'}
+																</ActionButton>
+															</div>
 														</div>
 													</div>
 												</div>

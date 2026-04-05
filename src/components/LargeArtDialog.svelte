@@ -4,6 +4,7 @@
 
 <script lang="ts">
 	import Modal from './Modal.svelte';
+	import ActionButton from './ActionButton.svelte';
 	import { formatSize } from '$lib/utils.js';
 	import { adbLog } from '$lib/stores/log.svelte.js';
 
@@ -97,27 +98,27 @@
 			{/if}
 
 			<div class="grid grid-cols-3 gap-2">
-				<button
+				<ActionButton
 					onclick={handleProceed}
 					disabled={resizing}
-					class="text-sm bg-surface text-text px-3 py-2 rounded hover:bg-surface-hover disabled:opacity-50"
+					variant="secondary"
 				>
 					Proceed
-				</button>
-				<button
+				</ActionButton>
+				<ActionButton
 					onclick={() => resolve(null)}
 					disabled={resizing}
-					class="text-sm bg-surface text-text px-3 py-2 rounded hover:bg-surface-hover disabled:opacity-50"
+					variant="secondary"
 				>
 					Cancel
-				</button>
-				<button
+				</ActionButton>
+				<ActionButton
 					onclick={handleAutoResize}
 					disabled={resizing}
-					class="text-sm bg-accent text-white px-3 py-2 rounded hover:bg-accent-hover disabled:opacity-50"
+					variant="primary"
 				>
 					{resizing ? 'Resizing...' : 'Auto Resize'}
-				</button>
+				</ActionButton>
 			</div>
 		</div>
 	</Modal>

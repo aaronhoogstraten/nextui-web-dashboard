@@ -7,6 +7,7 @@
 	import { getNextUIVersion } from '$lib/stores/connection.svelte.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
 	import { formatSize, formatError, plural, errorMsg, successMsg, type Notification } from '$lib/utils.js';
+	import ActionButton from './ActionButton.svelte';
 	import StatusMessage from './StatusMessage.svelte';
 	import JSZip from 'jszip';
 
@@ -281,12 +282,12 @@
 	<div class="p-6 flex flex-col h-full">
 		<div class="flex items-center justify-between mb-4">
 			<div class="flex items-center gap-3">
-				<button
+				<ActionButton
 					onclick={stopTail}
-					class="text-sm bg-surface hover:bg-surface-hover text-text px-3 py-1.5 rounded"
+					variant="secondary"
 				>
 					&larr; Back
-				</button>
+				</ActionButton>
 				<h2 class="text-lg font-bold text-text truncate" title={viewingFile.fullPath}>
 					{viewingFile.relativePath}
 				</h2>
@@ -296,13 +297,13 @@
 					<input type="checkbox" bind:checked={autoScroll} class="accent-accent" />
 					Auto-scroll
 				</label>
-				<button
+				<ActionButton
 					onclick={() => (logLines = [])}
-					class="text-sm bg-surface hover:bg-surface-hover text-text px-3 py-1.5 rounded"
+					variant="secondary"
 					title="Clear the viewer (does not affect the log file on device)"
 				>
 					Clear View
-				</button>
+				</ActionButton>
 			</div>
 		</div>
 
@@ -333,20 +334,20 @@
 		<div class="flex items-center justify-between mb-4">
 			<h2 class="text-2xl font-bold text-text">Log Viewer</h2>
 			<div class="flex items-center gap-2">
-				<button
+				<ActionButton
 					onclick={scanForLogs}
 					disabled={scanning || downloading}
-					class="text-sm bg-surface hover:bg-surface-hover text-text disabled:opacity-50 px-3 py-1.5 rounded"
+					variant="secondary"
 				>
 					{scanning ? 'Scanning...' : 'Rescan'}
-				</button>
-				<button
+				</ActionButton>
+				<ActionButton
 					onclick={downloadLogs}
 					disabled={scanning || downloading || logFiles.length === 0}
-					class="text-sm bg-accent text-white px-3 py-1.5 rounded hover:bg-accent-hover disabled:opacity-50"
+					variant="primary"
 				>
 					{downloading ? 'Downloading...' : 'Download All as Zip'}
-				</button>
+				</ActionButton>
 			</div>
 		</div>
 
@@ -367,13 +368,19 @@
 				<thead class="bg-surface sticky top-0">
 					<tr class="text-left">
 						<th class="py-2 px-3 font-medium text-text-muted">
-							<button onclick={() => toggleSort('path')} class="hover:text-text cursor-pointer">File{sortIndicator('path')}</button>
+							<ActionButton onclick={() => toggleSort('path')} variant="subtle" size="xs">
+								File{sortIndicator('path')}
+							</ActionButton>
 						</th>
 						<th class="py-2 px-3 font-medium text-text-muted w-28">
-							<button onclick={() => toggleSort('size')} class="hover:text-text cursor-pointer">Size{sortIndicator('size')}</button>
+							<ActionButton onclick={() => toggleSort('size')} variant="subtle" size="xs">
+								Size{sortIndicator('size')}
+							</ActionButton>
 						</th>
 						<th class="py-2 px-3 font-medium text-text-muted w-44">
-							<button onclick={() => toggleSort('mtime')} class="hover:text-text cursor-pointer">Modified{sortIndicator('mtime')}</button>
+							<ActionButton onclick={() => toggleSort('mtime')} variant="subtle" size="xs">
+								Modified{sortIndicator('mtime')}
+							</ActionButton>
 						</th>
 						<th class="py-2 px-3 font-medium text-text-muted w-20"></th>
 					</tr>
@@ -399,19 +406,21 @@
 								</td>
 								<td class="py-1.5 px-3 text-right">
 									<div class="flex justify-end gap-1.5">
-										<button
+										<ActionButton
 											onclick={() => startTail(file)}
-											class="text-xs bg-accent text-white px-2 py-1 rounded hover:bg-accent-hover"
+											variant="subtle"
+											size="xs"
 										>
 											View
-										</button>
-										<button
+										</ActionButton>
+										<ActionButton
 											onclick={() => downloadSingleLog(file)}
 											disabled={downloading || downloadingFile !== null}
-											class="text-xs bg-surface hover:bg-surface-hover text-text px-2 py-1 rounded border border-border disabled:opacity-50"
+											variant="subtle"
+											size="xs"
 										>
 											{downloadingFile === file.fullPath ? '...' : 'Download'}
-										</button>
+										</ActionButton>
 									</div>
 								</td>
 							</tr>

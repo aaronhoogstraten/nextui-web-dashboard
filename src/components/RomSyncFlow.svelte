@@ -7,6 +7,7 @@
 	import { adbLog } from '$lib/stores/log.svelte.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
 	import { buildDeviceDirMap, parseRomDirectoryName } from '$lib/roms/index.js';
+	import ActionButton from './ActionButton.svelte';
 	import Modal from './Modal.svelte';
 	import OverwriteDialog, { type ConflictResolution } from './OverwriteDialog.svelte';
 	import StatusMessage from './StatusMessage.svelte';
@@ -284,7 +285,9 @@
 	<!-- Sync: Review Diff -->
 	<div class="flex items-center justify-between mb-4">
 		<div class="flex items-center gap-3">
-			<button onclick={exitSync} class="text-sm text-accent hover:underline">&larr; Back</button>
+			<button onclick={exitSync} class="text-sm text-accent hover:underline">
+				&larr; Back
+			</button>
 			<h2 class="text-2xl font-bold text-text">Sync Review</h2>
 		</div>
 	</div>
@@ -298,16 +301,16 @@
 		<span class="text-warning">~{syncTotals.existsCount} existing</span>
 		<span class="text-text-muted">{syncTotals.checkedCount} selected</span>
 		<div class="flex-1"></div>
-		<button onclick={syncCheckAllNew} class="text-sm text-accent hover:underline">
+		<ActionButton onclick={syncCheckAllNew} variant="plain" size="none" class="text-sm text-accent hover:underline font-normal">
 			Select All New
-		</button>
-		<button
+		</ActionButton>
+		<ActionButton
 			onclick={executeSync}
 			disabled={syncTotals.checkedCount === 0}
-			class="bg-accent text-white px-4 py-1.5 rounded hover:bg-accent-hover disabled:opacity-50 text-sm"
+			variant="primary"
 		>
 			Start Sync ({plural(syncTotals.checkedCount, 'file')})
-		</button>
+		</ActionButton>
 	</div>
 
 	<div class="flex-1 overflow-auto space-y-2">
@@ -334,9 +337,15 @@
 				{#if sys.expanded}
 					<div class="p-3">
 						<div class="flex items-center gap-2 mb-2">
-							<button onclick={() => syncCheckNewInSystem(sys)} class="text-xs text-accent hover:underline">Select new</button>
-							<button onclick={() => syncCheckAllInSystem(sys)} class="text-xs text-accent hover:underline">Select all</button>
-							<button onclick={() => syncUncheckSystem(sys)} class="text-xs text-text-muted hover:text-text">Deselect all</button>
+							<ActionButton onclick={() => syncCheckNewInSystem(sys)} variant="plain" size="none" class="text-xs text-accent hover:underline font-normal">
+								Select new
+							</ActionButton>
+							<ActionButton onclick={() => syncCheckAllInSystem(sys)} variant="plain" size="none" class="text-xs text-accent hover:underline font-normal">
+								Select all
+							</ActionButton>
+							<ActionButton onclick={() => syncUncheckSystem(sys)} variant="plain" size="none" class="text-xs text-text-muted hover:text-text font-normal">
+								Deselect all
+							</ActionButton>
 						</div>
 						<table class="w-full text-sm">
 							<thead>
@@ -426,9 +435,9 @@
 					</div>
 				{/if}
 			</div>
-			<button onclick={exitSync} class="bg-surface hover:bg-surface-hover text-text px-4 py-1.5 rounded text-sm mt-4">
+			<ActionButton onclick={exitSync} variant="secondary" class="mt-4">
 				Back to ROMs
-			</button>
+			</ActionButton>
 		</div>
 	</div>
 {/if}
