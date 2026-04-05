@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { respondToStayAwakePrompt, isStayAwakeBusy } from '$lib/stores/connection.svelte.js';
+	import ActionButton from './ActionButton.svelte';
 	import Modal from './Modal.svelte';
 
 	let dontAskAgain = $state(false);
@@ -34,20 +35,20 @@
 				Don't ask again
 			</label>
 			<div class="flex items-center gap-2">
-				<button
+				<ActionButton
 					onclick={() => respond(false)}
 					disabled={isStayAwakeBusy()}
-					class="text-sm bg-surface hover:bg-surface-hover text-text px-3 py-1.5 rounded disabled:opacity-50"
+					variant="secondary"
 				>
 					No
-				</button>
-				<button
+				</ActionButton>
+				<ActionButton
 					onclick={() => respond(true)}
 					disabled={isStayAwakeBusy()}
-					class="text-sm bg-accent text-white px-3 py-1.5 rounded hover:bg-accent-hover disabled:opacity-50"
+					variant="primary"
 				>
 					{isStayAwakeBusy() ? 'Enabling...' : 'Yes'}
-				</button>
+				</ActionButton>
 			</div>
 		</div>
 	</div>

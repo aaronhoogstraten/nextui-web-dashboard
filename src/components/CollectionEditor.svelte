@@ -7,6 +7,7 @@
 	import { formatError, compareByName, plural, errorMsg, successMsg, type Notification } from '$lib/utils.js';
 	import Modal from './Modal.svelte';
 	import StatusMessage from './StatusMessage.svelte';
+	import ActionButton from './ActionButton.svelte';
 
 	interface CollectionInfo {
 		name: string;
@@ -253,19 +254,19 @@
 		{/if}
 	</div>
 	<div class="flex items-center gap-2">
-		<button
+		<ActionButton
 			onclick={openPicker}
-			class="text-sm bg-accent text-white px-3 py-1.5 rounded hover:bg-accent-hover"
+			variant="primary"
 		>
 			Add ROMs
-		</button>
-		<button
+		</ActionButton>
+		<ActionButton
 			onclick={saveCollection}
 			disabled={!editorDirty || saving}
-			class="text-sm bg-green-700 text-white px-3 py-1.5 rounded hover:bg-green-600 disabled:opacity-50"
+			variant="success"
 		>
 			{saving ? 'Saving...' : 'Save'}
-		</button>
+		</ActionButton>
 	</div>
 </div>
 
@@ -312,23 +313,32 @@
 						</td>
 						<td class="py-1.5 px-3">
 							<div class="flex items-center gap-1">
-								<button
+								<ActionButton
 									onclick={() => moveUp(i)}
 									disabled={i === 0}
-									class="text-xs text-text-muted hover:text-text disabled:opacity-30 px-1"
+									variant="subtle"
+									size="xs"
 									title="Move up"
-								>&#9650;</button>
-								<button
+								>
+									&#9650;
+								</ActionButton>
+								<ActionButton
 									onclick={() => moveDown(i)}
 									disabled={i === editorPaths.length - 1}
-									class="text-xs text-text-muted hover:text-text disabled:opacity-30 px-1"
+									variant="subtle"
+									size="xs"
 									title="Move down"
-								>&#9660;</button>
-								<button
+								>
+									&#9660;
+								</ActionButton>
+								<ActionButton
 									onclick={() => removeEntry(i)}
-									class="text-xs text-accent hover:text-accent-hover px-1"
+									variant="danger"
+									size="xs"
 									title="Remove from collection"
-								>Remove</button>
+								>
+									Remove
+								</ActionButton>
 							</div>
 						</td>
 					</tr>
@@ -350,18 +360,20 @@
 				<h3 class="text-lg font-bold text-text">Add ROMs to Collection</h3>
 				<div class="flex items-center gap-2">
 					{#if selectedCount > 0}
-						<button
+						<ActionButton
 							onclick={addSelectedRoms}
-							class="text-sm bg-accent text-white px-3 py-1.5 rounded hover:bg-accent-hover"
+							variant="primary"
 						>
 							Add {plural(selectedCount, 'ROM')}
-						</button>
+						</ActionButton>
 					{/if}
 					<button
 						onclick={closePicker}
 						class="text-text-muted hover:text-text px-2 py-1"
 						title="Close"
-					>&#10005;</button>
+					>
+						&#10005;
+					</button>
 				</div>
 			</div>
 

@@ -37,6 +37,7 @@
 		type Notification
 	} from '$lib/utils.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
+	import ActionButton from './ActionButton.svelte';
 	import ImagePreview from './ImagePreview.svelte';
 	import StatusMessage from './StatusMessage.svelte';
 
@@ -527,34 +528,34 @@
 	<div class="flex items-center justify-between mb-4">
 		<h2 class="text-2xl font-bold text-text">File Browser</h2>
 		<div class="flex items-center gap-2">
-			<button
+			<ActionButton
 				onclick={uploadFiles}
 				disabled={uploading}
-				class="text-sm bg-accent text-white px-3 py-1.5 rounded hover:bg-accent-hover disabled:opacity-50"
+				variant="primary"
 			>
 				{uploading ? 'Uploading...' : 'Upload File'}
-			</button>
-			<button
+			</ActionButton>
+			<ActionButton
 				onclick={createFolder}
 				disabled={creatingFolder}
-				class="text-sm bg-surface hover:bg-surface-hover text-text disabled:opacity-50 px-3 py-1.5 rounded"
+				variant="secondary"
 			>
 				{creatingFolder ? 'Creating...' : 'New Folder'}
-			</button>
-			<button
+			</ActionButton>
+			<ActionButton
 				onclick={uploadFolder}
 				disabled={uploading}
-				class="text-sm bg-accent text-white px-3 py-1.5 rounded hover:bg-accent-hover disabled:opacity-50"
+				variant="primary"
 			>
 				{uploading ? 'Uploading...' : 'Upload Folder'}
-			</button>
-			<button
+			</ActionButton>
+			<ActionButton
 				onclick={() => navigate(currentPath)}
 				disabled={loading}
-				class="text-sm bg-surface hover:bg-surface-hover text-text disabled:opacity-50 px-3 py-1.5 rounded"
+				variant="secondary"
 			>
 				{loading ? 'Loading...' : 'Refresh'}
-			</button>
+			</ActionButton>
 		</div>
 	</div>
 
@@ -567,20 +568,20 @@
 			onkeydown={(e) => e.key === 'Enter' && doSearch()}
 			class="flex-1 text-sm bg-surface text-text border border-border rounded px-3 py-1.5 placeholder:text-text-muted"
 		/>
-		<button
+		<ActionButton
 			onclick={doSearch}
 			disabled={searching || !searchQuery.trim()}
-			class="text-sm bg-accent text-white px-3 py-1.5 rounded hover:bg-accent-hover disabled:opacity-50"
+			variant="primary"
 		>
 			{searching ? 'Searching...' : 'Search'}
-		</button>
+		</ActionButton>
 		{#if searchResults !== null}
-			<button
+			<ActionButton
 				onclick={clearSearch}
-				class="text-sm bg-surface hover:bg-surface-hover text-text px-3 py-1.5 rounded"
+				variant="secondary"
 			>
 				Clear
-			</button>
+			</ActionButton>
 		{/if}
 	</div>
 
@@ -593,7 +594,10 @@
 			{#if i === pathSegments.length - 1}
 				<span class="text-text font-medium">{segment.name}</span>
 			{:else}
-				<button onclick={() => navigate(segment.path)} class="text-accent hover:underline">
+				<button
+					onclick={() => navigate(segment.path)}
+					class="text-accent hover:underline"
+				>
 					{segment.name}
 				</button>
 			{/if}
@@ -728,37 +732,41 @@
 									<div class="flex items-center gap-2">
 										{#if entry.isFile}
 											{#if isTextFile(entry.name)}
-												<button
+												<ActionButton
 													onclick={() => openEditor(joinPath(currentPath, entry.name))}
-													class="text-xs text-accent hover:underline"
+													variant="subtle"
+													size="xs"
 												>
 													Edit
-												</button>
+												</ActionButton>
 											{/if}
 											{#if isImageFile(entry.name)}
-												<button
+												<ActionButton
 													onclick={() => previewImage(entry)}
 													disabled={previewLoading !== null}
-													class="text-xs text-accent hover:underline disabled:opacity-50"
+													variant="subtle"
+													size="xs"
 												>
 													{previewLoading === entry.name ? '...' : 'Preview'}
-												</button>
+												</ActionButton>
 											{/if}
-											<button
+											<ActionButton
 												onclick={() => downloadFile(entry)}
 												disabled={downloadingFile !== null}
-												class="text-xs text-accent hover:underline disabled:opacity-50"
+												variant="subtle"
+												size="xs"
 											>
 												{downloadingFile === entry.name ? '...' : 'Download'}
-											</button>
+											</ActionButton>
 										{/if}
-										<button
+										<ActionButton
 											onclick={() => deleteEntry(entry)}
 											disabled={deletingEntry !== null}
-											class="text-xs text-accent hover:underline disabled:opacity-50"
+											variant="danger"
+											size="xs"
 										>
 											{deletingEntry === entry.name ? '...' : 'Delete'}
-										</button>
+										</ActionButton>
 									</div>
 								</td>
 							</tr>
@@ -781,20 +789,22 @@
 						</span>
 					</div>
 					<div class="flex items-center gap-2 shrink-0">
-						<button
+						<ActionButton
 							onclick={saveEditor}
 							disabled={!editorDirty || editorSaving}
-							class="text-xs bg-accent text-white px-2 py-1 rounded hover:bg-accent-hover disabled:opacity-50"
+							variant="primary"
+							size="xs"
 						>
 							{editorSaving ? 'Saving...' : 'Save'}
-						</button>
-						<button
+						</ActionButton>
+						<ActionButton
 							onclick={closeEditor}
-							class="text-xs text-text-muted hover:text-text px-1"
+							variant="subtle"
+							size="xs"
 							title="Close editor"
 						>
-							&#10005;
-						</button>
+							Close
+						</ActionButton>
 					</div>
 				</div>
 

@@ -4,6 +4,7 @@
 	import { getConnection, isConnected } from '$lib/stores/connection.svelte.js';
 	import { isFeatureEnabled } from '$lib/stores/features.svelte.js';
 	import { formatError } from '$lib/utils.js';
+	import ActionButton from './ActionButton.svelte';
 
 	let collapsed = $state(false);
 	let autoScroll = $state(true);
@@ -229,8 +230,12 @@
 					<input type="checkbox" bind:checked={autoScroll} class="accent-accent" />
 					Auto-scroll
 				</label>
-				<button onclick={copyLogs} class="text-text-muted hover:text-text">{copyLabel}</button>
-				<button onclick={clearLog} class="text-text-muted hover:text-text">Clear</button>
+				<ActionButton onclick={copyLogs} variant="subtle" size="xs">
+					{copyLabel}
+				</ActionButton>
+				<ActionButton onclick={clearLog} variant="subtle" size="xs">
+					Clear
+				</ActionButton>
 			</div>
 		{/if}
 	</div>

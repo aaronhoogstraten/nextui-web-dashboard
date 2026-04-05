@@ -32,6 +32,7 @@
 		type DroppedFile
 	} from '$lib/utils.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
+	import ActionButton from './ActionButton.svelte';
 	import ImagePreview from './ImagePreview.svelte';
 	import Modal from './Modal.svelte';
 	import OverwriteDialog from './OverwriteDialog.svelte';
@@ -1336,24 +1337,24 @@
 			<h2 class="text-2xl font-bold text-text">ROM Systems</h2>
 			<div class="flex items-center gap-4">
 				{#if hasDirectoryPicker}
-					<button
+					<ActionButton
 						onclick={startSyncFlow}
-						class="text-sm bg-accent text-white px-3 py-1.5 rounded hover:bg-accent-hover"
+						variant="primary"
 					>
 						Sync from Folder
-					</button>
+					</ActionButton>
 				{/if}
 				<label class="flex items-center gap-2 text-sm text-text-muted cursor-pointer">
 					<input type="checkbox" bind:checked={hideEmpty} class="accent-accent" />
 					Show systems with files only
 				</label>
-				<button
+				<ActionButton
 					onclick={refreshAll}
 					disabled={refreshing}
-					class="text-sm bg-surface hover:bg-surface-hover text-text disabled:opacity-50 px-3 py-1.5 rounded"
+					variant="secondary"
 				>
 					{refreshing ? 'Refreshing...' : 'Refresh'}
-				</button>
+				</ActionButton>
 			</div>
 		</div>
 
@@ -1387,29 +1388,6 @@
 							{#if s.system.isCustom}
 								<span class="text-xs text-text-muted ml-1 italic">Custom</span>
 							{/if}
-							{#if availableEmus.size > 0 && !availableEmus.has(s.system.systemCode)}
-								{@const emuMsg = `No emulator found at Emus/${detectedPlatform}/${s.system.systemCode}.pak\n\nUse the Pak Store on your device to download more emulators.`}
-								<!-- svelte-ignore a11y_no_static_element_interactions -->
-								<span
-									onclick={(e: MouseEvent) => {
-										e.stopPropagation();
-										missingEmuInfo = emuMsg;
-									}}
-									onkeydown={(e: KeyboardEvent) => {
-										if (e.key === 'Enter' || e.key === ' ') {
-											e.stopPropagation();
-											e.preventDefault();
-											missingEmuInfo = emuMsg;
-										}
-									}}
-									role="button"
-									tabindex="0"
-									title={emuMsg}
-									class="text-xs text-warning ml-2 hover:opacity-80 cursor-pointer"
-								>
-									&#9888; Missing emulator
-								</span>
-							{/if}
 						</div>
 						<div class="flex items-center gap-3">
 							{#if s.loading}
@@ -1427,6 +1405,18 @@
 							<span class="text-text-muted">{s.expanded ? '\u25B2' : '\u25BC'}</span>
 						</div>
 					</button>
+					{#if availableEmus.size > 0 && !availableEmus.has(s.system.systemCode)}
+						{@const emuMsg = `No emulator found at Emus/${detectedPlatform}/${s.system.systemCode}.pak\n\nUse the Pak Store on your device to download more emulators.`}
+						<div class="px-3 pb-2 bg-surface">
+							<button
+								onclick={() => (missingEmuInfo = emuMsg)}
+								title={emuMsg}
+								class="text-xs text-warning hover:opacity-80 cursor-pointer"
+							>
+								&#9888; Missing emulator
+							</button>
+						</div>
+					{/if}
 
 					<!-- Details (expanded) -->
 					{#if s.expanded}
@@ -1444,21 +1434,21 @@
 								</div>
 								<div class="flex items-center gap-2">
 									{#if s.displayNameDirty}
-										<button
+										<ActionButton
 											onclick={() => saveDisplayNames(s)}
 											disabled={s.savingNames}
-											class="text-sm bg-green-700 text-white px-3 py-1.5 rounded hover:bg-green-600 disabled:opacity-50"
+											variant="success"
 										>
 											{s.savingNames ? 'Saving...' : 'Save Names'}
-										</button>
+										</ActionButton>
 									{/if}
-									<button
+									<ActionButton
 										onclick={() => uploadRoms(s)}
 										disabled={uploadingTo !== null}
-										class="text-sm bg-accent text-white px-3 py-1.5 rounded hover:bg-accent-hover disabled:opacity-50"
+										variant="primary"
 									>
 										{uploadingTo === s.system.systemCode ? 'Uploading...' : 'Upload ROMs'}
-									</button>
+									</ActionButton>
 								</div>
 							</div>
 
@@ -1494,32 +1484,36 @@
 												</div>
 											{/if}
 											<!-- Buttons -->
-											<div class="flex items-center justify-between px-1.5 py-1">
-												<span class="text-xs text-text-muted truncate">{media.label}</span>
-												<div class="flex items-center shrink-0">
-													<button
+											<div class="border-t border-border/60 px-1.5 pt-1.5 pb-1 space-y-1.5">
+												<div class="text-[11px] leading-tight text-text-muted break-all text-center">
+													{media.label}
+												</div>
+												<div class="flex items-center justify-center gap-1">
+													<ActionButton
 														onclick={() => uploadSpecialMedia(s, media.name)}
 														disabled={uploadingBg !== null || removingBg !== null}
-														class="text-xs {media.url
-															? 'text-text-muted hover:bg-surface'
-															: 'text-accent'} px-1 py-0.5 rounded disabled:opacity-50"
+														variant={media.url ? 'subtle' : 'primary'}
+														size="none"
+														class={media.url ? 'text-xs px-1.5 py-0.5' : 'text-xs px-2 py-0.5'}
 													>
 														{uploadingBg === `${s.system.systemCode}/${media.name}`
 															? '...'
 															: media.url
 																? 'Replace'
 																: 'Add'}
-													</button>
+													</ActionButton>
 													{#if media.url}
-														<button
+														<ActionButton
 															onclick={() => removeSpecialMedia(s, media.name)}
 															disabled={removingBg !== null || uploadingBg !== null}
-															class="text-xs text-accent hover:bg-surface px-1 py-0.5 rounded disabled:opacity-50"
+															variant="danger"
+															size="none"
+															class="text-xs px-1.5 py-0.5"
 														>
 															{removingBg === `${s.system.systemCode}/${media.name}`
 																? '...'
 																: 'Delete'}
-														</button>
+														</ActionButton>
 													{/if}
 												</div>
 											</div>
@@ -1586,31 +1580,32 @@
 
 											<!-- Action buttons -->
 											<div class="flex items-center gap-1 shrink-0">
-												<button
+												<ActionButton
 													onclick={() => renameRom(s, rom)}
-													class="text-xs px-2 py-1 rounded text-text-muted hover:bg-surface"
+													variant="subtle"
+													size="xs"
 													title="Set display name"
 												>
 													Rename
-												</button>
+												</ActionButton>
 												{#if (rom.displayName || '') !== (s.displayNameMap.get(rom.name) || '')}
-													<button
+													<ActionButton
 														onclick={() => saveDisplayNameForRom(s, rom)}
 														disabled={savingNameFor !== null}
-														class="text-xs px-2 py-1 rounded text-success hover:bg-surface disabled:opacity-50"
+														variant="success"
+														size="xs"
 														title="Save display name to device"
 													>
 														{savingNameFor === rom.name ? 'Saving...' : 'Save name'}
-													</button>
+													</ActionButton>
 												{/if}
-												<button
+												<ActionButton
 													onclick={() => uploadMedia(s, rom)}
 													disabled={uploadingMediaFor !== null ||
 														removingMediaFor !== null ||
 														removingRom !== null}
-													class="text-xs px-2 py-1 rounded
-													{rom.hasMedia ? 'text-text-muted hover:bg-surface' : 'bg-accent text-white hover:bg-accent-hover'}
-													disabled:opacity-50"
+													variant={rom.hasMedia ? 'subtle' : 'primary'}
+													size="xs"
 													title={rom.hasMedia
 														? `Replace ${rom.mediaFileName}`
 														: `Upload art as ${rom.mediaFileName}`}
@@ -1622,29 +1617,31 @@
 													{:else}
 														Add art
 													{/if}
-												</button>
+												</ActionButton>
 												{#if rom.hasMedia}
-													<button
+													<ActionButton
 														onclick={() => removeMedia(s, rom)}
 														disabled={removingMediaFor !== null ||
 															uploadingMediaFor !== null ||
 															removingRom !== null}
-														class="text-xs px-2 py-1 rounded text-text-muted hover:bg-surface disabled:opacity-50"
+														variant="subtle"
+														size="xs"
 														title={`Remove ${rom.mediaFileName}`}
 													>
 														{removingMediaFor === rom.name ? 'Removing...' : 'Remove art'}
-													</button>
+													</ActionButton>
 												{/if}
-												<button
+												<ActionButton
 													onclick={() => removeRom(s, rom)}
 													disabled={removingRom !== null ||
 														removingMediaFor !== null ||
 														uploadingMediaFor !== null}
-													class="text-xs px-2 py-1 rounded text-accent hover:bg-surface disabled:opacity-50"
+													variant="danger"
+													size="xs"
 													title={`Delete ${rom.name}`}
 												>
 													{removingRom === rom.name ? 'Deleting...' : 'Delete'}
-												</button>
+												</ActionButton>
 											</div>
 										</div>
 									{/each}
@@ -1671,12 +1668,12 @@
 			<h3 class="text-lg font-bold text-text mb-3">Missing Emulator</h3>
 			<p class="text-sm text-text whitespace-pre-line">{missingEmuInfo}</p>
 			<div class="mt-4 flex justify-end">
-				<button
+				<ActionButton
 					onclick={() => (missingEmuInfo = null)}
-					class="text-sm bg-surface hover:bg-surface-hover text-text px-3 py-1.5 rounded"
+					variant="secondary"
 				>
 					OK
-				</button>
+				</ActionButton>
 			</div>
 		</div>
 	</Modal>

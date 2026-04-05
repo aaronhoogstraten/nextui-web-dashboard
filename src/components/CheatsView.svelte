@@ -7,6 +7,7 @@
 	import { adbExec } from '$lib/stores/connection.svelte.js';
 	import { formatSize, formatError, compareByName, plural, pickFiles, errorMsg, successMsg, type Notification } from '$lib/utils.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
+	import ActionButton from './ActionButton.svelte';
 	import Modal from './Modal.svelte';
 	import StatusMessage from './StatusMessage.svelte';
 
@@ -288,20 +289,20 @@
 	<div class="flex items-center justify-between mb-4">
 		<h2 class="text-2xl font-bold text-text">Cheats</h2>
 		<div class="flex items-center gap-2">
-			<button
+			<ActionButton
 				onclick={openSystemPicker}
 				disabled={uploadingTo !== null}
-				class="text-sm bg-accent text-white px-3 py-1.5 rounded hover:bg-accent-hover disabled:opacity-50"
+				variant="primary"
 			>
 				Upload to System
-			</button>
-			<button
+			</ActionButton>
+			<ActionButton
 				onclick={refresh}
 				disabled={loading}
-				class="text-sm bg-surface hover:bg-surface-hover text-text disabled:opacity-50 px-3 py-1.5 rounded"
+				variant="secondary"
 			>
 				{loading ? 'Loading...' : 'Refresh'}
-			</button>
+			</ActionButton>
 		</div>
 	</div>
 
@@ -345,13 +346,14 @@
 								{/if}
 
 								<div class="flex items-center gap-2 mb-2">
-									<button
+									<ActionButton
 										onclick={() => uploadCheats(sys)}
 										disabled={uploadingTo !== null}
-										class="text-xs bg-accent text-white px-2 py-1 rounded hover:bg-accent-hover disabled:opacity-50"
+										variant="primary"
+										size="xs"
 									>
 										{uploadingTo === sys.systemCode ? 'Uploading...' : 'Upload .cht'}
-									</button>
+									</ActionButton>
 								</div>
 
 								<table class="w-full text-sm">
@@ -386,19 +388,21 @@
 												</td>
 												<td class="py-1.5 px-2">
 													<div class="flex items-center gap-2">
-														<button
+														<ActionButton
 															onclick={() => downloadCheat(sys, cheat)}
-															class="text-xs text-accent hover:underline"
+															variant="subtle"
+															size="xs"
 														>
 															Download
-														</button>
-														<button
+														</ActionButton>
+														<ActionButton
 															onclick={() => deleteCheat(sys, cheat)}
 															disabled={deletingFile !== null}
-															class="text-xs text-accent hover:text-accent-hover disabled:opacity-50"
+															variant="danger"
+															size="xs"
 														>
 															{deletingFile === cheat.fileName ? '...' : 'Delete'}
-														</button>
+														</ActionButton>
 													</div>
 												</td>
 											</tr>
@@ -428,7 +432,9 @@
 					onclick={() => (pickerOpen = false)}
 					class="text-text-muted hover:text-text px-2 py-1"
 					title="Close"
-				>&#10005;</button>
+				>
+					&#10005;
+				</button>
 			</div>
 
 			<div class="flex-1 overflow-auto p-2">
