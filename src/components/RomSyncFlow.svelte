@@ -301,9 +301,9 @@
 		<span class="text-warning">~{syncTotals.existsCount} existing</span>
 		<span class="text-text-muted">{syncTotals.checkedCount} selected</span>
 		<div class="flex-1"></div>
-		<ActionButton onclick={syncCheckAllNew} variant="plain" size="none" class="text-sm text-accent hover:underline font-normal">
+		<button onclick={syncCheckAllNew} class="text-sm text-accent hover:underline">
 			Select All New
-		</ActionButton>
+		</button>
 		<ActionButton
 			onclick={executeSync}
 			disabled={syncTotals.checkedCount === 0}
@@ -337,15 +337,15 @@
 				{#if sys.expanded}
 					<div class="p-3">
 						<div class="flex items-center gap-2 mb-2">
-							<ActionButton onclick={() => syncCheckNewInSystem(sys)} variant="plain" size="none" class="text-xs text-accent hover:underline font-normal">
+							<button onclick={() => syncCheckNewInSystem(sys)} class="text-xs text-accent hover:underline">
 								Select new
-							</ActionButton>
-							<ActionButton onclick={() => syncCheckAllInSystem(sys)} variant="plain" size="none" class="text-xs text-accent hover:underline font-normal">
+							</button>
+							<button onclick={() => syncCheckAllInSystem(sys)} class="text-xs text-accent hover:underline">
 								Select all
-							</ActionButton>
-							<ActionButton onclick={() => syncUncheckSystem(sys)} variant="plain" size="none" class="text-xs text-text-muted hover:text-text font-normal">
+							</button>
+							<button onclick={() => syncUncheckSystem(sys)} class="text-xs text-text-muted hover:text-text">
 								Deselect all
-							</ActionButton>
+							</button>
 						</div>
 						<table class="w-full text-sm">
 							<thead>

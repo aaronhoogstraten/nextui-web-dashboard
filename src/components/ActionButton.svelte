@@ -2,20 +2,12 @@
 	import type { Snippet } from 'svelte';
 	import type { HTMLButtonAttributes } from 'svelte/elements';
 
-	type ActionVariant =
-		| 'primary'
-		| 'secondary'
-		| 'subtle'
-		| 'danger'
-		| 'success'
-		| 'warning'
-		| 'plain';
+	type ActionVariant = 'primary' | 'secondary' | 'subtle' | 'danger' | 'success' | 'warning';
 	type ActionSize = 'sm' | 'xs' | 'none';
 
 	let {
 		variant = 'secondary',
 		size = 'sm',
-		busy = false,
 		disabled = false,
 		title,
 		type = 'button',
@@ -26,14 +18,13 @@
 	}: {
 		variant?: ActionVariant;
 		size?: ActionSize;
-		busy?: boolean;
 		disabled?: boolean;
 		title?: string;
 		type?: 'button' | 'submit' | 'reset';
 		onclick?: HTMLButtonAttributes['onclick'];
 		children?: Snippet;
 		class?: string;
-	} & HTMLButtonAttributes = $props();
+	} = $props();
 
 	const sizeClasses: Record<ActionSize, string> = {
 		sm: 'text-sm px-3 py-1.5',
@@ -49,8 +40,7 @@
 			'border border-red-500/30 bg-red-500/10 text-red-500 hover:bg-red-500/20 hover:text-red-400',
 		success: 'bg-green-700 text-white hover:bg-green-600',
 		warning:
-			'border border-warning/40 bg-warning/10 text-warning hover:bg-warning/20 hover:text-warning',
-		plain: 'border-transparent bg-transparent text-inherit hover:bg-transparent'
+			'border border-warning/40 bg-warning/10 text-warning hover:bg-warning/20 hover:text-warning'
 	};
 
 	const baseClasses =
@@ -65,7 +55,7 @@
 	{...restProps}
 	{type}
 	{title}
-	disabled={disabled || busy}
+	{disabled}
 	onclick={onclick}
 	class={classes}
 >

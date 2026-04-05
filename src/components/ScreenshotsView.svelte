@@ -242,20 +242,15 @@
 										&middot; {formatDate(shot.mtime)}
 									{/if}
 								</span>
-								<div class="flex items-center gap-2">
-									<ActionButton onclick={() => openPreview(shot)} variant="subtle" size="xs">
-										View
-									</ActionButton>
-									<ActionButton
-										onclick={() => removeScreenshot(shot)}
-										disabled={removingFile !== null}
-										variant="danger"
-										size="xs"
-										title="Delete screenshot"
-									>
-										{removingFile === shot.name ? '...' : 'Delete'}
-									</ActionButton>
-								</div>
+								<ActionButton
+									onclick={() => removeScreenshot(shot)}
+									disabled={removingFile !== null}
+									variant="danger"
+									size="xs"
+									title="Delete screenshot"
+								>
+									{removingFile === shot.name ? '...' : 'Delete'}
+								</ActionButton>
 							</div>
 						</div>
 					</div>

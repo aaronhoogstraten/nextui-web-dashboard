@@ -322,9 +322,6 @@
 				>
 					<img src={bgUrl} alt="Collections bg" class="h-10 rounded border border-border object-contain" />
 				</button>
-				<ActionButton onclick={() => openPreview(bgUrl!, 'Collections background')} variant="subtle" size="xs">
-					View
-				</ActionButton>
 				<ActionButton onclick={uploadBg} variant="subtle" size="xs">Replace</ActionButton>
 				<ActionButton onclick={removeBg} variant="danger" size="xs">Delete</ActionButton>
 			{:else}
@@ -376,15 +373,6 @@
 
 								<!-- Actions -->
 								<div class="flex items-center gap-2 shrink-0">
-									{#if col.iconUrl}
-										<ActionButton
-											onclick={() => openPreview(col.iconUrl!, col.name + ' icon')}
-											variant="subtle"
-											size="xs"
-										>
-											View
-										</ActionButton>
-									{/if}
 									{#if col.iconUrl}
 										<ActionButton onclick={() => removeIcon(col)} variant="danger" size="xs">
 											Remove icon

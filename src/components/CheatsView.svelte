@@ -286,25 +286,25 @@
 </script>
 
 <div class="p-6 flex flex-col h-full">
-		<div class="flex items-center justify-between mb-4">
-			<h2 class="text-2xl font-bold text-text">Cheats</h2>
-			<div class="flex items-center gap-2">
-				<ActionButton
-					onclick={openSystemPicker}
-					disabled={uploadingTo !== null}
-					variant="primary"
-				>
-					Upload to System
-				</ActionButton>
-				<ActionButton
-					onclick={refresh}
-					disabled={loading}
-					variant="secondary"
-				>
-					{loading ? 'Loading...' : 'Refresh'}
-				</ActionButton>
-			</div>
+	<div class="flex items-center justify-between mb-4">
+		<h2 class="text-2xl font-bold text-text">Cheats</h2>
+		<div class="flex items-center gap-2">
+			<ActionButton
+				onclick={openSystemPicker}
+				disabled={uploadingTo !== null}
+				variant="primary"
+			>
+				Upload to System
+			</ActionButton>
+			<ActionButton
+				onclick={refresh}
+				disabled={loading}
+				variant="secondary"
+			>
+				{loading ? 'Loading...' : 'Refresh'}
+			</ActionButton>
 		</div>
+	</div>
 
 	{#if notice}
 		<StatusMessage notification={notice} />

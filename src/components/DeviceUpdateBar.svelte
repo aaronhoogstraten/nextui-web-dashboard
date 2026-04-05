@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { isDeviceUpdateAvailable, dismissDeviceUpdate } from '$lib/stores/device-update.svelte.js';
-	import ActionButton from './ActionButton.svelte';
 </script>
 
 {#if isDeviceUpdateAvailable()}
@@ -15,14 +14,12 @@
 			>
 				view the release on GitHub.</a>
 		</span>
-		<ActionButton
+		<button
 			onclick={dismissDeviceUpdate}
-			variant="plain"
-			size="none"
 			class="ml-4 shrink-0 hover:text-blue-200"
 			aria-label="Dismiss"
 		>
 			✕
-		</ActionButton>
+		</button>
 	</div>
 {/if}

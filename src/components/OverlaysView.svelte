@@ -485,24 +485,15 @@
 												<div class="text-xs text-text truncate" title={file.name}>{file.name}</div>
 												<div class="flex items-center justify-between gap-2 mt-1">
 													<span class="text-xs text-text-muted">{formatSize(file.size)}</span>
-													<div class="flex items-center gap-2">
-														<ActionButton
-															onclick={() => openPreview(file, sys.systemCode)}
-															variant="subtle"
-															size="xs"
-														>
-															View
-														</ActionButton>
-														<ActionButton
-															onclick={() => removeOverlay(sys, file)}
-															disabled={removingFile !== null}
-															variant="danger"
-															size="xs"
-															title="Remove overlay"
-														>
-															{removingFile === `${sys.systemCode}/${file.name}` ? '...' : 'Delete'}
-														</ActionButton>
-													</div>
+													<ActionButton
+														onclick={() => removeOverlay(sys, file)}
+														disabled={removingFile !== null}
+														variant="danger"
+														size="xs"
+														title="Remove overlay"
+													>
+														{removingFile === `${sys.systemCode}/${file.name}` ? '...' : 'Delete'}
+													</ActionButton>
 												</div>
 											</div>
 										</div>
@@ -559,23 +550,14 @@
 														<div class="text-xs text-text-muted truncate">by {overlay.author}</div>
 														<div class="flex items-center justify-between gap-2 mt-1">
 															<span class="text-xs text-text-muted">{overlay.resolution}</span>
-															<div class="flex items-center gap-2">
-																<ActionButton
-																	onclick={() => openCommunityPreview(overlay)}
-																	variant="subtle"
-																	size="xs"
-																>
-																	View
-																</ActionButton>
-																<ActionButton
-																	onclick={() => installCommunityOverlay(sys, overlay)}
-																	disabled={installingOverlay !== null}
-																	variant="primary"
-																	size="xs"
-																>
-																	{installingOverlay === overlay.path ? 'Downloading...' : 'Download'}
-																</ActionButton>
-															</div>
+															<ActionButton
+																onclick={() => installCommunityOverlay(sys, overlay)}
+																disabled={installingOverlay !== null}
+																variant="primary"
+																size="xs"
+															>
+																{installingOverlay === overlay.path ? 'Downloading...' : 'Download'}
+															</ActionButton>
 														</div>
 													</div>
 												</div>
