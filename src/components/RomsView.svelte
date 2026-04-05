@@ -1390,18 +1390,26 @@
 							{/if}
 							{#if availableEmus.size > 0 && !availableEmus.has(s.system.systemCode)}
 								{@const emuMsg = `No emulator found at Emus/${detectedPlatform}/${s.system.systemCode}.pak\n\nUse the Pak Store on your device to download more emulators.`}
-								<ActionButton
+								<!-- svelte-ignore a11y_no_static_element_interactions -->
+								<span
 									onclick={(e: MouseEvent) => {
 										e.stopPropagation();
 										missingEmuInfo = emuMsg;
 									}}
-									variant="warning"
-									size="xs"
+									onkeydown={(e: KeyboardEvent) => {
+										if (e.key === 'Enter' || e.key === ' ') {
+											e.stopPropagation();
+											e.preventDefault();
+											missingEmuInfo = emuMsg;
+										}
+									}}
+									role="button"
+									tabindex="0"
 									title={emuMsg}
-									class="ml-2 align-middle"
+									class="text-xs text-warning ml-2 hover:opacity-80 cursor-pointer"
 								>
 									&#9888; Missing emulator
-								</ActionButton>
+								</span>
 							{/if}
 						</div>
 						<div class="flex items-center gap-3">

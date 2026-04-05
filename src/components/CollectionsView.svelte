@@ -363,9 +363,12 @@
 
 								<!-- Info -->
 								<div class="flex-1 min-w-0">
-									<div class="text-text font-semibold truncate">
+									<button
+										onclick={() => openEditor(col)}
+										class="text-text font-semibold hover:text-accent text-left truncate block"
+									>
 										{col.name}
-									</div>
+									</button>
 									<div class="text-xs text-text-muted">
 										{plural(col.romPaths.length, 'ROM')}
 									</div>
