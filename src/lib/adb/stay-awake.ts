@@ -3,6 +3,7 @@ import JSZip from 'jszip';
 import { base } from '$app/paths';
 import { pathExists, pushFile, shell } from './file-ops.js';
 import { ShellCmd } from './adb-utils.js';
+import { launchPakNative } from './pak.js';
 import { adbLog } from '$lib/stores/log.svelte.js';
 
 /** Cached supported platforms from developer-pak.json. */
@@ -57,8 +58,7 @@ const PRESENTER_INVOCATION_RE = /^(\s*)minui-presenter\s+--/m;
 /** Prefix for platform-specific binaries inside the zip. */
 const BIN_PREFIX = 'bin/';
 
-/** Device /tmp paths used by the stay-awake workflow. */
-const TMP_NEXT = '/tmp/next';
+/** Device /tmp path used by the stay-awake workflow. */
 const TMP_STAY_AWAKE = '/tmp/stay_awake';
 
 const DEV_PAK_DIR = '/tmp/DashboardDeveloper.pak';
@@ -136,41 +136,12 @@ export async function installDevPak(adb: Adb): Promise<void> {
 
 /**
  * Launch DashboardDeveloper.pak using the device's native pak-launching mechanism.
- * Writes the launch command to TMP_NEXT and kills nextui.elf, which triggers
- * the MinUI.pak main loop to execute the pak with the full system environment.
- * This is identical to how paks are launched from the device menu.
+ * SIGKILL is used (inside launchPakNative) so SDL_QUIT handlers don't fire —
+ * those would show "Powering off", kill daemons (keymon, batmon, audiomon),
+ * and remove /tmp/nextui_exec, causing the MinUI loop to exit after the pak.
  */
 export async function launchDevPakNative(adb: Adb): Promise<void> {
-	adbLog.info('Launching DashboardDeveloper.pak via native mechanism');
-
-	// Check if nextui.elf is at the menu. If TMP_NEXT exists, another pak is
-	// currently running (the MinUI loop deletes it only after the pak exits).
-	const nextExists = await pathExists(adb, TMP_NEXT);
-	if (nextExists) {
-		throw new Error(
-			'Cannot launch DashboardDeveloper.pak: another pak is currently running. Return to the NextUI menu first.'
-		);
-	}
-
-	// Write the launch command to TMP_NEXT (same format nextui.elf uses)
-	const expectedCmd = `sh ${LAUNCH_SCRIPT}`;
-	await shell(adb, `echo '${expectedCmd}' > ${TMP_NEXT}`);
-
-	// Verify the write succeeded and nextui.elf is ready to be replaced
-	const written = (await shell(adb, `cat ${TMP_NEXT}`)).trim();
-	adbLog.debug(`${TMP_NEXT} after: "${written}"`);
-	if (written !== expectedCmd) {
-		throw new Error(`Failed to write launch command to ${TMP_NEXT} (got: "${written}")`);
-	}
-
-	// Use SIGKILL (-9) to terminate nextui.elf immediately.
-	// SIGTERM would trigger SDL_QUIT → PWR_powerOff() which shows "Powering off",
-	// kills daemons (keymon, batmon, audiomon), and removes /tmp/nextui_exec
-	// (which would cause the MinUI loop to exit after the pak finishes).
-	// SIGKILL bypasses all signal handlers so none of that happens.
-	await shell(adb, 'killall -9 nextui.elf');
-
-	adbLog.info('DashboardDeveloper.pak launched (nextui.elf will restart when pak exits)');
+	await launchPakNative(adb, LAUNCH_SCRIPT);
 }
 
 /**
