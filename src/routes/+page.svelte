@@ -11,6 +11,7 @@
 	import ConsoleLog from '../components/ConsoleLog.svelte';
 	import TransferProgress from '../components/TransferProgress.svelte';
 	import StayAwakePrompt from '../components/StayAwakePrompt.svelte';
+	import DeviceInUsePrompt from '../components/DeviceInUsePrompt.svelte';
 	import Modal from '../components/Modal.svelte';
 	import ActionButton from '../components/ActionButton.svelte';
 	import {
@@ -18,7 +19,8 @@
 		isConnected,
 		isStayAwakePromptShown,
 		getStayAwakeError,
-		dismissStayAwakeError
+		dismissStayAwakeError,
+		isDeviceInUsePromptShown
 	} from '$lib/stores/connection.svelte.js';
 	import { hasWebUSB } from '$lib/adb/connection.js';
 	import { isFeatureEnabled } from '$lib/stores/features.svelte.js';
@@ -96,6 +98,10 @@
 
 {#if isStayAwakePromptShown()}
 	<StayAwakePrompt />
+{/if}
+
+{#if isDeviceInUsePromptShown()}
+	<DeviceInUsePrompt />
 {/if}
 
 {#if getStayAwakeError()}

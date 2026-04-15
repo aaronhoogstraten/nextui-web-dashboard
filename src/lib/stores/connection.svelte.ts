@@ -33,6 +33,32 @@ let stayAwakeBusy: boolean = $state(false);
 let stayAwakeError: string = $state('');
 let stayAwakePollController: AbortController | null = null;
 
+/** Shown when WebUSB can't claim the device because another program (e.g. a local adb server) holds it. */
+let deviceInUsePromptVisible: boolean = $state(false);
+
+/**
+ * Match ya-webadb's `DeviceBusyError`, thrown when another program (typically a local
+ * `adb` server) has already claimed the USB device. The class is not re-exported from
+ * the package index, so we match its constructor name and the stable message string it
+ * constructs with (see ya-webadb `libraries/adb-daemon-webusb/src/error.ts`).
+ */
+function isDeviceBusyError(e: unknown): boolean {
+	if (!(e instanceof Error)) return false;
+	return (
+		e.name === 'DeviceBusyError' ||
+		e.constructor?.name === 'DeviceBusyError' ||
+		e.message === 'The device is already in used by another program'
+	);
+}
+
+export function isDeviceInUsePromptShown() {
+	return deviceInUsePromptVisible;
+}
+
+export function dismissDeviceInUsePrompt() {
+	deviceInUsePromptVisible = false;
+}
+
 const STAY_AWAKE_PREF_KEY = 'stayAwakePref';
 const STAY_AWAKE_POLL_MS = 5000;
 
@@ -318,10 +344,15 @@ export async function connect() {
 		conn.adb.disconnected.then(onDisconnect, onDisconnect);
 	} catch (e) {
 		const msg = formatError(e);
-		error = msg;
 		status = 'Connection failed';
 		connection = null;
 		adbLog.error(`Connection failed: ${msg}`);
+		if (isDeviceBusyError(e)) {
+			deviceInUsePromptVisible = true;
+			error = '';
+		} else {
+			error = msg;
+		}
 	} finally {
 		busy = false;
 	}
