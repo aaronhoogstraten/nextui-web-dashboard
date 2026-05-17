@@ -60,6 +60,10 @@
 		return `${file.definition.systemCode}/${file.definition.fileName}`;
 	}
 
+	function hashMismatchDetail(lead: string, expected: string, actual: string): string {
+		return `${lead}\nExpected: ${expected}\nGot: ${actual}`;
+	}
+
 	function getSystemDragKey(system: SystemState): string {
 		return `${system.systemCode}:${system.files[0]?.devicePath ?? system.systemName}`;
 	}
@@ -130,7 +134,11 @@
 							file.detail = 'Present, hash OK';
 						} else {
 							file.status = 'invalid';
-							file.detail = `Hash mismatch: ${result.actualSha1.substring(0, 12)}...`;
+							file.detail = hashMismatchDetail(
+								'SHA-1 hash mismatch.',
+								file.definition.sha1,
+								result.actualSha1
+							);
 						}
 					}
 				} catch (e) {
@@ -283,7 +291,11 @@
 				const result = await validateBiosFile(data, file.definition);
 				if (!result.valid) {
 					file.status = 'invalid';
-					file.detail = `Selected file hash doesn't match expected. Got: ${result.actualSha1.substring(0, 16)}...`;
+					file.detail = hashMismatchDetail(
+						"Selected file SHA-1 hash doesn't match.",
+						file.definition.sha1,
+						result.actualSha1
+					);
 					system.notice = {
 						type: 'error',
 						message: `Validation failed for ${file.definition.fileName}`
@@ -387,7 +399,11 @@
 				invalid++;
 				for (const file of entry.fileNameMatches) {
 					file.status = 'invalid';
-					file.detail = `Selected file hash doesn't match expected. Got: ${entry.hash.substring(0, 16)}...`;
+					file.detail = hashMismatchDetail(
+						"Selected file SHA-1 hash doesn't match.",
+						file.definition.sha1,
+						entry.hash
+					);
 				}
 				return [];
 			}
@@ -572,7 +588,7 @@
 										<div
 											class="text-xs {system.isCustom
 												? 'text-blue-500'
-												: effectiveStatusColor(file, system)} mt-0.5"
+												: effectiveStatusColor(file, system)} mt-0.5 font-mono break-all whitespace-pre-line"
 										>
 											{file.detail}
 										</div>
