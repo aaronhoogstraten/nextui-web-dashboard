@@ -53,8 +53,8 @@
 	}
 
 	async function renderAtScale(bitmap: ImageBitmap, pct: number): Promise<Blob> {
-		const w = Math.max(1, Math.round(bitmap.width * pct / 100));
-		const h = Math.max(1, Math.round(bitmap.height * pct / 100));
+		const w = Math.max(1, Math.round((bitmap.width * pct) / 100));
+		const h = Math.max(1, Math.round((bitmap.height * pct) / 100));
 		const canvas = new OffscreenCanvas(w, h);
 		const ctx = canvas.getContext('2d')!;
 		ctx.drawImage(bitmap, 0, 0, w, h);
@@ -66,11 +66,13 @@
 		try {
 			// Scale down as PNG until under threshold
 			const scales = [90, 80, 70, 60, 50, 40, 30, 25, 20, 15, 10, 7, 5, 3, 2, 1];
-			adbLog.debug(`[LargeArtDialog] Original: ${bitmap.width}x${bitmap.height}, ${formatSize(f.size)}`);
+			adbLog.debug(
+				`[LargeArtDialog] Original: ${bitmap.width}x${bitmap.height}, ${formatSize(f.size)}`
+			);
 			for (const pct of scales) {
 				const blob = await renderAtScale(bitmap, pct);
-				const w = Math.max(1, Math.round(bitmap.width * pct / 100));
-				const h = Math.max(1, Math.round(bitmap.height * pct / 100));
+				const w = Math.max(1, Math.round((bitmap.width * pct) / 100));
+				const h = Math.max(1, Math.round((bitmap.height * pct) / 100));
 				adbLog.debug(`[LargeArtDialog] ${pct}% → ${w}x${h} = ${formatSize(blob.size)}`);
 				if (blob.size <= LARGE_ART_THRESHOLD) {
 					adbLog.debug(`[LargeArtDialog] Success at ${pct}% scale`);
@@ -89,34 +91,25 @@
 		<div class="p-6">
 			<h3 class="text-lg font-bold text-text mb-3">Large Art File Detected</h3>
 			<div class="text-sm text-text mb-2">
-				Detected large art file ({formatSize(file.size)}), it's recommended to use smaller files otherwise device performance could be affected.
+				Detected large art file ({formatSize(file.size)}), it's recommended to use smaller files
+				otherwise device performance could be affected.
 			</div>
-			<div class="font-mono text-xs text-text-muted mb-4 truncate" title={file.name}>{file.name}</div>
+			<div class="font-mono text-xs text-text-muted mb-4 truncate" title={file.name}>
+				{file.name}
+			</div>
 
 			{#if resizeError}
 				<div class="text-sm text-warning mb-3">{resizeError}</div>
 			{/if}
 
 			<div class="grid grid-cols-3 gap-2">
-				<ActionButton
-					onclick={handleProceed}
-					disabled={resizing}
-					variant="secondary"
-				>
+				<ActionButton onclick={handleProceed} disabled={resizing} variant="secondary">
 					Proceed
 				</ActionButton>
-				<ActionButton
-					onclick={() => resolve(null)}
-					disabled={resizing}
-					variant="secondary"
-				>
+				<ActionButton onclick={() => resolve(null)} disabled={resizing} variant="secondary">
 					Cancel
 				</ActionButton>
-				<ActionButton
-					onclick={handleAutoResize}
-					disabled={resizing}
-					variant="primary"
-				>
+				<ActionButton onclick={handleAutoResize} disabled={resizing} variant="primary">
 					{resizing ? 'Resizing...' : 'Auto Resize'}
 				</ActionButton>
 			</div>

@@ -18,15 +18,16 @@
 	<div class="p-6">
 		<h3 class="text-lg font-bold text-text mb-3">Keep Device Awake?</h3>
 		<p class="text-sm text-text-muted mb-4">
-			This will prevent the device from going to sleep and disconnecting while any file operations are in progress.<br />
+			This will prevent the device from going to sleep and disconnecting while any file operations
+			are in progress.<br />
 			<br />
 			Selecting 'Yes' will install and launch the
 			<a
 				href="https://github.com/josegonzalez/minui-developer-pak"
 				target="_blank"
 				rel="noopener noreferrer"
-				class="text-accent hover:underline"
-			>Developer.pak</a>
+				class="text-accent hover:underline">Developer.pak</a
+			>
 			on your device.
 		</p>
 		<div class="flex items-center justify-between">
@@ -42,11 +43,7 @@
 				>
 					No
 				</ActionButton>
-				<ActionButton
-					onclick={() => respond(true)}
-					disabled={isStayAwakeBusy()}
-					variant="primary"
-				>
+				<ActionButton onclick={() => respond(true)} disabled={isStayAwakeBusy()} variant="primary">
 					{isStayAwakeBusy() ? 'Enabling...' : 'Yes'}
 				</ActionButton>
 			</div>

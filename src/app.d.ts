@@ -27,7 +27,9 @@ declare global {
 	}
 
 	interface Window {
-		showDirectoryPicker?(options?: { mode?: 'read' | 'readwrite' }): Promise<FileSystemDirectoryHandle>;
+		showDirectoryPicker?(options?: {
+			mode?: 'read' | 'readwrite';
+		}): Promise<FileSystemDirectoryHandle>;
 		readonly thisisunsafe: string;
 		__nextui?: {
 			readonly flags: Record<string, boolean>;
@@ -46,7 +48,10 @@ declare global {
 	}
 
 	interface FileSystemFileEntry extends FileSystemEntry {
-		file(successCallback: (file: File) => void, errorCallback?: (error: DOMException) => void): void;
+		file(
+			successCallback: (file: File) => void,
+			errorCallback?: (error: DOMException) => void
+		): void;
 	}
 
 	interface FileSystemDirectoryEntry extends FileSystemEntry {

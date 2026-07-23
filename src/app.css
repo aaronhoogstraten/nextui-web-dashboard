@@ -1,53 +1,53 @@
 @import 'tailwindcss';
 
 @theme {
-  --font-sans: 'Raleway', ui-sans-serif, system-ui, sans-serif;
-  --font-mono: 'Fira Code', ui-monospace, monospace;
-  --color-bg: var(--color-bg-val);
-  --color-surface: var(--color-surface-val);
-  --color-surface-hover: var(--color-surface-hover-val);
-  --color-sidebar: var(--color-sidebar-val);
-  --color-text: var(--color-text-val);
-  --color-text-muted: var(--color-text-muted-val);
-  --color-accent: var(--color-accent-val);
-  --color-accent-hover: var(--color-accent-hover-val);
-  --color-border: var(--color-border-val);
-  --color-success: var(--color-success-val);
-  --color-warning: var(--color-warning-val);
-  --color-terminal: var(--color-terminal-val);
-  --color-terminal-text: var(--color-terminal-text-val);
+	--font-sans: 'Raleway', ui-sans-serif, system-ui, sans-serif;
+	--font-mono: 'Fira Code', ui-monospace, monospace;
+	--color-bg: var(--color-bg-val);
+	--color-surface: var(--color-surface-val);
+	--color-surface-hover: var(--color-surface-hover-val);
+	--color-sidebar: var(--color-sidebar-val);
+	--color-text: var(--color-text-val);
+	--color-text-muted: var(--color-text-muted-val);
+	--color-accent: var(--color-accent-val);
+	--color-accent-hover: var(--color-accent-hover-val);
+	--color-border: var(--color-border-val);
+	--color-success: var(--color-success-val);
+	--color-warning: var(--color-warning-val);
+	--color-terminal: var(--color-terminal-val);
+	--color-terminal-text: var(--color-terminal-text-val);
 }
 
 /* Dark theme (default) */
 :root {
-  --color-bg-val: #292929;
-  --color-surface-val: #333333;
-  --color-surface-hover-val: #3d3d3d;
-  --color-sidebar-val: #1e1e1e;
-  --color-text-val: #eeeeee;
-  --color-text-muted-val: #888888;
-  --color-accent-val: #9B2256;
-  --color-accent-hover-val: #b52a66;
-  --color-border-val: #444444;
-  --color-success-val: #4ade80;
-  --color-warning-val: #eab308;
-  --color-terminal-val: #1a1a2e;
-  --color-terminal-text-val: #4ade80;
+	--color-bg-val: #292929;
+	--color-surface-val: #333333;
+	--color-surface-hover-val: #3d3d3d;
+	--color-sidebar-val: #1e1e1e;
+	--color-text-val: #eeeeee;
+	--color-text-muted-val: #888888;
+	--color-accent-val: #9b2256;
+	--color-accent-hover-val: #b52a66;
+	--color-border-val: #444444;
+	--color-success-val: #4ade80;
+	--color-warning-val: #eab308;
+	--color-terminal-val: #1a1a2e;
+	--color-terminal-text-val: #4ade80;
 }
 
 /* Light theme */
 :root.light {
-  --color-bg-val: #dddddd;
-  --color-surface-val: #cccccc;
-  --color-surface-hover-val: #bbbbbb;
-  --color-sidebar-val: #c0c0c0;
-  --color-text-val: #111111;
-  --color-text-muted-val: #666666;
-  --color-accent-val: #9B2256;
-  --color-accent-hover-val: #7d1b45;
-  --color-border-val: #999999;
-  --color-success-val: #15803d;
-  --color-warning-val: #a16207;
-  --color-terminal-val: #f0f0f0;
-  --color-terminal-text-val: #1a1a1a;
+	--color-bg-val: #dddddd;
+	--color-surface-val: #cccccc;
+	--color-surface-hover-val: #bbbbbb;
+	--color-sidebar-val: #c0c0c0;
+	--color-text-val: #111111;
+	--color-text-muted-val: #666666;
+	--color-accent-val: #9b2256;
+	--color-accent-hover-val: #7d1b45;
+	--color-border-val: #999999;
+	--color-success-val: #15803d;
+	--color-warning-val: #a16207;
+	--color-terminal-val: #f0f0f0;
+	--color-terminal-text-val: #1a1a1a;
 }

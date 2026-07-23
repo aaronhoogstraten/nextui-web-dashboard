@@ -51,7 +51,9 @@
 	let currentConflictFile: SyncFile | null = $state.raw(null);
 
 	const syncTotals = $derived.by(() => {
-		let newCount = 0, existsCount = 0, checkedCount = 0;
+		let newCount = 0,
+			existsCount = 0,
+			checkedCount = 0;
 		for (const s of syncSystems) {
 			for (const f of s.files) {
 				if (f.status === 'new') newCount++;
@@ -65,7 +67,9 @@
 	// --- Helpers ---
 
 	function syncSystemCounts(sys: SyncSystem) {
-		let newCount = 0, existsCount = 0, checkedCount = 0;
+		let newCount = 0,
+			existsCount = 0,
+			checkedCount = 0;
 		for (const f of sys.files) {
 			if (f.status === 'new') newCount++;
 			else if (f.status === 'exists') existsCount++;
@@ -89,7 +93,12 @@
 		syncSystems = [];
 		syncScanStatus = 'Scanning local folder...';
 
-		const localSystems: { dirName: string; deviceDirName: string; systemCode: string; files: SyncFile[] }[] = [];
+		const localSystems: {
+			dirName: string;
+			deviceDirName: string;
+			systemCode: string;
+			files: SyncFile[];
+		}[] = [];
 
 		for await (const entry of dirHandle.values()) {
 			if (entry.kind !== 'directory') continue;
@@ -106,8 +115,13 @@
 				const fileHandle = fileEntry as FileSystemFileHandle;
 				const file = await fileHandle.getFile();
 				sysFiles.push({
-					name: fileEntry.name, localSize: file.size, deviceSize: null,
-					status: 'new', checked: true, isMedia: false, fileHandle
+					name: fileEntry.name,
+					localSize: file.size,
+					deviceSize: null,
+					status: 'new',
+					checked: true,
+					isMedia: false,
+					fileHandle
 				});
 			}
 
@@ -119,19 +133,33 @@
 					const fileHandle = mediaEntry as FileSystemFileHandle;
 					const file = await fileHandle.getFile();
 					sysFiles.push({
-						name: mediaEntry.name, localSize: file.size, deviceSize: null,
-						status: 'new', checked: true, isMedia: true, fileHandle
+						name: mediaEntry.name,
+						localSize: file.size,
+						deviceSize: null,
+						status: 'new',
+						checked: true,
+						isMedia: true,
+						fileHandle
 					});
 				}
-			} catch { /* no .media/ */ }
+			} catch {
+				/* no .media/ */
+			}
 
 			if (sysFiles.length > 0) {
-				localSystems.push({ dirName: entry.name, deviceDirName: entry.name, systemCode: parsed.systemCode, files: sysFiles });
+				localSystems.push({
+					dirName: entry.name,
+					deviceDirName: entry.name,
+					systemCode: parsed.systemCode,
+					files: sysFiles
+				});
 			}
 		}
 
 		if (localSystems.length === 0) {
-			syncNotice = errorMsg('No system directories found matching the expected pattern (e.g. "Game Boy (GB)").');
+			syncNotice = errorMsg(
+				'No system directories found matching the expected pattern (e.g. "Game Boy (GB)").'
+			);
 			oncomplete();
 			return;
 		}
@@ -143,7 +171,9 @@
 		let deviceDirByCode = new Map<string, string>();
 		try {
 			deviceDirByCode = buildDeviceDirMap(await listDirectory(adb, DEVICE_PATHS.roms));
-		} catch { /* Roms directory unreadable */ }
+		} catch {
+			/* Roms directory unreadable */
+		}
 
 		for (const sys of localSystems) {
 			// Use the actual device directory name if it differs from local
@@ -158,14 +188,18 @@
 				for (const e of await listDirectory(adb, devicePath)) {
 					if (e.isFile && !e.name.startsWith('.')) deviceFileMap.set(e.name, Number(e.size));
 				}
-			} catch { /* dir doesn't exist */ }
+			} catch {
+				/* dir doesn't exist */
+			}
 
 			const deviceMediaMap = new Map<string, number>();
 			try {
 				for (const e of await listDirectory(adb, `${devicePath}/.media`)) {
 					if (e.isFile && !e.name.startsWith('.')) deviceMediaMap.set(e.name, Number(e.size));
 				}
-			} catch { /* no .media/ */ }
+			} catch {
+				/* no .media/ */
+			}
 
 			for (const file of sys.files) {
 				const deviceSize = (file.isMedia ? deviceMediaMap : deviceFileMap).get(file.name);
@@ -211,9 +245,14 @@
 
 	async function executeSync() {
 		const filesToSync = syncSystems.flatMap((sys) =>
-			sys.files.filter((f) => f.checked).map((f) => ({ system: sys.dirName, deviceDirName: sys.deviceDirName, file: f }))
+			sys.files
+				.filter((f) => f.checked)
+				.map((f) => ({ system: sys.dirName, deviceDirName: sys.deviceDirName, file: f }))
 		);
-		if (filesToSync.length === 0) { syncNotice = errorMsg('No files selected.'); return; }
+		if (filesToSync.length === 0) {
+			syncNotice = errorMsg('No files selected.');
+			return;
+		}
 
 		syncPhase = 'syncing';
 		syncNotice = null;
@@ -231,12 +270,23 @@
 
 			if (item.file.status === 'exists') {
 				if (conflictPolicy === 'skip-all') {
-					syncSkipped++; syncCompleted++; continue;
+					syncSkipped++;
+					syncCompleted++;
+					continue;
 				}
 				if (conflictPolicy === 'ask') {
 					const resolution = await showSyncConflict(item.file);
-					if (resolution === 'skip') { syncSkipped++; syncCompleted++; continue; }
-					if (resolution === 'skip-all') { syncSkipped++; syncCompleted++; conflictPolicy = 'skip-all'; continue; }
+					if (resolution === 'skip') {
+						syncSkipped++;
+						syncCompleted++;
+						continue;
+					}
+					if (resolution === 'skip-all') {
+						syncSkipped++;
+						syncCompleted++;
+						conflictPolicy = 'skip-all';
+						continue;
+					}
 					if (resolution === 'overwrite-all') conflictPolicy = 'overwrite-all';
 				}
 			}
@@ -280,14 +330,11 @@
 			<div class="text-sm text-text-muted">{syncScanStatus}</div>
 		</div>
 	</div>
-
 {:else if syncPhase === 'review'}
 	<!-- Sync: Review Diff -->
 	<div class="flex items-center justify-between mb-4">
 		<div class="flex items-center gap-3">
-			<button onclick={exitSync} class="text-sm text-accent hover:underline">
-				&larr; Back
-			</button>
+			<button onclick={exitSync} class="text-sm text-accent hover:underline"> &larr; Back </button>
 			<h2 class="text-2xl font-bold text-text">Sync Review</h2>
 		</div>
 	</div>
@@ -304,11 +351,7 @@
 		<button onclick={syncCheckAllNew} class="text-sm text-accent hover:underline">
 			Select All New
 		</button>
-		<ActionButton
-			onclick={executeSync}
-			disabled={syncTotals.checkedCount === 0}
-			variant="primary"
-		>
+		<ActionButton onclick={executeSync} disabled={syncTotals.checkedCount === 0} variant="primary">
 			Start Sync ({plural(syncTotals.checkedCount, 'file')})
 		</ActionButton>
 	</div>
@@ -337,13 +380,22 @@
 				{#if sys.expanded}
 					<div class="p-3">
 						<div class="flex items-center gap-2 mb-2">
-							<button onclick={() => syncCheckNewInSystem(sys)} class="text-xs text-accent hover:underline">
+							<button
+								onclick={() => syncCheckNewInSystem(sys)}
+								class="text-xs text-accent hover:underline"
+							>
 								Select new
 							</button>
-							<button onclick={() => syncCheckAllInSystem(sys)} class="text-xs text-accent hover:underline">
+							<button
+								onclick={() => syncCheckAllInSystem(sys)}
+								class="text-xs text-accent hover:underline"
+							>
 								Select all
 							</button>
-							<button onclick={() => syncUncheckSystem(sys)} class="text-xs text-text-muted hover:text-text">
+							<button
+								onclick={() => syncUncheckSystem(sys)}
+								class="text-xs text-text-muted hover:text-text"
+							>
 								Deselect all
 							</button>
 						</div>
@@ -365,7 +417,8 @@
 										</td>
 										<td class="py-1 px-2">
 											<span class="text-text text-xs truncate block" title={file.name}>
-												{#if file.isMedia}<span class="text-text-muted">.media/</span>{/if}{file.name}
+												{#if file.isMedia}<span class="text-text-muted">.media/</span
+													>{/if}{file.name}
 											</span>
 										</td>
 										<td class="py-1 px-2 text-right text-text-muted text-xs tabular-nums">
@@ -390,7 +443,6 @@
 			</div>
 		{/each}
 	</div>
-
 {:else if syncPhase === 'syncing'}
 	<!-- Sync: Progress -->
 	<div class="flex-1 flex flex-col items-center justify-center gap-4">
@@ -401,9 +453,14 @@
 				<span>{syncCompleted}/{syncTotal}</span>
 			</div>
 			<div class="w-full bg-surface rounded-full h-2">
-				<div class="bg-accent h-2 rounded-full transition-all" style="width: {syncTotal > 0 ? (syncCompleted / syncTotal) * 100 : 0}%"></div>
+				<div
+					class="bg-accent h-2 rounded-full transition-all"
+					style="width: {syncTotal > 0 ? (syncCompleted / syncTotal) * 100 : 0}%"
+				></div>
 			</div>
-			<div class="text-xs text-text-muted mt-2 truncate text-center" title={syncCurrentFile}>{syncCurrentFile}</div>
+			<div class="text-xs text-text-muted mt-2 truncate text-center" title={syncCurrentFile}>
+				{syncCurrentFile}
+			</div>
 		</div>
 		<div class="flex gap-4 text-xs">
 			<span class="text-success">{syncTransferred} transferred</span>
@@ -413,7 +470,6 @@
 			{/if}
 		</div>
 	</div>
-
 {:else if syncPhase === 'done'}
 	<!-- Sync: Complete -->
 	<div class="flex-1 flex items-center justify-center">
@@ -435,9 +491,7 @@
 					</div>
 				{/if}
 			</div>
-			<ActionButton onclick={exitSync} variant="secondary" class="mt-4">
-				Back to ROMs
-			</ActionButton>
+			<ActionButton onclick={exitSync} variant="secondary" class="mt-4">Back to ROMs</ActionButton>
 		</div>
 	</div>
 {/if}
@@ -446,8 +500,18 @@
 	{#snippet detail()}
 		{#if currentConflictFile}
 			<div class="flex justify-between text-xs">
-				<div><span class="text-text-muted">Local:</span> <span class="text-text">{formatSize(currentConflictFile.localSize)}</span></div>
-				<div><span class="text-text-muted">Device:</span> <span class="text-text">{currentConflictFile.deviceSize !== null ? formatSize(currentConflictFile.deviceSize) : 'unknown'}</span></div>
+				<div>
+					<span class="text-text-muted">Local:</span>
+					<span class="text-text">{formatSize(currentConflictFile.localSize)}</span>
+				</div>
+				<div>
+					<span class="text-text-muted">Device:</span>
+					<span class="text-text"
+						>{currentConflictFile.deviceSize !== null
+							? formatSize(currentConflictFile.deviceSize)
+							: 'unknown'}</span
+					>
+				</div>
 			</div>
 		{/if}
 	{/snippet}

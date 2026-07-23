@@ -3,7 +3,12 @@
 	import type { Adb } from '@yume-chan/adb';
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { listDirectory, pullFile, pushFile, pathExists } from '$lib/adb/file-ops.js';
-	import { beginTransfer, endTransfer, trackedPush, skipTransferFile } from '$lib/stores/transfer.svelte.js';
+	import {
+		beginTransfer,
+		endTransfer,
+		trackedPush,
+		skipTransferFile
+	} from '$lib/stores/transfer.svelte.js';
 	import { adbExec } from '$lib/stores/connection.svelte.js';
 	import { formatSize, formatError, compareByName, plural, pickFiles } from '$lib/utils.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
@@ -42,9 +47,7 @@
 	let previewSrc: string | null = $state(null);
 	let previewAlt: string = $state('');
 
-	let filteredSystems = $derived(
-		hideEmpty ? systems.filter((s) => s.files.length > 0) : systems
-	);
+	let filteredSystems = $derived(hideEmpty ? systems.filter((s) => s.files.length > 0) : systems);
 
 	async function refreshAll() {
 		refreshing = true;
@@ -152,7 +155,10 @@
 			for (const file of files) {
 				if (!file.name.toLowerCase().endsWith('.png')) continue;
 				const data = await largeArtDialog.check(file);
-				if (!data) { skipTransferFile(file.size); continue; }
+				if (!data) {
+					skipTransferFile(file.size);
+					continue;
+				}
 				await trackedPush(adb, `${sys.devicePath}/${file.name}`, data);
 				uploaded++;
 			}
@@ -239,7 +245,9 @@
 			if (res.status === 404) return [];
 			if (res.status === 403 && rateLimitRemaining === 0) {
 				const waitMsg = rateLimitReset ? ` Try again in ${formatResetTime(rateLimitReset)}.` : '';
-				throw new Error(`GitHub API rate limit exceeded (60 requests/hour for unauthenticated access).${waitMsg}`);
+				throw new Error(
+					`GitHub API rate limit exceeded (60 requests/hour for unauthenticated access).${waitMsg}`
+				);
 			}
 			throw new Error(`GitHub API ${res.status}: ${res.statusText}`);
 		}
@@ -399,11 +407,7 @@
 				<input type="checkbox" bind:checked={hideEmpty} class="accent-accent" />
 				Show systems with overlays only
 			</label>
-			<ActionButton
-				onclick={refreshAll}
-				disabled={refreshing}
-				variant="secondary"
-			>
+			<ActionButton onclick={refreshAll} disabled={refreshing} variant="secondary">
 				{refreshing ? 'Refreshing...' : 'Refresh'}
 			</ActionButton>
 		</div>
@@ -412,7 +416,9 @@
 	{#if refreshing && systems.length === 0}
 		<div class="text-sm text-text-muted py-8 text-center">Scanning overlays...</div>
 	{:else if systems.length === 0 && !refreshing}
-		<div class="text-sm text-text-muted py-8 text-center">No Overlays directory found on device</div>
+		<div class="text-sm text-text-muted py-8 text-center">
+			No Overlays directory found on device
+		</div>
 	{:else}
 		<div class="space-y-2">
 			{#each filteredSystems as sys}
@@ -424,9 +430,7 @@
 					>
 						<span class="font-semibold text-text">{sys.systemCode}</span>
 						<div class="flex items-center gap-3">
-							<span
-								class="text-sm {sys.files.length > 0 ? 'text-success' : 'text-text-muted'}"
-							>
+							<span class="text-sm {sys.files.length > 0 ? 'text-success' : 'text-text-muted'}">
 								{plural(sys.files.length, 'overlay')}
 							</span>
 							<span class="text-text-muted">{sys.expanded ? '\u25B2' : '\u25BC'}</span>
@@ -475,7 +479,11 @@
 														onclick={() => openPreview(file, sys.systemCode)}
 														class="w-full h-full cursor-pointer"
 													>
-														<img src={file.thumbnailUrl} alt={file.name} class="w-full h-full object-contain" />
+														<img
+															src={file.thumbnailUrl}
+															alt={file.name}
+															class="w-full h-full object-contain"
+														/>
 													</button>
 												{:else}
 													<span class="text-text-muted text-2xl">&#128444;</span>
@@ -518,16 +526,22 @@
 
 									{#if rateLimitRemaining !== null && rateLimitRemaining <= 10}
 										<div class="text-xs text-warning mb-2">
-											GitHub API: {plural(rateLimitRemaining ?? 0, 'request')} remaining{rateLimitReset ? ` (resets in ${formatResetTime(rateLimitReset)})` : ''}
+											GitHub API: {plural(rateLimitRemaining ?? 0, 'request')} remaining{rateLimitReset
+												? ` (resets in ${formatResetTime(rateLimitReset)})`
+												: ''}
 										</div>
 									{/if}
 
 									{#if communityLoading}
-										<div class="text-sm text-text-muted py-4 text-center">Loading community overlays...</div>
+										<div class="text-sm text-text-muted py-4 text-center">
+											Loading community overlays...
+										</div>
 									{:else if communityError}
 										<div class="text-sm text-red-400 py-4 text-center">{communityError}</div>
 									{:else if communityOverlays.length === 0}
-										<div class="text-sm text-text-muted py-4 text-center">No community overlays available for {sys.systemCode}</div>
+										<div class="text-sm text-text-muted py-4 text-center">
+											No community overlays available for {sys.systemCode}
+										</div>
 									{:else}
 										<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
 											{#each communityOverlays as overlay}
@@ -546,7 +560,9 @@
 														</button>
 													</div>
 													<div class="p-2">
-														<div class="text-xs text-text truncate" title={overlay.name}>{overlay.name}</div>
+														<div class="text-xs text-text truncate" title={overlay.name}>
+															{overlay.name}
+														</div>
 														<div class="text-xs text-text-muted truncate">by {overlay.author}</div>
 														<div class="flex items-center justify-between gap-2 mt-1">
 															<span class="text-xs text-text-muted">{overlay.resolution}</span>

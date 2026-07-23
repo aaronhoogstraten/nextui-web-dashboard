@@ -35,17 +35,24 @@
 		<div class="p-6">
 			<h3 class="text-lg font-bold text-text mb-3">File Already Exists</h3>
 			<div class="text-sm text-text mb-4">
-				<div class="font-mono text-xs text-text-muted mb-3 truncate" title={fileName}>{fileName}</div>
+				<div class="font-mono text-xs text-text-muted mb-3 truncate" title={fileName}>
+					{fileName}
+				</div>
 				{#if detail}
 					{@render detail(fileName)}
 				{/if}
 			</div>
 			<div class="grid grid-cols-2 gap-2">
-				<ActionButton onclick={() => resolve('overwrite')} variant="primary">Overwrite</ActionButton>
+				<ActionButton onclick={() => resolve('overwrite')} variant="primary">Overwrite</ActionButton
+				>
 				<ActionButton onclick={() => resolve('skip')} variant="secondary">Skip</ActionButton>
 				{#if multiple}
-					<ActionButton onclick={() => resolve('overwrite-all')} variant="primary">Overwrite All</ActionButton>
-					<ActionButton onclick={() => resolve('skip-all')} variant="secondary">Skip All</ActionButton>
+					<ActionButton onclick={() => resolve('overwrite-all')} variant="primary"
+						>Overwrite All</ActionButton
+					>
+					<ActionButton onclick={() => resolve('skip-all')} variant="secondary"
+						>Skip All</ActionButton
+					>
 				{/if}
 			</div>
 		</div>

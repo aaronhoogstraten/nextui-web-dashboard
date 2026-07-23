@@ -5,7 +5,15 @@
 	import { listDirectory, pullFile } from '$lib/adb/file-ops.js';
 	import { beginTransfer, endTransfer, trackedPull } from '$lib/stores/transfer.svelte.js';
 	import { adbExec } from '$lib/stores/connection.svelte.js';
-	import { formatSize, formatError, getMimeType, plural, errorMsg, successMsg, type Notification } from '$lib/utils.js';
+	import {
+		formatSize,
+		formatError,
+		getMimeType,
+		plural,
+		errorMsg,
+		successMsg,
+		type Notification
+	} from '$lib/utils.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
 	import ActionButton from './ActionButton.svelte';
 	import ImagePreview from './ImagePreview.svelte';
@@ -181,11 +189,7 @@
 	<div class="flex items-center justify-between mb-4">
 		<h2 class="text-2xl font-bold text-text">Screenshots</h2>
 		<div class="flex items-center gap-2">
-			<ActionButton
-				onclick={refresh}
-				disabled={loading || downloading}
-				variant="secondary"
-			>
+			<ActionButton onclick={refresh} disabled={loading || downloading} variant="secondary">
 				{loading ? 'Loading...' : 'Refresh'}
 			</ActionButton>
 			<ActionButton
@@ -223,11 +227,12 @@
 							{#if shot.loadingThumb}
 								<div class="w-full h-full bg-surface-hover animate-pulse"></div>
 							{:else if shot.thumbnailUrl}
-								<button
-									onclick={() => openPreview(shot)}
-									class="w-full h-full cursor-pointer"
-								>
-									<img src={shot.thumbnailUrl} alt={shot.name} class="w-full h-full object-contain" />
+								<button onclick={() => openPreview(shot)} class="w-full h-full cursor-pointer">
+									<img
+										src={shot.thumbnailUrl}
+										alt={shot.name}
+										class="w-full h-full object-contain"
+									/>
 								</button>
 							{:else}
 								<span class="text-text-muted text-2xl">&#128247;</span>

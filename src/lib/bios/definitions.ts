@@ -49,9 +49,21 @@ const GBA_BIOS = {
 } as const;
 
 const SEGA_CD_BIOS = [
-	{ fileName: 'bios_CD_E.bin', sha1: 'f891e0ea651e2232af0c5c4cb46a0cae2ee8f356', md5: 'e66fa1dc5820d254611fdcdba0662372' },
-	{ fileName: 'bios_CD_J.bin', sha1: '4846f448160059a7da0215a5df12ca160f26dd69', md5: '278a9397d192149e84e820ac621a8edd' },
-	{ fileName: 'bios_CD_U.bin', sha1: 'f4f315adcef9b8feb0364c21ab7f0eaf5457f3ed', md5: '2efd74e3232ff260e371b99f84024f7f' }
+	{
+		fileName: 'bios_CD_E.bin',
+		sha1: 'f891e0ea651e2232af0c5c4cb46a0cae2ee8f356',
+		md5: 'e66fa1dc5820d254611fdcdba0662372'
+	},
+	{
+		fileName: 'bios_CD_J.bin',
+		sha1: '4846f448160059a7da0215a5df12ca160f26dd69',
+		md5: '278a9397d192149e84e820ac621a8edd'
+	},
+	{
+		fileName: 'bios_CD_U.bin',
+		sha1: 'f4f315adcef9b8feb0364c21ab7f0eaf5457f3ed',
+		md5: '2efd74e3232ff260e371b99f84024f7f'
+	}
 ] as const;
 
 export const BIOS_SYSTEMS: BiosSystem[] = [
@@ -365,7 +377,7 @@ export const BIOS_SYSTEMS: BiosSystem[] = [
 				md5: '8ecd73eb4edf7ed7e81aef1be80031d5'
 			}
 		]
-	},
+	}
 ];
 
 /**
@@ -376,7 +388,8 @@ export const BIOS_SYSTEMS: BiosSystem[] = [
  */
 export function getBiosDevicePath(file: BiosFileDefinition): string {
 	if (file.isRomFile) {
-		const romDirName = getRomDirectoryName(file.systemCode) ?? `${file.systemCode} (${file.systemCode})`;
+		const romDirName =
+			getRomDirectoryName(file.systemCode) ?? `${file.systemCode} (${file.systemCode})`;
 		return `${DEVICE_PATHS.roms}/${romDirName}/${file.fileName}`;
 	}
 	return `${DEVICE_PATHS.bios}/${file.systemCode}/${file.fileName}`;
@@ -405,9 +418,9 @@ export function getBiosFilesForSystem(systemCode: string): BiosFileDefinition[] 
 
 // Dev-time assertion: ensure all BIOS file system codes exist in ROM_SYSTEMS
 if (import.meta.env.DEV) {
-	const invalid = ALL_BIOS_FILES
-		.map((f) => f.systemCode)
-		.filter((code) => !ROM_SYSTEM_CODES.has(code));
+	const invalid = ALL_BIOS_FILES.map((f) => f.systemCode).filter(
+		(code) => !ROM_SYSTEM_CODES.has(code)
+	);
 	if (invalid.length > 0) {
 		const unique = [...new Set(invalid)];
 		console.error(`BIOS system codes not found in ROM_SYSTEMS: ${unique.join(', ')}`);

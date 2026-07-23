@@ -1337,22 +1337,13 @@
 			<h2 class="text-2xl font-bold text-text">ROM Systems</h2>
 			<div class="flex items-center gap-4">
 				{#if hasDirectoryPicker}
-					<ActionButton
-						onclick={startSyncFlow}
-						variant="primary"
-					>
-						Sync from Folder
-					</ActionButton>
+					<ActionButton onclick={startSyncFlow} variant="primary">Sync from Folder</ActionButton>
 				{/if}
 				<label class="flex items-center gap-2 text-sm text-text-muted cursor-pointer">
 					<input type="checkbox" bind:checked={hideEmpty} class="accent-accent" />
 					Show systems with files only
 				</label>
-				<ActionButton
-					onclick={refreshAll}
-					disabled={refreshing}
-					variant="secondary"
-				>
+				<ActionButton onclick={refreshAll} disabled={refreshing} variant="secondary">
 					{refreshing ? 'Refreshing...' : 'Refresh'}
 				</ActionButton>
 			</div>
@@ -1485,7 +1476,9 @@
 											{/if}
 											<!-- Buttons -->
 											<div class="border-t border-border/60 px-1.5 pt-1.5 pb-1 space-y-1.5">
-												<div class="text-[11px] leading-tight text-text-muted break-all text-center">
+												<div
+													class="text-[11px] leading-tight text-text-muted break-all text-center"
+												>
 													{media.label}
 												</div>
 												<div class="flex items-center justify-center gap-1">
@@ -1668,12 +1661,7 @@
 			<h3 class="text-lg font-bold text-text mb-3">Missing Emulator</h3>
 			<p class="text-sm text-text whitespace-pre-line">{missingEmuInfo}</p>
 			<div class="mt-4 flex justify-end">
-				<ActionButton
-					onclick={() => (missingEmuInfo = null)}
-					variant="secondary"
-				>
-					OK
-				</ActionButton>
+				<ActionButton onclick={() => (missingEmuInfo = null)} variant="secondary">OK</ActionButton>
 			</div>
 		</div>
 	</Modal>

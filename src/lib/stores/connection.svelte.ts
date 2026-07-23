@@ -249,7 +249,9 @@ export async function toggleStayAwake(): Promise<void> {
  * Respond to the stay-awake prompt dialog.
  * @param answer 'yes' | 'yes-always' | 'no' | 'never'
  */
-export async function respondToStayAwakePrompt(answer: 'yes' | 'yes-always' | 'no' | 'never'): Promise<void> {
+export async function respondToStayAwakePrompt(
+	answer: 'yes' | 'yes-always' | 'no' | 'never'
+): Promise<void> {
 	stayAwakePromptVisible = false;
 	try {
 		if (answer === 'yes-always') localStorage.setItem(STAY_AWAKE_PREF_KEY, 'always');

@@ -14,9 +14,7 @@ function loadTheme(): Theme {
 }
 
 let systemPrefersDark: boolean = $state(
-	typeof window !== 'undefined'
-		? window.matchMedia('(prefers-color-scheme: dark)').matches
-		: true
+	typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)').matches : true
 );
 
 function resolveTheme(t: Theme): 'dark' | 'light' {

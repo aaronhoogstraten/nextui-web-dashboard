@@ -129,9 +129,7 @@ export async function checkForDeviceUpdate(): Promise<void> {
 		}
 		const data = await res.json();
 		const assets: { name: string }[] = data.assets ?? [];
-		const match = assets
-			.map((a) => a.name.match(/^(NextUI-\d{8}-\d+)/))
-			.find((m) => m !== null);
+		const match = assets.map((a) => a.name.match(/^(NextUI-\d{8}-\d+)/)).find((m) => m !== null);
 		latestRelease = match ? match[1] : '';
 		adbLog.info(`Latest NextUI release: ${latestRelease || '(not found)'}`);
 		fetchStatus = 'done';

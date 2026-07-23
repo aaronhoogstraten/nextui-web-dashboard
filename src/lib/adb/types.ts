@@ -48,6 +48,7 @@ export interface DevicePaths {
 	cheats: string;
 	collections: string;
 	screenshots: string;
+	palettes: string;
 	tools: string;
 	minuiZip: string;
 }
@@ -67,6 +68,7 @@ export function buildDevicePaths(basePath: string): DevicePaths {
 		cheats: `${basePath}/Cheats`,
 		collections: `${basePath}/Collections`,
 		screenshots: `${basePath}/Screenshots`,
+		palettes: `${basePath}/Palettes`,
 		tools: `${basePath}/Tools`,
 		minuiZip: `${basePath}/MinUI.zip`
 	};

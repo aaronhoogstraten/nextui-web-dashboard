@@ -3,9 +3,23 @@
 	import type { Adb } from '@yume-chan/adb';
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { listDirectory, pullFile, pushFile, pathExists } from '$lib/adb/file-ops.js';
-	import { beginTransfer, endTransfer, trackedPush, trackedPull } from '$lib/stores/transfer.svelte.js';
+	import {
+		beginTransfer,
+		endTransfer,
+		trackedPush,
+		trackedPull
+	} from '$lib/stores/transfer.svelte.js';
 	import { adbExec } from '$lib/stores/connection.svelte.js';
-	import { formatSize, formatError, compareByName, plural, pickFiles, errorMsg, successMsg, type Notification } from '$lib/utils.js';
+	import {
+		formatSize,
+		formatError,
+		compareByName,
+		plural,
+		pickFiles,
+		errorMsg,
+		successMsg,
+		type Notification
+	} from '$lib/utils.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
 	import ActionButton from './ActionButton.svelte';
 	import Modal from './Modal.svelte';
@@ -289,18 +303,10 @@
 	<div class="flex items-center justify-between mb-4">
 		<h2 class="text-2xl font-bold text-text">Cheats</h2>
 		<div class="flex items-center gap-2">
-			<ActionButton
-				onclick={openSystemPicker}
-				disabled={uploadingTo !== null}
-				variant="primary"
-			>
+			<ActionButton onclick={openSystemPicker} disabled={uploadingTo !== null} variant="primary">
 				Upload to System
 			</ActionButton>
-			<ActionButton
-				onclick={refresh}
-				disabled={loading}
-				variant="secondary"
-			>
+			<ActionButton onclick={refresh} disabled={loading} variant="secondary">
 				{loading ? 'Loading...' : 'Refresh'}
 			</ActionButton>
 		</div>
@@ -312,7 +318,9 @@
 
 	<div class="text-xs text-text-muted mb-3">
 		Source: <span class="font-mono">{CHEATS_PATH}/</span>
-		<span class="ml-2">Cheat files must match ROM filename + extension (e.g. game.zip.cht for game.zip)</span>
+		<span class="ml-2"
+			>Cheat files must match ROM filename + extension (e.g. game.zip.cht for game.zip)</span
+		>
 	</div>
 
 	<div class="flex-1 overflow-auto">
@@ -342,7 +350,9 @@
 						{#if sys.expanded}
 							<div class="p-3 space-y-1">
 								{#if sys.loading}
-									<div class="text-xs text-text-muted py-2 text-center">Validating ROM matches...</div>
+									<div class="text-xs text-text-muted py-2 text-center">
+										Validating ROM matches...
+									</div>
 								{/if}
 
 								<div class="flex items-center gap-2 mb-2">
@@ -368,7 +378,10 @@
 									<tbody>
 										{#each sys.cheats as cheat}
 											<tr class="border-t border-border hover:bg-surface-hover transition-colors">
-												<td class="py-1.5 px-2 text-text font-mono text-xs truncate max-w-[200px]" title={cheat.fileName}>
+												<td
+													class="py-1.5 px-2 text-text font-mono text-xs truncate max-w-[200px]"
+													title={cheat.fileName}
+												>
 													{cheat.fileName}
 												</td>
 												<td class="py-1.5 px-2">
@@ -441,7 +454,9 @@
 				{#if pickerLoading}
 					<div class="text-sm text-text-muted py-8 text-center">Loading systems...</div>
 				{:else if pickerSystems.length === 0}
-					<div class="text-sm text-text-muted py-8 text-center">No ROM systems found on device.</div>
+					<div class="text-sm text-text-muted py-8 text-center">
+						No ROM systems found on device.
+					</div>
 				{:else}
 					{#each pickerSystems as sys}
 						<button

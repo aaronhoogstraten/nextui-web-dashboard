@@ -39,7 +39,9 @@
 </script>
 
 {#if isTransferActive()}
-	<div class="bg-sidebar border-t border-border px-3 py-1.5 flex items-center gap-3 text-xs shrink-0">
+	<div
+		class="bg-sidebar border-t border-border px-3 py-1.5 flex items-center gap-3 text-xs shrink-0"
+	>
 		<span class="text-text truncate flex-shrink min-w-0" title={getCurrentFileName()}>
 			{label}
 		</span>

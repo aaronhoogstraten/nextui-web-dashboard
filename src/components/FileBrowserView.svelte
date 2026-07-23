@@ -19,8 +19,19 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import type { Adb } from '@yume-chan/adb';
-	import { listDirectory, pullFile, pushFile, isDirectory, searchFiles } from '$lib/adb/file-ops.js';
-	import { beginTransfer, endTransfer, trackedPush, trackedPull } from '$lib/stores/transfer.svelte.js';
+	import {
+		listDirectory,
+		pullFile,
+		pushFile,
+		isDirectory,
+		searchFiles
+	} from '$lib/adb/file-ops.js';
+	import {
+		beginTransfer,
+		endTransfer,
+		trackedPush,
+		trackedPull
+	} from '$lib/stores/transfer.svelte.js';
 	import { DEVICE_PATHS, type DirectoryEntry } from '$lib/adb/types.js';
 	import { adbExec } from '$lib/stores/connection.svelte.js';
 	import {
@@ -217,7 +228,12 @@
 
 	async function deleteEntry(entry: DirectoryEntry) {
 		const kind = entry.isDirectory ? 'folder' : 'file';
-		if (!confirm(`Delete ${kind} "${entry.name}"?${entry.isDirectory ? ' This will remove all contents.' : ''}`)) return;
+		if (
+			!confirm(
+				`Delete ${kind} "${entry.name}"?${entry.isDirectory ? ' This will remove all contents.' : ''}`
+			)
+		)
+			return;
 		deletingEntry = entry.name;
 		notice = null;
 		try {
@@ -409,7 +425,10 @@
 
 	// --- Drag-and-Drop Upload ---
 
-	function readAllEntries(entry: FileSystemEntry, basePath = ''): Promise<{ file: File; relativePath: string }[]> {
+	function readAllEntries(
+		entry: FileSystemEntry,
+		basePath = ''
+	): Promise<{ file: File; relativePath: string }[]> {
 		if (entry.isFile) {
 			return new Promise((resolve, reject) => {
 				(entry as FileSystemFileEntry).file(
@@ -424,9 +443,10 @@
 			const readBatch = () => {
 				reader.readEntries((batch) => {
 					if (batch.length === 0) {
-						Promise.all(
-							allEntries.map((e) => readAllEntries(e, basePath + entry.name + '/'))
-						).then((results) => resolve(results.flat()), reject);
+						Promise.all(allEntries.map((e) => readAllEntries(e, basePath + entry.name + '/'))).then(
+							(results) => resolve(results.flat()),
+							reject
+						);
 					} else {
 						allEntries.push(...batch);
 						readBatch();
@@ -444,7 +464,9 @@
 		if (!e.dataTransfer?.items || uploading) return;
 
 		const items = Array.from(e.dataTransfer.items).filter((i) => i.kind === 'file');
-		const fsEntries = items.map((i) => i.webkitGetAsEntry()).filter((entry): entry is FileSystemEntry => entry !== null);
+		const fsEntries = items
+			.map((i) => i.webkitGetAsEntry())
+			.filter((entry): entry is FileSystemEntry => entry !== null);
 		if (fsEntries.length === 0) return;
 
 		const allFiles = (await Promise.all(fsEntries.map((entry) => readAllEntries(entry)))).flat();
@@ -519,7 +541,9 @@
 	ondrop={handleDrop}
 >
 	{#if dragOver}
-		<div class="absolute inset-0 z-50 bg-bg/80 border-2 border-dashed border-accent rounded-lg flex items-center justify-center pointer-events-none">
+		<div
+			class="absolute inset-0 z-50 bg-bg/80 border-2 border-dashed border-accent rounded-lg flex items-center justify-center pointer-events-none"
+		>
 			<span class="text-lg font-medium text-accent">Upload to {currentPath}</span>
 		</div>
 	{/if}
@@ -528,32 +552,16 @@
 	<div class="flex items-center justify-between mb-4">
 		<h2 class="text-2xl font-bold text-text">File Browser</h2>
 		<div class="flex items-center gap-2">
-			<ActionButton
-				onclick={uploadFiles}
-				disabled={uploading}
-				variant="primary"
-			>
+			<ActionButton onclick={uploadFiles} disabled={uploading} variant="primary">
 				{uploading ? 'Uploading...' : 'Upload File'}
 			</ActionButton>
-			<ActionButton
-				onclick={createFolder}
-				disabled={creatingFolder}
-				variant="secondary"
-			>
+			<ActionButton onclick={createFolder} disabled={creatingFolder} variant="secondary">
 				{creatingFolder ? 'Creating...' : 'New Folder'}
 			</ActionButton>
-			<ActionButton
-				onclick={uploadFolder}
-				disabled={uploading}
-				variant="primary"
-			>
+			<ActionButton onclick={uploadFolder} disabled={uploading} variant="primary">
 				{uploading ? 'Uploading...' : 'Upload Folder'}
 			</ActionButton>
-			<ActionButton
-				onclick={() => navigate(currentPath)}
-				disabled={loading}
-				variant="secondary"
-			>
+			<ActionButton onclick={() => navigate(currentPath)} disabled={loading} variant="secondary">
 				{loading ? 'Loading...' : 'Refresh'}
 			</ActionButton>
 		</div>
@@ -568,20 +576,11 @@
 			onkeydown={(e) => e.key === 'Enter' && doSearch()}
 			class="flex-1 text-sm bg-surface text-text border border-border rounded px-3 py-1.5 placeholder:text-text-muted"
 		/>
-		<ActionButton
-			onclick={doSearch}
-			disabled={searching || !searchQuery.trim()}
-			variant="primary"
-		>
+		<ActionButton onclick={doSearch} disabled={searching || !searchQuery.trim()} variant="primary">
 			{searching ? 'Searching...' : 'Search'}
 		</ActionButton>
 		{#if searchResults !== null}
-			<ActionButton
-				onclick={clearSearch}
-				variant="secondary"
-			>
-				Clear
-			</ActionButton>
+			<ActionButton onclick={clearSearch} variant="secondary">Clear</ActionButton>
 		{/if}
 	</div>
 
@@ -594,10 +593,7 @@
 			{#if i === pathSegments.length - 1}
 				<span class="text-text font-medium">{segment.name}</span>
 			{:else}
-				<button
-					onclick={() => navigate(segment.path)}
-					class="text-accent hover:underline"
-				>
+				<button onclick={() => navigate(segment.path)} class="text-accent hover:underline">
 					{segment.name}
 				</button>
 			{/if}
@@ -658,7 +654,11 @@
 											{fileName}
 										</button>
 									</td>
-									<td class="py-1.5 px-3 text-text-muted text-xs font-mono truncate" colspan="2" title={dirPath}>
+									<td
+										class="py-1.5 px-3 text-text-muted text-xs font-mono truncate"
+										colspan="2"
+										title={dirPath}
+									>
 										{dirPath}
 									</td>
 								</tr>
@@ -797,12 +797,7 @@
 						>
 							{editorSaving ? 'Saving...' : 'Save'}
 						</ActionButton>
-						<ActionButton
-							onclick={closeEditor}
-							variant="subtle"
-							size="xs"
-							title="Close editor"
-						>
+						<ActionButton onclick={closeEditor} variant="subtle" size="xs" title="Close editor">
 							Close
 						</ActionButton>
 					</div>

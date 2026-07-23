@@ -233,9 +233,7 @@
 				<ActionButton onclick={copyLogs} variant="subtle" size="xs">
 					{copyLabel}
 				</ActionButton>
-				<ActionButton onclick={clearLog} variant="subtle" size="xs">
-					Clear
-				</ActionButton>
+				<ActionButton onclick={clearLog} variant="subtle" size="xs">Clear</ActionButton>
 			</div>
 		{/if}
 	</div>
@@ -260,7 +258,9 @@
 	{/if}
 
 	{#if consoleEnabled && !collapsed}
-		<div class="flex items-center gap-2 px-2 py-1.5 border-t border-border font-mono text-xs shrink-0">
+		<div
+			class="flex items-center gap-2 px-2 py-1.5 border-t border-border font-mono text-xs shrink-0"
+		>
 			<span class="text-accent shrink-0">$</span>
 			<input
 				bind:value={currentInput}

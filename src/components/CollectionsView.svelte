@@ -4,7 +4,14 @@
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { listDirectory, pullFile, pushFile, pathExists } from '$lib/adb/file-ops.js';
 	import { adbExec } from '$lib/stores/connection.svelte.js';
-	import { formatError, compareByName, plural, pickFile, errorMsg, type Notification } from '$lib/utils.js';
+	import {
+		formatError,
+		compareByName,
+		plural,
+		pickFile,
+		errorMsg,
+		type Notification
+	} from '$lib/utils.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
 	import ActionButton from './ActionButton.svelte';
 	import ImagePreview from './ImagePreview.svelte';
@@ -165,7 +172,11 @@
 	}
 
 	async function deleteCollection(col: CollectionState) {
-		if (!confirm(`Delete collection "${col.name}"? This will remove the collection file and its icon.`))
+		if (
+			!confirm(
+				`Delete collection "${col.name}"? This will remove the collection file and its icon.`
+			)
+		)
 			return;
 		deletingCollection = col.name;
 		try {
@@ -288,17 +299,8 @@
 		<div class="flex items-center justify-between mb-4">
 			<h2 class="text-2xl font-bold text-text">Collections</h2>
 			<div class="flex items-center gap-2">
-				<ActionButton
-					onclick={createCollection}
-					variant="primary"
-				>
-					New Collection
-				</ActionButton>
-				<ActionButton
-					onclick={refresh}
-					disabled={loading}
-					variant="secondary"
-				>
+				<ActionButton onclick={createCollection} variant="primary">New Collection</ActionButton>
+				<ActionButton onclick={refresh} disabled={loading} variant="secondary">
 					{loading ? 'Loading...' : 'Refresh'}
 				</ActionButton>
 			</div>
@@ -320,7 +322,11 @@
 					onclick={() => openPreview(bgUrl!, 'Collections background')}
 					class="h-10 cursor-pointer"
 				>
-					<img src={bgUrl} alt="Collections bg" class="h-10 rounded border border-border object-contain" />
+					<img
+						src={bgUrl}
+						alt="Collections bg"
+						class="h-10 rounded border border-border object-contain"
+					/>
 				</button>
 				<ActionButton onclick={uploadBg} variant="subtle" size="xs">Replace</ActionButton>
 				<ActionButton onclick={removeBg} variant="danger" size="xs">Delete</ActionButton>
@@ -351,7 +357,11 @@
 											onclick={() => openPreview(col.iconUrl!, col.name + ' icon')}
 											class="w-full h-full cursor-pointer"
 										>
-											<img src={col.iconUrl} alt={col.name + ' icon'} class="w-full h-full object-contain rounded" />
+											<img
+												src={col.iconUrl}
+												alt={col.name + ' icon'}
+												class="w-full h-full object-contain rounded"
+											/>
 										</button>
 									{:else}
 										<span class="text-text-muted text-lg">&#128194;</span>

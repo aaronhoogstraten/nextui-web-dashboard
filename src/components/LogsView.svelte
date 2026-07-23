@@ -6,7 +6,14 @@
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { getNextUIVersion } from '$lib/stores/connection.svelte.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
-	import { formatSize, formatError, plural, errorMsg, successMsg, type Notification } from '$lib/utils.js';
+	import {
+		formatSize,
+		formatError,
+		plural,
+		errorMsg,
+		successMsg,
+		type Notification
+	} from '$lib/utils.js';
 	import ActionButton from './ActionButton.svelte';
 	import StatusMessage from './StatusMessage.svelte';
 	import JSZip from 'jszip';
@@ -120,10 +127,7 @@
 					const cleaned = lines.map((l) => l.replace(/\r$/, ''));
 					if (cleaned.length > 0) {
 						const combined = logLines.concat(cleaned);
-						logLines =
-							combined.length > MAX_LINES
-								? combined.slice(-MAX_LINES)
-								: combined;
+						logLines = combined.length > MAX_LINES ? combined.slice(-MAX_LINES) : combined;
 						scrollToBottom();
 					}
 				}
@@ -282,12 +286,7 @@
 	<div class="p-6 flex flex-col h-full">
 		<div class="flex items-center justify-between mb-4">
 			<div class="flex items-center gap-3">
-				<ActionButton
-					onclick={stopTail}
-					variant="secondary"
-				>
-					&larr; Back
-				</ActionButton>
+				<ActionButton onclick={stopTail} variant="secondary">&larr; Back</ActionButton>
 				<h2 class="text-lg font-bold text-text truncate" title={viewingFile.fullPath}>
 					{viewingFile.relativePath}
 				</h2>
@@ -325,7 +324,9 @@
 		</div>
 
 		<div class="mt-2 text-xs text-text-muted">
-			{logLines.length} line{logLines.length !== 1 ? 's' : ''}{logLines.length >= MAX_LINES ? ` (capped at ${MAX_LINES})` : ''}
+			{logLines.length} line{logLines.length !== 1 ? 's' : ''}{logLines.length >= MAX_LINES
+				? ` (capped at ${MAX_LINES})`
+				: ''}
 		</div>
 	</div>
 {:else}
@@ -334,11 +335,7 @@
 		<div class="flex items-center justify-between mb-4">
 			<h2 class="text-2xl font-bold text-text">Log Viewer</h2>
 			<div class="flex items-center gap-2">
-				<ActionButton
-					onclick={scanForLogs}
-					disabled={scanning || downloading}
-					variant="secondary"
-				>
+				<ActionButton onclick={scanForLogs} disabled={scanning || downloading} variant="secondary">
 					{scanning ? 'Scanning...' : 'Rescan'}
 				</ActionButton>
 				<ActionButton
@@ -388,7 +385,8 @@
 				<tbody>
 					{#if scanning}
 						<tr>
-							<td colspan="4" class="py-8 text-center text-text-muted">Scanning for log files...</td>
+							<td colspan="4" class="py-8 text-center text-text-muted">Scanning for log files...</td
+							>
 						</tr>
 					{:else if logFiles.length === 0}
 						<tr>
@@ -406,11 +404,7 @@
 								</td>
 								<td class="py-1.5 px-3 text-right">
 									<div class="flex justify-end gap-1.5">
-										<ActionButton
-											onclick={() => startTail(file)}
-											variant="subtle"
-											size="xs"
-										>
+										<ActionButton onclick={() => startTail(file)} variant="subtle" size="xs">
 											View
 										</ActionButton>
 										<ActionButton

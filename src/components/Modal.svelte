@@ -39,7 +39,10 @@
 	tabindex="-1"
 	onclick={handleBackdropClick}
 >
-	<div class="bg-bg border border-border rounded-lg w-full {maxWidth} mx-4" data-modal-label-id={labelId}>
+	<div
+		class="bg-bg border border-border rounded-lg w-full {maxWidth} mx-4"
+		data-modal-label-id={labelId}
+	>
 		{@render children()}
 	</div>
 </div>

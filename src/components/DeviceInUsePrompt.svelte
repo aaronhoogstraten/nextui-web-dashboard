@@ -25,8 +25,8 @@
 	<div class="p-6">
 		<h3 class="text-lg font-bold text-text mb-3">Device In Use</h3>
 		<p class="text-sm text-text-muted mb-4">
-			Another program on your computer (likely a local <code>adb</code> server) is holding the USB
-			connection to your device. The NextUI Dashboard can't connect until it's released.
+			Another program on your computer (likely a local <code>adb</code> server) is holding the USB connection
+			to your device. The NextUI Dashboard can't connect until it's released.
 		</p>
 		<p class="text-sm text-text-muted mb-2">
 			Open <strong class="text-text">{terminalName}</strong> on your computer and run:
@@ -34,14 +34,13 @@
 		<div class="flex items-center gap-2 mb-4">
 			<code
 				class="flex-1 bg-surface border border-border rounded px-3 py-2 text-sm font-mono text-text select-all"
-			>{command}</code>
+				>{command}</code
+			>
 			<ActionButton onclick={copyCommand} variant="secondary">
 				{copied ? 'Copied' : 'Copy'}
 			</ActionButton>
 		</div>
-		<p class="text-sm text-text-muted mb-4">
-			Then click Connect in the sidebar again.
-		</p>
+		<p class="text-sm text-text-muted mb-4">Then click Connect in the sidebar again.</p>
 		<div class="flex justify-end">
 			<ActionButton onclick={dismissDeviceInUsePrompt} variant="primary">OK</ActionButton>
 		</div>

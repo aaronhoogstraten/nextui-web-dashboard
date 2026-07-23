@@ -120,14 +120,22 @@ export async function installDevPak(adb: Adb): Promise<void> {
 			const script = new TextDecoder().decode(data);
 			const match = PRESENTER_INVOCATION_RE.exec(script);
 			if (match) {
-				const patched = script.replace(PRESENTER_INVOCATION_RE, `${match[1]}${DASHBOARD_PRESENTER_CMD}`);
+				const patched = script.replace(
+					PRESENTER_INVOCATION_RE,
+					`${match[1]}${DASHBOARD_PRESENTER_CMD}`
+				);
 				data = new TextEncoder().encode(patched);
 				adbLog.debug('Patched launch.sh with dashboard minui-presenter command');
 			} else {
 				adbLog.warn('launch.sh: minui-presenter invocation line not found, installing unmodified');
 			}
 		}
-		await pushFile(adb, `${DEV_PAK_DIR}/${file.relativePath}`, data, file.executable ? 0o755 : 0o644);
+		await pushFile(
+			adb,
+			`${DEV_PAK_DIR}/${file.relativePath}`,
+			data,
+			file.executable ? 0o755 : 0o644
+		);
 		adbLog.debug(`Pushed ${file.relativePath} (${data.length} bytes)`);
 	}
 

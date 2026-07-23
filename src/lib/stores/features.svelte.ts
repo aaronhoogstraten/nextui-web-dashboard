@@ -47,7 +47,7 @@ if (typeof window !== 'undefined') {
 		},
 		enableFeature,
 		disableFeature,
-		resetFeatures,
+		resetFeatures
 	};
 
 	Object.defineProperty(window, 'thisisunsafe', {
@@ -55,6 +55,6 @@ if (typeof window !== 'undefined') {
 			enableFeature('adb-shell');
 			return 'ADB Console unlocked. Look for the input field in the Console panel.';
 		},
-		configurable: true,
+		configurable: true
 	});
 }

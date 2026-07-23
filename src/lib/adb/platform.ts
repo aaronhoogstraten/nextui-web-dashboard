@@ -89,7 +89,11 @@ export interface MinUIEnv {
  * Extracts SDCARD_PATH and LD_LIBRARY_PATH, resolving shell variables to
  * their concrete values. Falls back to defaults derived from basePath.
  */
-export async function parseMinUIEnv(adb: Adb, platform: string, basePath: string): Promise<MinUIEnv> {
+export async function parseMinUIEnv(
+	adb: Adb,
+	platform: string,
+	basePath: string
+): Promise<MinUIEnv> {
 	const systemDir = `${basePath}/.system/${platform}`;
 	const launchSh = `${systemDir}/paks/MinUI.pak/launch.sh`;
 	const defaults: MinUIEnv = {

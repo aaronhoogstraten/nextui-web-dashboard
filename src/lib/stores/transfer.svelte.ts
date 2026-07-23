@@ -44,7 +44,11 @@ export function getBytesTotal(): number {
 
 // --- Lifecycle ---
 
-export function beginTransfer(dir: TransferDirection, totalFiles: number, totalBytes?: number): void {
+export function beginTransfer(
+	dir: TransferDirection,
+	totalFiles: number,
+	totalBytes?: number
+): void {
 	if (lingerTimer) {
 		clearTimeout(lingerTimer);
 		lingerTimer = null;
@@ -97,10 +101,7 @@ export async function trackedPush(
 	filesCompleted++;
 }
 
-export async function trackedPull(
-	adb: Adb,
-	remotePath: string
-): Promise<Uint8Array<ArrayBuffer>> {
+export async function trackedPull(adb: Adb, remotePath: string): Promise<Uint8Array<ArrayBuffer>> {
 	currentFileName = remotePath.split('/').pop() ?? remotePath;
 	fileBaseBytes = bytesTransferred;
 	const result = await pullFile(adb, remotePath, onFileProgress);

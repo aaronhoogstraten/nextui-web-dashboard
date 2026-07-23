@@ -35,7 +35,8 @@
 	const variantClasses: Record<ActionVariant, string> = {
 		primary: 'bg-accent text-white hover:bg-accent-hover',
 		secondary: 'border border-border bg-surface text-text hover:bg-surface-hover',
-		subtle: 'border border-border bg-surface text-text-muted hover:bg-surface-hover hover:text-text',
+		subtle:
+			'border border-border bg-surface text-text-muted hover:bg-surface-hover hover:text-text',
 		danger:
 			'border border-red-500/30 bg-red-500/10 text-red-500 hover:bg-red-500/20 hover:text-red-400',
 		success: 'bg-green-700 text-white hover:bg-green-600',
@@ -51,14 +52,7 @@
 	);
 </script>
 
-<button
-	{...restProps}
-	{type}
-	{title}
-	{disabled}
-	onclick={onclick}
-	class={classes}
->
+<button {...restProps} {type} {title} {disabled} {onclick} class={classes}>
 	{#if children}
 		{@render children()}
 	{/if}

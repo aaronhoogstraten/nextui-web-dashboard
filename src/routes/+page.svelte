@@ -8,6 +8,7 @@
 	import CollectionsView from '../components/CollectionsView.svelte';
 	import LogsView from '../components/LogsView.svelte';
 	import ScreenshotsView from '../components/ScreenshotsView.svelte';
+	import PalettesView from '../components/PalettesView.svelte';
 	import ConsoleLog from '../components/ConsoleLog.svelte';
 	import TransferProgress from '../components/TransferProgress.svelte';
 	import StayAwakePrompt from '../components/StayAwakePrompt.svelte';
@@ -77,6 +78,8 @@
 			<CollectionsView adb={connectedAdb!} />
 		{:else if activeView === 'screenshots'}
 			<ScreenshotsView adb={connectedAdb!} />
+		{:else if activeView === 'palettes'}
+			<PalettesView adb={connectedAdb!} />
 		{:else if activeView === 'files'}
 			<FileBrowserView adb={connectedAdb!} />
 		{:else if activeView === 'logs'}
@@ -110,12 +113,7 @@
 			<h3 class="text-lg font-bold text-text mb-3">Keep device awake</h3>
 			<p class="text-sm text-text whitespace-pre-line">{getStayAwakeError()}</p>
 			<div class="mt-4 flex justify-end">
-				<ActionButton
-					onclick={dismissStayAwakeError}
-					variant="secondary"
-				>
-					OK
-				</ActionButton>
+				<ActionButton onclick={dismissStayAwakeError} variant="secondary">OK</ActionButton>
 			</div>
 		</div>
 	</Modal>

@@ -67,7 +67,18 @@ export const ROM_SYSTEMS: RomSystem[] = [
 	{
 		systemName: 'Commodore 128',
 		systemCode: 'C128',
-		supportedFormats: ['.d64', '.d71', '.d80', '.d81', '.d82', '.g64', '.t64', '.tap', '.crt', '.zip']
+		supportedFormats: [
+			'.d64',
+			'.d71',
+			'.d80',
+			'.d81',
+			'.d82',
+			'.g64',
+			'.t64',
+			'.tap',
+			'.crt',
+			'.zip'
+		]
 	},
 	{
 		systemName: 'Commodore 64',

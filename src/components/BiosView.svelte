@@ -499,11 +499,7 @@
 				<input type="checkbox" bind:checked={hideComplete} class="accent-accent" />
 				Show missing only
 			</label>
-			<ActionButton
-				onclick={checkAllSystems}
-				disabled={checking}
-				variant="secondary"
-			>
+			<ActionButton onclick={checkAllSystems} disabled={checking} variant="secondary">
 				{checking ? 'Checking...' : 'Refresh'}
 			</ActionButton>
 		</div>
@@ -588,7 +584,10 @@
 										<div
 											class="text-xs {system.isCustom
 												? 'text-blue-500'
-												: effectiveStatusColor(file, system)} mt-0.5 font-mono break-all whitespace-pre-line"
+												: effectiveStatusColor(
+														file,
+														system
+													)} mt-0.5 font-mono break-all whitespace-pre-line"
 										>
 											{file.detail}
 										</div>

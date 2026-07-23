@@ -4,7 +4,14 @@
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { listDirectory, pushFile, pathExists } from '$lib/adb/file-ops.js';
 	import { parseRomDirectoryName } from '$lib/roms/definitions.js';
-	import { formatError, compareByName, plural, errorMsg, successMsg, type Notification } from '$lib/utils.js';
+	import {
+		formatError,
+		compareByName,
+		plural,
+		errorMsg,
+		successMsg,
+		type Notification
+	} from '$lib/utils.js';
 	import Modal from './Modal.svelte';
 	import StatusMessage from './StatusMessage.svelte';
 	import ActionButton from './ActionButton.svelte';
@@ -69,10 +76,7 @@
 	let pickerLoading = $state(false);
 
 	const selectedCount = $derived(
-		pickerSystems.reduce(
-			(sum, sys) => sum + sys.files.filter((f) => f.selected).length,
-			0
-		)
+		pickerSystems.reduce((sum, sys) => sum + sys.files.filter((f) => f.selected).length, 0)
 	);
 
 	// --- Helpers ---
@@ -173,9 +177,7 @@
 						systemCode: parsed ? parsed.systemCode : null,
 						expanded: false,
 						loading: false,
-						files: romFiles
-							.sort(compareByName)
-							.map((e) => ({ name: e.name, selected: false })),
+						files: romFiles.sort(compareByName).map((e) => ({ name: e.name, selected: false })),
 						fileCount: romFiles.length
 					});
 				} catch {
@@ -242,29 +244,15 @@
 <!-- Editor View -->
 <div class="flex items-center justify-between mb-4">
 	<div class="flex items-center gap-3">
-		<button
-			onclick={closeEditor}
-			class="text-sm text-accent hover:underline"
-		>
-			&larr; Back
-		</button>
+		<button onclick={closeEditor} class="text-sm text-accent hover:underline"> &larr; Back </button>
 		<h2 class="text-2xl font-bold text-text">{collection.name}</h2>
 		{#if editorDirty}
 			<span class="text-xs text-warning">unsaved changes</span>
 		{/if}
 	</div>
 	<div class="flex items-center gap-2">
-		<ActionButton
-			onclick={openPicker}
-			variant="primary"
-		>
-			Add ROMs
-		</ActionButton>
-		<ActionButton
-			onclick={saveCollection}
-			disabled={!editorDirty || saving}
-			variant="success"
-		>
+		<ActionButton onclick={openPicker} variant="primary">Add ROMs</ActionButton>
+		<ActionButton onclick={saveCollection} disabled={!editorDirty || saving} variant="success">
 			{saving ? 'Saving...' : 'Save'}
 		</ActionButton>
 	</div>
@@ -360,10 +348,7 @@
 				<h3 class="text-lg font-bold text-text">Add ROMs to Collection</h3>
 				<div class="flex items-center gap-2">
 					{#if selectedCount > 0}
-						<ActionButton
-							onclick={addSelectedRoms}
-							variant="primary"
-						>
+						<ActionButton onclick={addSelectedRoms} variant="primary">
 							Add {plural(selectedCount, 'ROM')}
 						</ActionButton>
 					{/if}
@@ -381,7 +366,9 @@
 				{#if pickerLoading}
 					<div class="text-sm text-text-muted py-8 text-center">Loading ROM systems...</div>
 				{:else if pickerSystems.length === 0}
-					<div class="text-sm text-text-muted py-8 text-center">No ROM systems found on device.</div>
+					<div class="text-sm text-text-muted py-8 text-center">
+						No ROM systems found on device.
+					</div>
 				{:else}
 					<div class="space-y-1">
 						{#each pickerSystems as sys}
@@ -404,7 +391,11 @@
 										{#each sys.files as file}
 											{@const romPath = `/Roms/${sys.dirName}/${file.name}`}
 											{@const alreadyAdded = editorPathSet.has(romPath)}
-											<label class="flex items-center gap-2 py-0.5 px-1 text-sm rounded hover:bg-surface cursor-pointer {alreadyAdded ? 'opacity-50' : ''}">
+											<label
+												class="flex items-center gap-2 py-0.5 px-1 text-sm rounded hover:bg-surface cursor-pointer {alreadyAdded
+													? 'opacity-50'
+													: ''}"
+											>
 												<input
 													type="checkbox"
 													bind:checked={file.selected}
@@ -415,7 +406,8 @@
 													{file.name}
 												</span>
 												{#if alreadyAdded}
-													<span class="text-xs text-text-muted ml-auto shrink-0">already added</span>
+													<span class="text-xs text-text-muted ml-auto shrink-0">already added</span
+													>
 												{/if}
 											</label>
 										{/each}

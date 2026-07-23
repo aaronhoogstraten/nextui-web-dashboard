@@ -28,15 +28,16 @@
 				rel="noopener noreferrer"
 				class="underline hover:text-blue-200"
 			>
-				view the release on GitHub.</a>
+				view the release on GitHub.</a
+			>
 			{#if getOpenUpdaterError()}
 				<span class="block mt-1 text-blue-100">
 					Couldn't open the Updater: {getOpenUpdaterError()}
 					<button
 						type="button"
 						onclick={dismissOpenUpdaterError}
-						class="underline hover:text-white ml-2"
-					>Dismiss</button>
+						class="underline hover:text-white ml-2">Dismiss</button
+					>
 				</span>
 			{/if}
 		</span>

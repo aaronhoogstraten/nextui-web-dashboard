@@ -29,7 +29,9 @@ export async function pushFile(
 	permission = 0o644,
 	onProgress?: TransferProgressCallback
 ): Promise<void> {
-	adbLog.info(`sync.write → ${remotePath} (${content.byteLength} bytes, perm=${permission.toString(8)})`);
+	adbLog.info(
+		`sync.write → ${remotePath} (${content.byteLength} bytes, perm=${permission.toString(8)})`
+	);
 	const sync = await adb.sync();
 	try {
 		const CHUNK_SIZE = 64 * 1024;
@@ -243,7 +245,9 @@ export async function getStorageInfo(adb: Adb): Promise<StorageInfo | null> {
 			// Fallback to positional if headers don't match
 			const parts = lines[lines.length - 1].split(/\s+/);
 			if (parts.length < 4) return null;
-			const t = parseInt(parts[1], 10), u = parseInt(parts[2], 10), a = parseInt(parts[3], 10);
+			const t = parseInt(parts[1], 10),
+				u = parseInt(parts[2], 10),
+				a = parseInt(parts[3], 10);
 			if (isNaN(t) || isNaN(u) || isNaN(a)) return null;
 			return { totalBytes: t * 1024, usedBytes: u * 1024, availableBytes: a * 1024 };
 		}
@@ -272,13 +276,9 @@ export async function getStorageInfo(adb: Adb): Promise<StorageInfo | null> {
  * @param adb - Active ADB connection
  * @returns Object with success status and error message if failed
  */
-export type VerifyResult =
-	| { ok: true; version?: string }
-	| { ok: false; error: string };
+export type VerifyResult = { ok: true; version?: string } | { ok: false; error: string };
 
-export async function verifyNextUIInstallation(
-	adb: Adb
-): Promise<VerifyResult> {
+export async function verifyNextUIInstallation(adb: Adb): Promise<VerifyResult> {
 	// Check base path by listing /mnt and looking for SDCARD
 	if (!(await pathExists(adb, DEVICE_PATHS.base))) {
 		return { ok: false, error: `NextUI installation not found at ${DEVICE_PATHS.base}` };
@@ -313,7 +313,8 @@ export async function verifyNextUIInstallation(
 			if (!systemTxt) {
 				return {
 					ok: false,
-					error: 'This device appears to be running a non-NextUI fork of MinUI. The dashboard only supports NextUI.'
+					error:
+						'This device appears to be running a non-NextUI fork of MinUI. The dashboard only supports NextUI.'
 				};
 			}
 			const version = (await systemTxt.async('string')).trim();
@@ -362,84 +363,109 @@ export async function runDiagnostics(
 
 	const results: DiagResult[] = [];
 
-	results.push(await test('ADB Transport', async () =>
-		`serial=${adb.serial}, maxPayload=${adb.maxPayloadSize}, features=[${adb.banner.features?.join(', ') ?? 'none'}]`
-	));
+	results.push(
+		await test('ADB Transport', async () =>
+			`serial=${adb.serial}, maxPayload=${adb.maxPayloadSize}, features=[${adb.banner.features?.join(', ') ?? 'none'}]`)
+	);
 
-	results.push(await test('sync.opendir("/")', async () => {
-		const entries = await listDirectory(adb, '/');
-		return `${entries.length} entries: ${entries.map((e) => e.name).join(', ')}`;
-	}));
+	results.push(
+		await test('sync.opendir("/")', async () => {
+			const entries = await listDirectory(adb, '/');
+			return `${entries.length} entries: ${entries.map((e) => e.name).join(', ')}`;
+		})
+	);
 
-	results.push(await test(`sync.opendir("${DEVICE_PATHS.base}")`, async () => {
-		const entries = await listDirectory(adb, DEVICE_PATHS.base);
-		const dirs = entries.filter((e) => e.isDirectory).map((e) => e.name);
-		return `${entries.length} entries. Dirs: ${dirs.join(', ')}`;
-	}));
+	results.push(
+		await test(`sync.opendir("${DEVICE_PATHS.base}")`, async () => {
+			const entries = await listDirectory(adb, DEVICE_PATHS.base);
+			const dirs = entries.filter((e) => e.isDirectory).map((e) => e.name);
+			return `${entries.length} entries. Dirs: ${dirs.join(', ')}`;
+		})
+	);
 
-	results.push(await test(`sync.stat("${DEVICE_PATHS.base}")`, async () => {
-		const sync = await adb.sync();
-		try {
-			const st = await sync.stat(DEVICE_PATHS.base);
-			return `mode=${st.mode}, size=${st.size}`;
-		} finally {
-			await sync.dispose();
-		}
-	}));
+	results.push(
+		await test(`sync.stat("${DEVICE_PATHS.base}")`, async () => {
+			const sync = await adb.sync();
+			try {
+				const st = await sync.stat(DEVICE_PATHS.base);
+				return `mode=${st.mode}, size=${st.size}`;
+			} finally {
+				await sync.dispose();
+			}
+		})
+	);
 
-	results.push(await test(`sync.lstat("${DEVICE_PATHS.base}")`, async () => {
-		const sync = await adb.sync();
-		try {
-			const st = await sync.lstat(DEVICE_PATHS.base);
-			return `mode=${st.mode}, size=${st.size}`;
-		} finally {
-			await sync.dispose();
-		}
-	}));
+	results.push(
+		await test(`sync.lstat("${DEVICE_PATHS.base}")`, async () => {
+			const sync = await adb.sync();
+			try {
+				const st = await sync.lstat(DEVICE_PATHS.base);
+				return `mode=${st.mode}, size=${st.size}`;
+			} finally {
+				await sync.dispose();
+			}
+		})
+	);
 
-	results.push(await test('sync.read("README.txt")', async () => {
-		const content = await pullFile(adb, `${DEVICE_PATHS.base}/README.txt`);
-		const text = new TextDecoder().decode(content.slice(0, 200));
-		return `${content.byteLength} bytes. Start: ${text.substring(0, 80).replace(/\n/g, '\\n')}...`;
-	}));
+	results.push(
+		await test('sync.read("README.txt")', async () => {
+			const content = await pullFile(adb, `${DEVICE_PATHS.base}/README.txt`);
+			const text = new TextDecoder().decode(content.slice(0, 200));
+			return `${content.byteLength} bytes. Start: ${text.substring(0, 80).replace(/\n/g, '\\n')}...`;
+		})
+	);
 
-	results.push(await test('subprocess.noneProtocol', async () => {
-		const output = await adb.subprocess.noneProtocol.spawnWaitText('echo hello');
-		return `output="${output.trim()}"`;
-	}));
+	results.push(
+		await test('subprocess.noneProtocol', async () => {
+			const output = await adb.subprocess.noneProtocol.spawnWaitText('echo hello');
+			return `output="${output.trim()}"`;
+		})
+	);
 
 	// shellProtocol — may not be available
 	try {
 		const proto = adb.subprocess.shellProtocol;
 		if (proto) {
-			results.push(await test('subprocess.shellProtocol', async () => {
-				const result = await proto.spawnWaitText('echo hello');
-				return `stdout="${result.stdout.trim()}", exitCode=${result.exitCode}`;
-			}));
+			results.push(
+				await test('subprocess.shellProtocol', async () => {
+					const result = await proto.spawnWaitText('echo hello');
+					return `stdout="${result.stdout.trim()}", exitCode=${result.exitCode}`;
+				})
+			);
 		} else {
-			results.push({ label: 'subprocess.shellProtocol', status: 'skip', detail: 'Not available (shellProtocol is undefined)' });
+			results.push({
+				label: 'subprocess.shellProtocol',
+				status: 'skip',
+				detail: 'Not available (shellProtocol is undefined)'
+			});
 		}
 	} catch (e) {
 		results.push({ label: 'subprocess.shellProtocol', status: 'fail', detail: String(e) });
 	}
 
-	results.push(await test('createSocketAndWait("shell:...")', async () => {
-		const output = await adb.createSocketAndWait('shell:echo hello');
-		return `output="${output.trim()}"`;
-	}));
+	results.push(
+		await test('createSocketAndWait("shell:...")', async () => {
+			const output = await adb.createSocketAndWait('shell:echo hello');
+			return `output="${output.trim()}"`;
+		})
+	);
 
-	results.push(await test('verifyNextUIInstallation', async () => {
-		const result = await verifyNextUIInstallation(adb);
-		if (!result.ok) throw new Error(result.error ?? 'Unknown error');
-		return 'Verified';
-	}));
+	results.push(
+		await test('verifyNextUIInstallation', async () => {
+			const result = await verifyNextUIInstallation(adb);
+			if (!result.ok) throw new Error(result.error ?? 'Unknown error');
+			return 'Verified';
+		})
+	);
 
-	results.push(await test('getStorageInfo', async () => {
-		const info = await getStorageInfo(adb);
-		if (!info) throw new Error('Returned null (shell may not be supported)');
-		const toGB = (b: number) => (b / 1024 / 1024 / 1024).toFixed(2);
-		return `${toGB(info.usedBytes)} GB / ${toGB(info.totalBytes)} GB (${toGB(info.availableBytes)} GB free)`;
-	}));
+	results.push(
+		await test('getStorageInfo', async () => {
+			const info = await getStorageInfo(adb);
+			if (!info) throw new Error('Returned null (shell may not be supported)');
+			const toGB = (b: number) => (b / 1024 / 1024 / 1024).toFixed(2);
+			return `${toGB(info.usedBytes)} GB / ${toGB(info.totalBytes)} GB (${toGB(info.availableBytes)} GB free)`;
+		})
+	);
 
 	return results;
 }

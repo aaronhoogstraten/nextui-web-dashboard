@@ -1,16 +1,6 @@
-export type {
-	DeviceInfo,
-	StorageInfo,
-	DirectoryEntry,
-	AdbConnection
-} from './types.js';
+export type { DeviceInfo, StorageInfo, DirectoryEntry, AdbConnection } from './types.js';
 export { DEVICE_PATHS } from './types.js';
-export {
-	hasWebUSB,
-	getBrowserRecommendation,
-	connectWebUSB,
-	disconnect
-} from './connection.js';
+export { hasWebUSB, getBrowserRecommendation, connectWebUSB, disconnect } from './connection.js';
 export {
 	pushFile,
 	pullFile,
