@@ -2,7 +2,7 @@
 	import { untrack } from 'svelte';
 	import type { Adb } from '@yume-chan/adb';
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
-	import { listDirectory, pullFile, pushFile, pathExists } from '$lib/adb/file-ops.js';
+	import { listDirectory, pathExists } from '$lib/adb/file-ops.js';
 	import {
 		beginTransfer,
 		endTransfer,

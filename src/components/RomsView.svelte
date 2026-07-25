@@ -694,7 +694,13 @@
 				continue;
 			}
 
-			if (existingTopLevel?.isFile && !clearedTopLevelConflicts.has(topLevelName)) {
+			// A nested entry needs `topLevelName` to be a directory, so an existing
+			// file of that name must go first. A flat entry just overwrites in place.
+			if (
+				hasNestedPath &&
+				existingTopLevel?.isFile &&
+				!clearedTopLevelConflicts.has(topLevelName)
+			) {
 				await adbExec(ShellCmd.rm(joinPath(state.devicePath, topLevelName)));
 				clearedTopLevelConflicts.add(topLevelName);
 				existingEntries.set(topLevelName, { isFile: false, isDirectory: true });

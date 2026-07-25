@@ -14,7 +14,7 @@
 		toggleStayAwake,
 		canStayAwake
 	} from '$lib/stores/connection.svelte.js';
-	import { hasWebUSB, getBrowserRecommendation } from '$lib/adb/connection.js';
+	import { hasWebUSB } from '$lib/adb/connection.js';
 	import { toggleTheme, isDark, getTheme } from '$lib/stores/theme.svelte.js';
 	import { isFeatureEnabled } from '$lib/stores/features.svelte.js';
 	import { APP_VERSION, isUpdateAvailable } from '$lib/stores/version.svelte.js';

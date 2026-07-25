@@ -53,7 +53,8 @@
 
 	// --- State ---
 
-	// svelte-ignore state_referenced_locally -- intentional snapshot of initial prop value
+	// Intentional snapshot of the initial prop value.
+	// svelte-ignore state_referenced_locally
 	let editorPaths: string[] = $state([...collection.romPaths]);
 	// svelte-ignore state_referenced_locally
 	let editorOriginal: string[] = $state([...collection.romPaths]);
@@ -282,7 +283,7 @@
 				</tr>
 			</thead>
 			<tbody>
-				{#each editorPaths as path, i}
+				{#each editorPaths as path, i (path)}
 					{@const valid = editorValidation.get(path)}
 					<tr class="border-t border-border hover:bg-surface-hover transition-colors">
 						<td class="py-1.5 px-3 text-text-muted tabular-nums">{i + 1}</td>

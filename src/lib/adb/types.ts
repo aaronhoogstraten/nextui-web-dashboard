@@ -78,7 +78,6 @@ export function buildDevicePaths(basePath: string): DevicePaths {
  * Device paths, populated at connection time from MinUI.pak/launch.sh.
  * Initialized with bootstrap defaults; updated via setDeviceBasePath().
  */
-// eslint-disable-next-line import/no-mutable-exports
 export let DEVICE_PATHS: DevicePaths = buildDevicePaths(DEFAULT_BASE);
 
 /** Update DEVICE_PATHS to use a new base path (called after reading launch.sh). */

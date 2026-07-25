@@ -8,7 +8,6 @@
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
 	import { buildDeviceDirMap, parseRomDirectoryName } from '$lib/roms/index.js';
 	import ActionButton from './ActionButton.svelte';
-	import Modal from './Modal.svelte';
 	import OverwriteDialog, { type ConflictResolution } from './OverwriteDialog.svelte';
 	import StatusMessage from './StatusMessage.svelte';
 
