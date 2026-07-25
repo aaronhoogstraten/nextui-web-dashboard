@@ -109,6 +109,22 @@ function toBase64Url(bytes: Uint8Array): string {
 	return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
+/** Decode an unpadded base64url string, or null if it isn't valid base64url. */
+function fromBase64Url(token: string): Uint8Array | null {
+	if (!/^[A-Za-z0-9_-]+$/.test(token)) return null;
+	let b64 = token.replace(/-/g, '+').replace(/_/g, '/');
+	while (b64.length % 4 !== 0) b64 += '=';
+	let bin: string;
+	try {
+		bin = atob(b64);
+	} catch {
+		return null;
+	}
+	const bytes = new Uint8Array(bin.length);
+	for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+	return bytes;
+}
+
 /**
  * Build a "NextUI Palette Studio" link that opens the editor pre-loaded with
  * the given palette's colors, encoded the way the studio itself does.
@@ -149,4 +165,90 @@ export function studioUrl(colors: (string | null)[]): string {
 		bytes.set(alphas, 1 + rgb.length);
 	}
 	return `${STUDIO_BASE}?t=${toBase64Url(bytes)}`;
+}
+
+const RGB_BYTES = COLOR_COUNT * 3;
+
+/**
+ * Decode a Palette Studio `t=` payload back into color1..color7 as normalized
+ * uppercase `RRGGBBAA` hex. Returns null if the token isn't a well-formed
+ * payload. Inverse of the encoding described on {@link studioUrl}.
+ */
+export function decodeStudioToken(token: string): string[] | null {
+	const bytes = fromBase64Url(token);
+	if (!bytes) return null;
+
+	let rgbOffset: number;
+	let alphaMask: number;
+	if (bytes.length === RGB_BYTES) {
+		// Short form: all colors fully opaque, no mask byte.
+		rgbOffset = 0;
+		alphaMask = 0;
+	} else if (bytes.length > RGB_BYTES + 1 && bytes.length <= RGB_BYTES + 1 + COLOR_COUNT) {
+		rgbOffset = 1;
+		alphaMask = bytes[0];
+		// No mask bits above color7, and exactly one trailing alpha byte per set bit.
+		if (alphaMask >> COLOR_COUNT !== 0) return null;
+		let expected = 0;
+		for (let i = 0; i < COLOR_COUNT; i++) if (alphaMask & (1 << i)) expected++;
+		if (bytes.length !== RGB_BYTES + 1 + expected) return null;
+	} else {
+		return null;
+	}
+
+	const colors: string[] = [];
+	let alphaIndex = RGB_BYTES + 1;
+	for (let i = 0; i < COLOR_COUNT; i++) {
+		const alpha = alphaMask & (1 << i) ? bytes[alphaIndex++] : 0xff;
+		let hex = '';
+		for (let j = 0; j < 3; j++) {
+			hex += bytes[rgbOffset + i * 3 + j].toString(16).padStart(2, '0');
+		}
+		hex += alpha.toString(16).padStart(2, '0');
+		colors.push(hex.toUpperCase());
+	}
+	return colors;
+}
+
+/**
+ * Extract the palette encoded in a Palette Studio link, e.g.
+ * `https://leaf.game/nextui-palettes/?t=-_jcK2OJKx4_9PLbGBgVy9znDg4L`.
+ *
+ * The text must be a bare URL carrying a decodable `t=` payload; a payload on
+ * its own is deliberately not accepted, since any 28-character word decodes as
+ * a valid 21-byte palette. The host isn't checked, so mirrors and forks of the
+ * studio work too — only the token is ever read.
+ */
+export function parseStudioLink(text: string): string[] | null {
+	const trimmed = text.trim();
+	if (!trimmed || /\s/.test(trimmed)) return null;
+
+	let url: URL;
+	try {
+		url = new URL(trimmed);
+	} catch {
+		// Links are often shared with the scheme stripped: `leaf.game/...?t=...`.
+		try {
+			url = new URL(`https://${trimmed}`);
+		} catch {
+			return null;
+		}
+	}
+
+	const token = url.searchParams.get('t');
+	return token ? decodeStudioToken(token) : null;
+}
+
+/**
+ * Render a palette back into NextUI's file format. Unset slots are omitted so
+ * NextUI falls back to its own defaults for them. Line breaks in `name` are
+ * collapsed to spaces so it can't inject extra `key=value` lines.
+ */
+export function formatPalette(name: string, colors: (string | null)[]): string {
+	const lines = ['version=1', `name=${name.replace(/[\r\n]+/g, ' ').trim()}`];
+	for (let i = 0; i < COLOR_COUNT; i++) {
+		const hex = colors[i];
+		if (hex) lines.push(`color${i + 1}=0x${hex.toLowerCase()}`);
+	}
+	return lines.join('\n') + '\n';
 }

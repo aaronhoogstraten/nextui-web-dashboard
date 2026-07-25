@@ -16,6 +16,8 @@
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
 	import {
 		parsePalette,
+		parseStudioLink,
+		formatPalette,
 		paletteDisplayName,
 		cssColor,
 		studioUrl,
@@ -169,36 +171,17 @@
 		return result;
 	}
 
-	async function uploadFromClipboard() {
-		let text: string;
-		try {
-			text = await navigator.clipboard.readText();
-		} catch (e) {
-			notice = `Could not read clipboard: ${formatError(e)}`;
-			return;
-		}
+	/** Ask for a palette name. Returns '' if the user cancels or clears it. */
+	function promptPaletteName(): string {
+		return window.prompt('Name for this palette:', 'Custom')?.trim() ?? '';
+	}
 
-		if (!text.trim()) {
-			notice = 'Clipboard is empty';
-			return;
-		}
-
-		const palette = parsePalette(text);
-		const hasColors = palette.colors.some((c) => c !== null);
-		if (!hasColors && palette.version === null) {
-			notice = "Clipboard doesn't look like a NextUI palette";
-			return;
-		}
-
-		let baseName = palette.name?.trim() ?? '';
-		if (!baseName) {
-			baseName = window.prompt('Name for this palette:', 'Custom')?.trim() ?? '';
-			if (!baseName) return; // cancelled
-		}
+	/** Upload one palette's text, under a filename derived from `baseName`. */
+	async function uploadPaletteText(content: string, baseName: string) {
 		uploading = true;
 		notice = '';
 		const filename = makeUnique(sanitizePaletteFilename(baseName), await existingPaletteNames());
-		const data = new TextEncoder().encode(text);
+		const data = new TextEncoder().encode(content);
 		beginTransfer('upload', 1, data.byteLength);
 
 		try {
@@ -214,6 +197,46 @@
 			endTransfer();
 			uploading = false;
 		}
+	}
+
+	/** Name and upload the palette carried by a Palette Studio link. */
+	async function uploadStudioColors(colors: string[]) {
+		const baseName = promptPaletteName();
+		if (!baseName) return; // cancelled
+		await uploadPaletteText(formatPalette(baseName, colors), baseName);
+	}
+
+	async function uploadFromClipboard() {
+		let text: string;
+		try {
+			text = await navigator.clipboard.readText();
+		} catch (e) {
+			notice = `Could not read clipboard: ${formatError(e)}`;
+			return;
+		}
+
+		if (!text.trim()) {
+			notice = 'Clipboard is empty';
+			return;
+		}
+
+		// The clipboard may hold either palette file text or a Palette Studio link.
+		const linkColors = parseStudioLink(text);
+		if (linkColors) {
+			await uploadStudioColors(linkColors);
+			return;
+		}
+
+		const palette = parsePalette(text);
+		if (palette.version === null && !palette.colors.some((c) => c !== null)) {
+			notice = "Clipboard doesn't look like a NextUI palette or Palette Studio link";
+			return;
+		}
+
+		// Palette files may omit `name=`, in which case ask for one.
+		const baseName = palette.name?.trim() || promptPaletteName();
+		if (!baseName) return; // cancelled
+		await uploadPaletteText(text, baseName);
 	}
 
 	function downloadPalette(entry: PaletteEntry) {
@@ -298,15 +321,39 @@
 
 	// --- Drag-and-drop upload ---
 
+	/**
+	 * True when the drag carries palette files or a link. Gated on
+	 * `text/uri-list` rather than `text/plain` so that dragging a text selection
+	 * around inside the editor panel doesn't trigger the drop overlay.
+	 */
+	function hasDraggedPalette(e: DragEvent): boolean {
+		return hasDraggedFiles(e) || (e.dataTransfer?.types.includes('text/uri-list') ?? false);
+	}
+
+	/**
+	 * The first URL of a link drop, or '' if none. Must be called before any
+	 * `await` in the drop handler — the DataTransfer is emptied after that.
+	 */
+	function getDraggedLink(e: DragEvent): string {
+		const uriList = e.dataTransfer?.getData('text/uri-list') ?? '';
+		// text/uri-list may hold several URLs plus `#` comment lines.
+		return (
+			uriList
+				.split('\n')
+				.map((l) => l.trim())
+				.find((l) => l && !l.startsWith('#')) ?? ''
+		);
+	}
+
 	function handleDragEnter(e: DragEvent) {
-		if (!hasDraggedFiles(e)) return;
+		if (!hasDraggedPalette(e)) return;
 		e.preventDefault();
 		dragCounter++;
 		dragOver = true;
 	}
 
 	function handleDragOver(e: DragEvent) {
-		if (!hasDraggedFiles(e)) return;
+		if (!hasDraggedPalette(e)) return;
 		e.preventDefault();
 		if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
 	}
@@ -325,10 +372,28 @@
 		dragCounter = 0;
 		dragOver = false;
 		if (uploading) return;
+		notice = '';
+
+		// Read the link up front, while the DataTransfer is still populated.
+		const link = getDraggedLink(e);
+
 		const dropped = await getDroppedFiles(e);
 		const files = dropped.map((d) => d.file);
-		if (files.length === 0) return;
-		await uploadPaletteFiles(files);
+		if (files.length > 0) {
+			await uploadPaletteFiles(files);
+			return;
+		}
+
+		// Nothing usable: a file drag that yielded no files, e.g. an empty folder.
+		// (A drop only fires at all for drags `hasDraggedPalette` accepted.)
+		if (!link) return;
+
+		const colors = parseStudioLink(link);
+		if (!colors) {
+			notice = "That link doesn't carry a Palette Studio palette";
+			return;
+		}
+		await uploadStudioColors(colors);
 	}
 
 	$effect(() => {
@@ -348,7 +413,9 @@
 		<div
 			class="absolute inset-0 z-50 bg-bg/80 border-2 border-dashed border-accent rounded-lg flex items-center justify-center pointer-events-none"
 		>
-			<span class="text-lg font-medium text-accent">Drop palette .txt files to upload</span>
+			<span class="text-lg font-medium text-accent">
+				Drop palette .txt files or a Palette Studio link to upload
+			</span>
 		</div>
 	{/if}
 
@@ -362,7 +429,7 @@
 				onclick={uploadFromClipboard}
 				disabled={uploading}
 				variant="secondary"
-				title="Read palette text from the clipboard and upload it"
+				title="Upload palette text or a Palette Studio link from the clipboard"
 			>
 				Paste from Clipboard
 			</ActionButton>
@@ -375,7 +442,7 @@
 	<a
 		href={STUDIO_BASE}
 		target="_blank"
-		rel="noopener noreferrer"
+		rel="noopener noreferrer external"
 		class="group mb-4 flex items-center gap-3 rounded-lg border border-accent/40 bg-accent/10 p-3 transition-colors hover:bg-accent/15"
 	>
 		<span class="text-sm text-text">
@@ -388,7 +455,9 @@
 	<p class="text-sm text-text-muted mb-4">
 		Custom palettes live in <span class="font-mono">{DEVICE_PATHS.palettes}</span> and appear under
 		Settings &gt; Appearance &gt; Color Palette. Upload an exported
-		<span class="font-mono">.txt</span> here, or drag one in.
+		<span class="font-mono">.txt</span>
+		here, or drag in a <span class="font-mono">.txt</span> or a Palette Studio link. Palette text or a
+		link can also be pasted from the clipboard.
 	</p>
 
 	{#if notice}
@@ -424,7 +493,7 @@
 									<a
 										href={studioUrl(entry.palette.colors)}
 										target="_blank"
-										rel="noopener noreferrer"
+										rel="noopener noreferrer external"
 										class="inline-flex items-center justify-center gap-1.5 rounded font-medium whitespace-nowrap transition-colors text-sm px-3 py-1.5 bg-accent text-white hover:bg-accent-hover"
 									>
 										Open in Palette Studio ↗
@@ -450,7 +519,7 @@
 
 							<!-- Color swatches -->
 							<div class="flex gap-2 mt-3 flex-wrap">
-								{#each entry.palette.colors as color, i}
+								{#each entry.palette.colors as color, i (i)}
 									<div class="flex flex-col items-center gap-1">
 										<div
 											class="w-10 h-10 rounded border border-border"
