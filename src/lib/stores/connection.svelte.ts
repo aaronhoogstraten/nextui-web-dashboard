@@ -1,6 +1,6 @@
 import { connectWebUSB, disconnect as adbDisconnect } from '$lib/adb/connection.js';
 import type { AdbConnection } from '$lib/adb/types.js';
-import { verifyNextUIInstallation, shell } from '$lib/adb/file-ops.js';
+import { verifyNextUIInstallation, logInstallDiagnostics, shell } from '$lib/adb/file-ops.js';
 import { detectDevice, parseMinUIEnv } from '$lib/adb/platform.js';
 import { DEFAULT_BASE, setDeviceBasePath } from '$lib/adb/types.js';
 import {
@@ -297,6 +297,13 @@ export async function connect() {
 		if (platform) {
 			const env = await parseMinUIEnv(conn.adb, platform, detection.basePath);
 			setDeviceBasePath(env.sdcardPath);
+		} else {
+			// Without a platform there is no launch.sh to read, but DEVICE_PATHS must
+			// still be set for this device: a previous failed connect leaves its own
+			// base path behind (that path only resets on disconnect, not on a failed
+			// verification), and inheriting it would verify — and report diagnostics
+			// for — the wrong location entirely.
+			setDeviceBasePath(detection.basePath);
 		}
 
 		// Verify this is a NextUI device (uses DEVICE_PATHS set above)
@@ -304,6 +311,7 @@ export async function connect() {
 		const verify = await verifyNextUIInstallation(conn.adb);
 		if (!verify.ok) {
 			adbLog.error(`Not a NextUI device: ${verify.error}`);
+			await logInstallDiagnostics(conn.adb);
 			try {
 				await adbDisconnect(conn);
 			} catch {

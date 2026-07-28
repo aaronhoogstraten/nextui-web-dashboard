@@ -278,6 +278,27 @@ export async function getStorageInfo(adb: Adb): Promise<StorageInfo | null> {
  */
 export type VerifyResult = { ok: true; version?: string } | { ok: false; error: string };
 
+/**
+ * Log what is actually present on the device after verification fails.
+ *
+ * A failed connection from an unfamiliar platform is otherwise a dead end —
+ * the log says which path was missing but not where the SD card really is.
+ * Best-effort: never throws, so it cannot mask the original failure.
+ */
+export async function logInstallDiagnostics(adb: Adb): Promise<void> {
+	for (const root of ['/mnt', DEVICE_PATHS.base]) {
+		try {
+			const entries = await listDirectory(adb, root);
+			const names = entries.map((e) => (e.isDirectory ? `${e.name}/` : e.name));
+			const shown = names.slice(0, 60).join(' ');
+			const more = names.length > 60 ? ` … (+${names.length - 60} more)` : '';
+			adbLog.info(`Contents of ${root}: ${shown || '(empty)'}${more}`);
+		} catch (e) {
+			adbLog.info(`Contents of ${root}: unavailable (${e})`);
+		}
+	}
+}
+
 export async function verifyNextUIInstallation(adb: Adb): Promise<VerifyResult> {
 	// Check base path by listing /mnt and looking for SDCARD
 	if (!(await pathExists(adb, DEVICE_PATHS.base))) {

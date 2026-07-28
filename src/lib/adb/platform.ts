@@ -1,5 +1,5 @@
 import type { Adb } from '@yume-chan/adb';
-import { shell } from './file-ops.js';
+import { shell, pathExists } from './file-ops.js';
 import { DEFAULT_BASE } from './types.js';
 import { adbLog } from '$lib/stores/log.svelte.js';
 
@@ -109,26 +109,188 @@ export async function parseMinUIEnv(
 		return defaults;
 	}
 
-	// Parse export KEY="value" or export KEY=value lines
-	const exports = new Map<string, string>();
-	for (const line of content.split('\n').map((l) => l.trim())) {
-		const match = line.match(/^export\s+(\w+)=["']?([^"'\n]*)["']?/);
-		if (match) exports.set(match[1], match[2]);
+	const { honored, ignored } = collectAssignments(content);
+
+	if (honored.size === 0 && ignored.size === 0) {
+		// The raw `shell:` service merges stderr into stdout and carries no exit
+		// code, so a missing or unreadable script comes back as BusyBox's error
+		// text rather than throwing. Enumerating every possible error string is
+		// futile, so always echo what came back — the recognizable ones only
+		// pick the severity. Without this the text appears nowhere: `shell()`
+		// logs the command and length, not the content.
+		const trimmed = content.trim();
+		const excerpt = trimmed.slice(0, 200) || '(empty)';
+		if (!trimmed || /(can't open|No such file|Permission denied)/i.test(trimmed)) {
+			adbLog.warn(`Could not read ${launchSh} — device returned: ${excerpt}`);
+		} else {
+			adbLog.debug(`No environment assignments in ${launchSh} — device returned: ${excerpt}`);
+		}
 	}
 
-	const sdcardPath = exports.get('SDCARD_PATH') || defaults.sdcardPath;
-	const resolvedSystemDir = `${sdcardPath}/.system/${platform}`;
+	// Record what the script actually said, including values we deliberately
+	// skipped. This is the detail needed to diagnose an unfamiliar platform
+	// from a copied log alone, so it must not hide a value the script does set.
+	const describe = (name: string) => {
+		const value = honored.get(name);
+		const bare = ignored.get(name);
+		if (value !== undefined)
+			return bare !== undefined ? `${value} (also set bare: ${bare})` : value;
+		return bare !== undefined ? `${bare} (ignored: not exported)` : '(unset)';
+	};
+	adbLog.debug(
+		`launch.sh raw: SDCARD_PATH=${describe('SDCARD_PATH')}, ` +
+			`LD_LIBRARY_PATH=${describe('LD_LIBRARY_PATH')}`
+	);
 
-	// Resolve LD_LIBRARY_PATH — replace shell variables with concrete values
-	let ldLibraryPath = exports.get('LD_LIBRARY_PATH') || defaults.ldLibraryPath;
-	ldLibraryPath = ldLibraryPath
-		.replace(/\$SYSTEM_PATH/g, resolvedSystemDir)
-		.replace(/\$SDCARD_PATH/g, sdcardPath)
-		.replace(/\$PLATFORM/g, platform)
-		.replace(/:\$LD_LIBRARY_PATH/, '');
+	// Resolve the mount point first — everything else derives from it. Only the
+	// detected platform is pinned at this stage, since the mount point is the
+	// value we are trying to establish.
+	let sdcardPath = resolveVar('SDCARD_PATH', honored, new Map([['PLATFORM', platform]])) ?? '';
+
+	// The script may route the mount through a variable that only exists at
+	// runtime (h700 uses $COMPAT_SDCARD_PATH). Trust the script only when it
+	// yields an absolute path that is actually present on the device;
+	// otherwise keep the mount point device detection measured.
+	if (!sdcardPath.startsWith('/') || !(await pathExists(adb, sdcardPath))) {
+		if (sdcardPath && sdcardPath !== basePath) {
+			const unset = [...new Set(unresolvedNames(sdcardPath))];
+			const detail = unset.length
+				? `unset variable(s): ${unset.join(', ')}`
+				: 'path not present on device';
+			adbLog.warn(
+				`SDCARD_PATH "${sdcardPath}" from ${launchSh} is unusable (${detail}); using ${basePath}`
+			);
+		}
+		sdcardPath = defaults.sdcardPath;
+	}
+
+	// Values measured from the device outrank the script's own assignments,
+	// which may be command substitutions or set inside a branch we cannot
+	// evaluate. SYSTEM_PATH is rebuilt from the mount point we settled on so it
+	// can never disagree with sdcardPath.
+	const pinned = new Map<string, string>([
+		['PLATFORM', platform],
+		['SDCARD_PATH', sdcardPath],
+		['SYSTEM_PATH', `${sdcardPath}/.system/${platform}`]
+	]);
+
+	// Resolve any remaining alias for the mount point (e.g. $COMPAT_SDCARD_PATH),
+	// then drop segments that still hold an unresolved variable — including the
+	// `:$LD_LIBRARY_PATH` self-reference scripts append.
+	const segments = (resolveVar('LD_LIBRARY_PATH', honored, pinned) ?? defaults.ldLibraryPath)
+		.replace(/\$\{?\w*SDCARD_PATH\}?/g, sdcardPath)
+		.split(':')
+		.filter(Boolean);
+	const usable: string[] = [];
+	const dropped: string[] = [];
+	for (const segment of segments) {
+		(segment.includes('$') ? dropped : usable).push(segment);
+	}
+	const ldLibraryPath = usable.join(':') || defaults.ldLibraryPath;
+
+	// A `:$LD_LIBRARY_PATH` self-reference is normal and expected; any other
+	// dropped segment means the script depends on something set at runtime that
+	// we could not determine, which shows up later as a library that fails to
+	// load. Judge by the segment itself — a `$(...)` substitution yields no
+	// variable name to report but is no less broken.
+	const selfRef = dropped.filter((segment) => SELF_REFERENCE.test(segment));
+	const unexpected = dropped.filter((segment) => !SELF_REFERENCE.test(segment));
+	if (unexpected.length) {
+		const names = [...new Set(unexpected.flatMap(unresolvedNames))];
+		const detail = names.length ? ` — unset variable(s): ${names.join(', ')}` : '';
+		adbLog.warn(`LD_LIBRARY_PATH: dropped unresolved segment(s) ${unexpected.join(', ')}${detail}`);
+	}
+	if (selfRef.length) {
+		adbLog.debug(`LD_LIBRARY_PATH: dropped self-reference ${selfRef.join(', ')}`);
+	}
 
 	adbLog.info(`MinUI env: SDCARD_PATH=${sdcardPath}, LD_LIBRARY_PATH=${ldLibraryPath}`);
 	return { sdcardPath, ldLibraryPath };
+}
+
+/** A segment consisting only of the `$LD_LIBRARY_PATH` self-reference. */
+const SELF_REFERENCE = /^\$\{?LD_LIBRARY_PATH\}?$/;
+
+/** Names of `$VAR` / `${VAR}` references left unexpanded in a resolved value. */
+function unresolvedNames(value: string): string[] {
+	return [...value.matchAll(/\$\{?(\w+)\}?/g)].map((m) => m[1]);
+}
+
+/** Values we return — honored only from an `export`, never a bare assignment. */
+const EXPORT_REQUIRED = new Set(['SDCARD_PATH', 'LD_LIBRARY_PATH']);
+
+/** Raw (unexpanded) assignments parsed out of a shell script. */
+interface ScriptAssignments {
+	/** Assignments used when resolving values. */
+	honored: Map<string, string>;
+	/**
+	 * Values we return that appeared as a bare, non-exported assignment. A name
+	 * can be present here and in `honored` if the script does both.
+	 */
+	ignored: Map<string, string>;
+}
+
+/**
+ * Collect raw (unexpanded) `KEY=value` assignments from a shell script.
+ *
+ * Bare assignments are kept because some platforms route the mount point
+ * through an intermediate variable (h700 uses COMPAT_SDCARD_PATH), but the
+ * values we ultimately return must come from an `export` — otherwise we would
+ * pick up an assignment from a conditional branch the device never takes.
+ * Those skipped values are still reported separately so diagnostics can show
+ * what the script said rather than claiming it said nothing.
+ */
+function collectAssignments(content: string): ScriptAssignments {
+	const honored = new Map<string, string>();
+	const ignored = new Map<string, string>();
+	for (const line of content.split('\n').map((l) => l.trim())) {
+		const match = line.match(/^(export\s+)?(\w+)=["']?([^"'\n]*)["']?/);
+		if (!match) continue;
+		const [, exported, name, value] = match;
+		if (!exported && EXPORT_REQUIRED.has(name)) ignored.set(name, value);
+		else honored.set(name, value);
+	}
+	return { honored, ignored };
+}
+
+/**
+ * Resolve a variable to its concrete value, expanding references to other
+ * variables. Returns undefined if the script never assigns it.
+ */
+function resolveVar(
+	name: string,
+	assignments: Map<string, string>,
+	pinned: Map<string, string>
+): string | undefined {
+	const pinnedValue = pinned.get(name);
+	if (pinnedValue !== undefined) return pinnedValue;
+	const raw = assignments.get(name);
+	if (raw === undefined) return undefined;
+	// Seed the cycle guard with this name so a self-reference such as
+	// `LD_LIBRARY_PATH=...:$LD_LIBRARY_PATH` is left unexpanded rather than
+	// recursing forever.
+	return expandVars(raw, assignments, pinned, new Set([name]));
+}
+
+/**
+ * Expand `$VAR` and `${VAR}` references. Pinned names always win over the
+ * script's own assignments; unknown names and reference cycles are left
+ * untouched for the caller to handle.
+ */
+function expandVars(
+	value: string,
+	assignments: Map<string, string>,
+	pinned: Map<string, string>,
+	seen: ReadonlySet<string>
+): string {
+	return value.replace(/\$\{(\w+)\}|\$(\w+)/g, (whole, braced, bare) => {
+		const name = braced ?? bare;
+		const pinnedValue = pinned.get(name);
+		if (pinnedValue !== undefined) return pinnedValue;
+		const raw = assignments.get(name);
+		if (raw === undefined || seen.has(name)) return whole;
+		return expandVars(raw, assignments, pinned, new Set(seen).add(name));
+	});
 }
 
 /** Cpuinfo platform detection script — fallback matching the NextUI updater. */
