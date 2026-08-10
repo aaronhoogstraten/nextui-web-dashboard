@@ -28,6 +28,7 @@
 		mtime: bigint;
 		thumbnailUrl: string | null;
 		loadingThumb: boolean;
+		selected: boolean;
 	}
 
 	const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.bmp']);
@@ -39,9 +40,15 @@
 	let previewAlt: string = $state('');
 	let removingFile: string | null = $state(null);
 	let downloading = $state(false);
-	let downloadProgress: string = $state('');
+	let deleting = $state(false);
+	let progress: string = $state('');
 
 	const totalSize = $derived(screenshots.reduce((sum, s) => sum + Number(s.size), 0));
+	const selectedShots = $derived(screenshots.filter((s) => s.selected));
+	const allSelected = $derived(
+		screenshots.length > 0 && selectedShots.length === screenshots.length
+	);
+	const busy = $derived(loading || downloading || deleting || removingFile !== null);
 
 	function isImage(name: string): boolean {
 		const dot = name.lastIndexOf('.');
@@ -75,7 +82,8 @@
 					size: e.size,
 					mtime: e.mtime,
 					thumbnailUrl: null,
-					loadingThumb: false
+					loadingThumb: false,
+					selected: false
 				}));
 
 			if (screenshots.length === 0) {
@@ -118,13 +126,34 @@
 		previewAlt = '';
 	}
 
+	/**
+	 * `rm` is silent on success, so any output means the device refused the delete
+	 * (read-only mount, permission denied). The shell helper resolves on non-zero
+	 * exits rather than throwing, so this is the only signal we get.
+	 */
+	function assertDeleted(output: string) {
+		const message = output.trim();
+		if (message) throw new Error(message);
+	}
+
+	/** Drop screenshots from the list, releasing their thumbnails and any open preview. */
+	function forget(shots: Screenshot[]) {
+		if (shots.length === 0) return;
+		for (const shot of shots) {
+			if (!shot.thumbnailUrl) continue;
+			if (previewSrc === shot.thumbnailUrl) closePreview();
+			URL.revokeObjectURL(shot.thumbnailUrl);
+		}
+		const removed = new Set(shots);
+		screenshots = screenshots.filter((s) => !removed.has(s));
+	}
+
 	async function removeScreenshot(shot: Screenshot) {
 		if (!confirm(`Delete "${shot.name}"?`)) return;
 		removingFile = shot.name;
 		try {
-			await adbExec(ShellCmd.rm(`${DEVICE_PATHS.screenshots}/${shot.name}`));
-			if (shot.thumbnailUrl) URL.revokeObjectURL(shot.thumbnailUrl);
-			screenshots = screenshots.filter((s) => s !== shot);
+			assertDeleted(await adbExec(ShellCmd.rm(`${DEVICE_PATHS.screenshots}/${shot.name}`)));
+			forget([shot]);
 		} catch (e) {
 			notice = errorMsg(`Delete failed: ${formatError(e)}`);
 		} finally {
@@ -132,25 +161,65 @@
 		}
 	}
 
+	function toggleSelectAll() {
+		const select = !allSelected;
+		for (const shot of screenshots) shot.selected = select;
+	}
+
+	async function deleteSelected() {
+		const targets = selectedShots;
+		if (targets.length === 0) return;
+		if (!confirm(`Delete ${plural(targets.length, 'screenshot')} from the device?`)) return;
+
+		deleting = true;
+		notice = null;
+		const deleted: Screenshot[] = [];
+		try {
+			// Batch the removals so a large selection doesn't need one shell call per file
+			const CHUNK = 50;
+			for (let i = 0; i < targets.length; i += CHUNK) {
+				const chunk = targets.slice(i, i + CHUNK);
+				progress = `Deleting ${Math.min(i + chunk.length, targets.length)}/${targets.length}...`;
+				assertDeleted(
+					await adbExec(ShellCmd.rmMany(chunk.map((s) => `${DEVICE_PATHS.screenshots}/${s.name}`)))
+				);
+				deleted.push(...chunk);
+			}
+			notice = successMsg(`Deleted ${plural(targets.length, 'screenshot')}`);
+		} catch (e) {
+			notice = errorMsg(
+				deleted.length > 0
+					? `Deleted ${deleted.length} of ${targets.length}, then failed: ${formatError(e)}`
+					: `Delete failed: ${formatError(e)}`
+			);
+		} finally {
+			// Prune whatever actually made it off the device, even if a later chunk failed
+			forget(deleted);
+			progress = '';
+			deleting = false;
+		}
+	}
+
 	async function downloadAll() {
-		if (screenshots.length === 0) return;
+		const targets = selectedShots.length > 0 ? selectedShots : screenshots;
+		if (targets.length === 0) return;
 		downloading = true;
 		notice = null;
-		downloadProgress = '';
+		progress = '';
 
-		beginTransfer('download', screenshots.length);
+		beginTransfer('download', targets.length);
 		try {
 			const zip = new JSZip();
 			let completed = 0;
 
-			for (const shot of screenshots) {
-				downloadProgress = `Downloading ${completed + 1}/${screenshots.length}: ${shot.name}`;
+			for (const shot of targets) {
+				progress = `Downloading ${completed + 1}/${targets.length}: ${shot.name}`;
 				const data = await trackedPull(adb, `${DEVICE_PATHS.screenshots}/${shot.name}`);
 				zip.file(shot.name, data);
 				completed++;
 			}
 
-			downloadProgress = 'Creating zip...';
+			progress = 'Creating zip...';
 			const blob = await zip.generateAsync({ type: 'blob' });
 
 			const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
@@ -163,11 +232,11 @@
 			a.click();
 			URL.revokeObjectURL(url);
 
-			downloadProgress = '';
-			notice = successMsg(`Downloaded ${filename} (${screenshots.length} files)`);
+			progress = '';
+			notice = successMsg(`Downloaded ${filename} (${targets.length} files)`);
 		} catch (e) {
 			notice = errorMsg(`Download failed: ${formatError(e)}`);
-			downloadProgress = '';
+			progress = '';
 		} finally {
 			endTransfer();
 		}
@@ -189,16 +258,34 @@
 	<div class="flex items-center justify-between mb-4">
 		<h2 class="text-2xl font-bold text-text">Screenshots</h2>
 		<div class="flex items-center gap-2">
-			<ActionButton onclick={refresh} disabled={loading || downloading} variant="secondary">
+			<ActionButton onclick={refresh} disabled={busy} variant="secondary">
 				{loading ? 'Loading...' : 'Refresh'}
 			</ActionButton>
 			<ActionButton
+				onclick={toggleSelectAll}
+				disabled={busy || screenshots.length === 0}
+				variant="secondary"
+			>
+				{allSelected ? 'Clear Selection' : 'Select All'}
+			</ActionButton>
+			<ActionButton
 				onclick={downloadAll}
-				disabled={loading || downloading || screenshots.length === 0}
+				disabled={busy || screenshots.length === 0}
 				variant="primary"
 			>
-				{downloading ? 'Downloading...' : 'Download All as Zip'}
+				{#if downloading}
+					Downloading...
+				{:else if selectedShots.length > 0}
+					Download {plural(selectedShots.length, 'File')} as Zip
+				{:else}
+					Download All as Zip
+				{/if}
 			</ActionButton>
+			{#if selectedShots.length > 0}
+				<ActionButton onclick={deleteSelected} disabled={busy} variant="danger">
+					{deleting ? 'Deleting...' : `Delete ${plural(selectedShots.length, 'File')}`}
+				</ActionButton>
+			{/if}
 		</div>
 	</div>
 
@@ -206,8 +293,8 @@
 		<StatusMessage notification={notice} />
 	{/if}
 
-	{#if downloadProgress}
-		<div class="text-xs text-text-muted mb-3">{downloadProgress}</div>
+	{#if progress}
+		<div class="text-xs text-text-muted mb-3">{progress}</div>
 	{/if}
 
 	<div class="text-xs text-text-muted mb-3">
@@ -221,8 +308,12 @@
 			<div class="text-sm text-text-muted py-8 text-center">No screenshots found</div>
 		{:else}
 			<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-				{#each screenshots as shot}
-					<div class="border border-border rounded-lg overflow-hidden bg-bg group">
+				{#each screenshots as shot (shot.name)}
+					<div
+						class="border rounded-lg overflow-hidden bg-bg group {shot.selected
+							? 'border-accent'
+							: 'border-border'}"
+					>
 						<div class="aspect-video bg-surface flex items-center justify-center">
 							{#if shot.loadingThumb}
 								<div class="w-full h-full bg-surface-hover animate-pulse"></div>
@@ -239,7 +330,16 @@
 							{/if}
 						</div>
 						<div class="p-2">
-							<div class="text-xs text-text truncate" title={shot.name}>{shot.name}</div>
+							<label class="flex items-center gap-2 cursor-pointer">
+								<input
+									type="checkbox"
+									bind:checked={shot.selected}
+									disabled={busy}
+									class="accent-accent shrink-0"
+									title="Select screenshot"
+								/>
+								<span class="text-xs text-text truncate" title={shot.name}>{shot.name}</span>
+							</label>
 							<div class="flex items-center justify-between gap-2 mt-1">
 								<span class="text-xs text-text-muted">
 									{formatSize(Number(shot.size))}
@@ -249,7 +349,7 @@
 								</span>
 								<ActionButton
 									onclick={() => removeScreenshot(shot)}
-									disabled={removingFile !== null}
+									disabled={busy}
 									variant="danger"
 									size="xs"
 									title="Delete screenshot"
@@ -265,7 +365,12 @@
 	</div>
 
 	<div class="mt-2 text-xs text-text-muted flex justify-between">
-		<span>{plural(screenshots.length, 'screenshot')}</span>
+		<span>
+			{plural(screenshots.length, 'screenshot')}
+			{#if selectedShots.length > 0}
+				&middot; {selectedShots.length} selected
+			{/if}
+		</span>
 		{#if screenshots.length > 0}
 			<span>Total: {formatSize(totalSize)}</span>
 		{/if}

@@ -34,6 +34,15 @@ export class ShellCmd {
 		return new ShellCmd(`rm -f ${shellEscape(path)}`);
 	}
 
+	/**
+	 * Remove several files in one call, ignoring errors if they don't exist.
+	 * An empty list builds a no-op — `rm -f` with no operands is an error on BusyBox.
+	 */
+	static rmMany(paths: string[]): ShellCmd {
+		if (paths.length === 0) return new ShellCmd('true');
+		return new ShellCmd(`rm -f ${paths.map(shellEscape).join(' ')}`);
+	}
+
 	/** Remove a directory and all its contents recursively. */
 	static rmrf(path: string): ShellCmd {
 		return new ShellCmd(`rm -rf ${shellEscape(path)}`);
