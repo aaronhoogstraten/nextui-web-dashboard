@@ -5,7 +5,7 @@ import JSZip from 'jszip';
 import type { DirectoryEntry, StorageInfo } from './types.js';
 import { DEVICE_PATHS } from './types.js';
 import { adbLog } from '$lib/stores/log.svelte.js';
-import { formatError } from '$lib/utils.js';
+import { formatError, joinPath } from '$lib/utils.js';
 import { ShellCmd } from './adb-utils.js';
 
 /** Progress callback for file transfers: (bytesTransferred, totalBytes). totalBytes is -1 if unknown. */
@@ -142,6 +142,177 @@ export async function listDirectory(adb: Adb, remotePath: string): Promise<Direc
 	} finally {
 		await sync.dispose();
 	}
+}
+
+/** A file found by walkDirectory, with its path relative to the walk root. */
+export interface WalkedFile {
+	/** Absolute path on the device */
+	path: string;
+	/** Path relative to the walk root, e.g. "GB/Zelda.gb" */
+	relativePath: string;
+	size: bigint;
+	/** Unix mtime in seconds; 0 when the device didn't report one */
+	mtime: bigint;
+}
+
+export interface WalkResult {
+	files: WalkedFile[];
+	/** Sum of all file sizes, in bytes */
+	totalBytes: number;
+	/** Directories that could not be listed (permissions, vanished mid-walk) */
+	skipped: string[];
+	/** Directories left unvisited because they sat below maxDepth */
+	tooDeep: string[];
+	/** True if a cap stopped the walk short of the full tree */
+	truncated: boolean;
+	/**
+	 * True if `onLimit` declined a cap. The walk stops immediately and the
+	 * partial result should be discarded, not used.
+	 */
+	aborted: boolean;
+}
+
+/** A cap the walk has run into, passed to onLimit so the caller can lift it. */
+export interface WalkLimit {
+	kind: 'files' | 'depth';
+	/** The cap that was reached */
+	limit: number;
+}
+
+export interface WalkOptions {
+	maxDepth?: number;
+	maxFiles?: number;
+	/**
+	 * Called when a cap is reached. Return true to lift that cap for the rest of
+	 * the walk, or false to abandon the walk entirely — declining sets `aborted`
+	 * and stops immediately rather than handing back a partial tree. Without this
+	 * callback the caps are hard and simply truncate.
+	 */
+	onLimit?: (limit: WalkLimit) => boolean | Promise<boolean>;
+	/** Called after each directory is listed, with the running file count */
+	onProgress?: (filesFound: number, currentDir: string) => void;
+}
+
+/**
+ * Recursively enumerate every file under a directory.
+ *
+ * Breadth-first, so shallow files are known early. Entries that are neither a
+ * regular file nor a directory (symlinks, sockets, device nodes) are ignored —
+ * which also means symlink loops cannot trap the walk. Directories that fail to
+ * list are recorded in `skipped` rather than aborting the whole walk, since a
+ * single unreadable folder shouldn't sink a large download.
+ *
+ * The file and depth caps are soft when `onLimit` is supplied: the walk asks
+ * once per cap and carries on if told to, so a caller can let the user opt into
+ * scanning an unusually large tree. Declining aborts the walk on the spot — a
+ * caller that says "no" wants out, not a half-scanned tree it has to explain.
+ *
+ * @param adb - Active ADB connection
+ * @param rootPath - Directory to walk
+ * @returns Every file found, with sizes, plus what was skipped
+ */
+export async function walkDirectory(
+	adb: Adb,
+	rootPath: string,
+	options: WalkOptions = {}
+): Promise<WalkResult> {
+	const { maxDepth = 16, maxFiles = 20000, onLimit, onProgress } = options;
+
+	const files: WalkedFile[] = [];
+	const skipped: string[] = [];
+	const tooDeep: string[] = [];
+	let totalBytes = 0;
+	let truncated = false;
+	let aborted = false;
+
+	// Effective caps — raised to Infinity if the caller waives one. Once waived a
+	// cap can never be reached again, so onLimit is asked at most once per kind.
+	let fileCap = maxFiles;
+	let depthCap = maxDepth;
+
+	/** Ask whether to keep going past a cap. True means the cap is lifted. */
+	async function liftCap(kind: WalkLimit['kind'], limit: number): Promise<boolean> {
+		if (!onLimit) {
+			// No arbiter — the cap is hard, so the result is simply incomplete
+			truncated = true;
+			return false;
+		}
+
+		if (await onLimit({ kind, limit })) {
+			if (kind === 'files') {
+				fileCap = Number.POSITIVE_INFINITY;
+			} else {
+				depthCap = Number.POSITIVE_INFINITY;
+			}
+			adbLog.info(`walk: ${kind} cap of ${limit} waived, continuing`);
+			return true;
+		}
+
+		aborted = true;
+		truncated = true;
+		adbLog.info(`walk: ${kind} cap of ${limit} declined, aborting`);
+		return false;
+	}
+
+	const queue: { path: string; relative: string; depth: number }[] = [
+		{ path: rootPath, relative: '', depth: 0 }
+	];
+
+	adbLog.info(`walk → ${rootPath}`);
+	while (queue.length > 0) {
+		const dir = queue.shift()!;
+
+		let entries: DirectoryEntry[];
+		try {
+			entries = await listDirectory(adb, dir.path);
+		} catch (e) {
+			adbLog.warn(`walk: skipping ${dir.path}: ${formatError(e)}`);
+			skipped.push(dir.path);
+			continue;
+		}
+
+		for (const entry of entries) {
+			const childPath = joinPath(dir.path, entry.name);
+			const childRelative = dir.relative ? `${dir.relative}/${entry.name}` : entry.name;
+
+			if (entry.isFile) {
+				if (files.length >= fileCap && !(await liftCap('files', maxFiles))) {
+					// A hard cap keeps scanning to report an accurate skipped set;
+					// an abort means nobody will read the result, so stop now
+					if (aborted) break;
+					continue;
+				}
+				files.push({
+					path: childPath,
+					relativePath: childRelative,
+					size: entry.size,
+					mtime: entry.mtime
+				});
+				totalBytes += Number(entry.size);
+			} else if (entry.isDirectory) {
+				if (dir.depth + 1 > depthCap && !(await liftCap('depth', maxDepth))) {
+					if (aborted) break;
+					tooDeep.push(childPath);
+					continue;
+				}
+				queue.push({ path: childPath, relative: childRelative, depth: dir.depth + 1 });
+			}
+		}
+
+		if (aborted) break;
+		onProgress?.(files.length, dir.path);
+	}
+
+	if (aborted) {
+		adbLog.info(`walk ✗ ${rootPath} aborted after ${files.length} files`);
+		return { files, totalBytes, skipped, tooDeep, truncated, aborted };
+	}
+
+	adbLog.info(
+		`walk ✓ ${rootPath} (${files.length} files, ${totalBytes} bytes, ` +
+			`${skipped.length} unreadable, ${tooDeep.length} too deep)`
+	);
+	return { files, totalBytes, skipped, tooDeep, truncated, aborted };
 }
 
 /**

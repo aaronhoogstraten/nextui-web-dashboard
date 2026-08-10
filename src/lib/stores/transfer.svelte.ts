@@ -97,14 +97,27 @@ export async function trackedPush(
 ): Promise<void> {
 	currentFileName = remotePath.split('/').pop() ?? remotePath;
 	fileBaseBytes = bytesTransferred;
-	await pushFile(adb, remotePath, content, permission, onFileProgress);
+	try {
+		await pushFile(adb, remotePath, content, permission, onFileProgress);
+	} catch (e) {
+		// Discard this file's partial bytes — a caller that skips past the failure
+		// would otherwise keep counting bytes for a file that never landed
+		bytesTransferred = fileBaseBytes;
+		throw e;
+	}
 	filesCompleted++;
 }
 
 export async function trackedPull(adb: Adb, remotePath: string): Promise<Uint8Array<ArrayBuffer>> {
 	currentFileName = remotePath.split('/').pop() ?? remotePath;
 	fileBaseBytes = bytesTransferred;
-	const result = await pullFile(adb, remotePath, onFileProgress);
+	let result: Uint8Array<ArrayBuffer>;
+	try {
+		result = await pullFile(adb, remotePath, onFileProgress);
+	} catch (e) {
+		bytesTransferred = fileBaseBytes;
+		throw e;
+	}
 	filesCompleted++;
 	return result;
 }

@@ -14,6 +14,17 @@
 		'.cue'
 	]);
 	const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp', '.svg']);
+
+	// A folder download is assembled entirely in browser memory — every file is
+	// held as a Uint8Array while the zip is built, so peak usage is roughly twice
+	// the folder size. Past these thresholds we warn before starting.
+	const LARGE_DOWNLOAD_BYTES = 512 * 1024 * 1024;
+	const LARGE_DOWNLOAD_FILES = 1000;
+
+	// Browser-based transfer over USB is slow and fragile compared to pulling the
+	// card. Anyone hitting the thresholds above should hear that before waiting.
+	const BULK_TRANSFER_ADVICE =
+		'For large transfers, it is recommended to use an SD card reader instead of the Dashboard.';
 </script>
 
 <script lang="ts">
@@ -24,13 +35,17 @@
 		pullFile,
 		pushFile,
 		isDirectory,
-		searchFiles
+		searchFiles,
+		walkDirectory,
+		type WalkResult,
+		type WalkLimit
 	} from '$lib/adb/file-ops.js';
 	import {
 		beginTransfer,
 		endTransfer,
 		trackedPush,
-		trackedPull
+		trackedPull,
+		skipTransferFile
 	} from '$lib/stores/transfer.svelte.js';
 	import { DEVICE_PATHS, type DirectoryEntry } from '$lib/adb/types.js';
 	import { adbExec } from '$lib/stores/connection.svelte.js';
@@ -49,10 +64,14 @@
 	} from '$lib/utils.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
 	import ActionButton from './ActionButton.svelte';
+	import ConfirmDialog from './ConfirmDialog.svelte';
 	import ImagePreview from './ImagePreview.svelte';
 	import StatusMessage from './StatusMessage.svelte';
+	import JSZip from 'jszip';
 
 	let { adb }: { adb: Adb } = $props();
+
+	let confirmDialog: ConfirmDialog;
 
 	let currentPath: string = $state(DEVICE_PATHS.base);
 	let entries: DirectoryEntry[] = $state([]);
@@ -62,6 +81,8 @@
 	let sortAsc = $state(true);
 	let uploading = $state(false);
 	let downloadingFile: string | null = $state(null);
+	let downloadingFolder: string | null = $state(null);
+	let folderProgress: string = $state('');
 	let deletingEntry: string | null = $state(null);
 	let searchQuery = $state('');
 	let searchResults: string[] | null = $state(null);
@@ -176,6 +197,149 @@
 			endTransfer();
 		}
 		downloadingFile = null;
+	}
+
+	/**
+	 * The scan caps are soft — hitting one asks whether to keep going rather than
+	 * silently handing back a partial tree. Returns true to lift the cap;
+	 * declining abandons the download rather than zipping a partial folder.
+	 */
+	function confirmWalkLimit(name: string, limit: WalkLimit): Promise<boolean> {
+		return confirmDialog.show({
+			title: 'Unusually large folder',
+			summary:
+				limit.kind === 'files'
+					? `"${name}" holds more than ${limit.limit.toLocaleString()} files.`
+					: `"${name}" is nested more than ${limit.limit} folders deep.`,
+			advice: BULK_TRANSFER_ADVICE,
+			details: [
+				'Scanning the rest will take longer, and the download that follows will be correspondingly larger.'
+			],
+			confirmLabel: 'Keep scanning',
+			cancelLabel: 'Cancel download',
+			confirmVariant: 'warning'
+		});
+	}
+
+	/**
+	 * Warn before a download big enough to stall the tab or exhaust memory.
+	 * Returns false if the user backs out.
+	 */
+	async function confirmFolderDownload(name: string, walk: WalkResult): Promise<boolean> {
+		const heavy =
+			walk.totalBytes >= LARGE_DOWNLOAD_BYTES || walk.files.length >= LARGE_DOWNLOAD_FILES;
+		if (!heavy && walk.skipped.length === 0) return true;
+
+		const details: string[] = [];
+		if (heavy) {
+			details.push(
+				'If you continue here, the whole folder is held in browser memory while the zip is built, so this can take several minutes and may run out of memory. Downloading subfolders one at a time is safer.'
+			);
+		}
+		if (walk.skipped.length > 0) {
+			details.push(
+				`${plural(walk.skipped.length, 'folder')} could not be read and will be omitted.`
+			);
+		}
+
+		return confirmDialog.show({
+			title: `Download "${name}"?`,
+			summary: `${plural(walk.files.length, 'file')} totalling ${formatSize(walk.totalBytes)}.`,
+			advice: heavy ? BULK_TRANSFER_ADVICE : undefined,
+			details,
+			confirmLabel: 'Download anyway',
+			confirmVariant: heavy ? 'warning' : 'primary'
+		});
+	}
+
+	async function downloadFolder(entry: DirectoryEntry) {
+		if (!entry.isDirectory) return;
+		const rootPath = joinPath(currentPath, entry.name);
+
+		downloadingFolder = entry.name;
+		notice = null;
+		folderProgress = `Scanning ${entry.name}...`;
+
+		try {
+			const walk = await walkDirectory(adb, rootPath, {
+				onProgress: (found) => {
+					folderProgress = `Scanning ${entry.name}... ${plural(found, 'file')} found`;
+				},
+				onLimit: (limit) => confirmWalkLimit(entry.name, limit)
+			});
+
+			// Backing out of any prompt abandons the download outright — a partial
+			// zip that looks like the real folder is worse than no zip at all
+			if (walk.aborted) {
+				notice = errorMsg(`Download of "${entry.name}" cancelled.`);
+				return;
+			}
+			if (walk.files.length === 0) {
+				notice = errorMsg(`"${entry.name}" contains no files to download.`);
+				return;
+			}
+			if (!(await confirmFolderDownload(entry.name, walk))) {
+				notice = errorMsg(`Download of "${entry.name}" cancelled.`);
+				return;
+			}
+
+			const zip = new JSZip();
+			let completed = 0;
+			const failed: string[] = [];
+			beginTransfer('download', walk.files.length, walk.totalBytes);
+
+			for (const file of walk.files) {
+				folderProgress = `Downloading ${completed + 1}/${walk.files.length}: ${file.relativePath}`;
+				try {
+					const data = await trackedPull(adb, file.path);
+					// Nest under the folder name so extracting yields one tidy directory.
+					// Carry the device mtime across; JSZip otherwise stamps "now".
+					zip.file(`${entry.name}/${file.relativePath}`, data, {
+						date: file.mtime > 0n ? new Date(Number(file.mtime) * 1000) : undefined
+					});
+				} catch {
+					// One unreadable file shouldn't discard an otherwise complete download.
+					// pullFile already logged the underlying error.
+					failed.push(file.relativePath);
+					skipTransferFile(Number(file.size));
+				}
+				completed++;
+			}
+
+			folderProgress = 'Creating zip...';
+			const blob = await zip.generateAsync(
+				// Level 1: ROMs and images are already compressed, so heavier settings
+				// cost minutes of CPU for almost no size win
+				{ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 1 } },
+				(meta) => {
+					folderProgress = `Creating zip... ${meta.percent.toFixed(0)}%`;
+				}
+			);
+
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = `${entry.name}.zip`;
+			a.click();
+			URL.revokeObjectURL(url);
+
+			const downloaded = walk.files.length - failed.length;
+			const problems = [
+				...(failed.length > 0 ? [`${plural(failed.length, 'file')} unreadable`] : []),
+				...(walk.skipped.length > 0
+					? [`${plural(walk.skipped.length, 'folder')} could not be read`]
+					: [])
+			];
+			const summary = `Downloaded ${entry.name}.zip (${plural(downloaded, 'file')}, ${formatSize(blob.size)})`;
+			notice =
+				problems.length > 0 ? errorMsg(`${summary} — ${problems.join(', ')}`) : successMsg(summary);
+		} catch (e) {
+			notice = errorMsg(`Folder download failed: ${formatError(e)}`);
+		} finally {
+			endTransfer();
+			folderProgress = '';
+			downloadingFolder = null;
+		}
 	}
 
 	async function uploadFiles() {
@@ -605,6 +769,10 @@
 		<StatusMessage notification={notice} />
 	{/if}
 
+	{#if folderProgress}
+		<div class="text-xs text-text-muted mb-3">{folderProgress}</div>
+	{/if}
+
 	<!-- Table + Editor split view -->
 	<div class="flex-1 flex gap-0 overflow-hidden">
 		<!-- File listing -->
@@ -752,11 +920,21 @@
 											{/if}
 											<ActionButton
 												onclick={() => downloadFile(entry)}
-												disabled={downloadingFile !== null}
+												disabled={downloadingFile !== null || downloadingFolder !== null}
 												variant="subtle"
 												size="xs"
 											>
 												{downloadingFile === entry.name ? '...' : 'Download'}
+											</ActionButton>
+										{:else if entry.isDirectory}
+											<ActionButton
+												onclick={() => downloadFolder(entry)}
+												disabled={downloadingFile !== null || downloadingFolder !== null}
+												variant="subtle"
+												size="xs"
+												title="Download folder as a zip"
+											>
+												{downloadingFolder === entry.name ? '...' : 'Download'}
 											</ActionButton>
 										{/if}
 										<ActionButton
@@ -840,3 +1018,5 @@
 {#if previewSrc}
 	<ImagePreview src={previewSrc} alt={previewAlt} onClose={closePreview} />
 {/if}
+
+<ConfirmDialog bind:this={confirmDialog} />
