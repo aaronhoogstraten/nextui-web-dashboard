@@ -21,7 +21,7 @@
 	let { adb }: { adb: Adb } = $props();
 
 	interface LogFile {
-		/** Relative path from .userdata, e.g. "app/logs/crash.log" */
+		/** Display path, e.g. "app/logs/crash.log" or "nextui.log" for SD card root logs */
 		relativePath: string;
 		/** Full device path */
 		fullPath: string;
@@ -168,8 +168,30 @@
 		logFiles = [];
 		const found: LogFile[] = [];
 
+		// Each source is scanned independently so one unreadable path can't discard
+		// what the other already found; the error is only surfaced if nothing turns up.
+		let scanError: string | null = null;
+
+		// Loose *.log files sitting at the SD card root (e.g. NextUI's own logs)
 		try {
-			// List all subdirectories under .userdata
+			const rootEntries = await listDirectory(adb, DEVICE_PATHS.base);
+			for (const entry of rootEntries) {
+				if (entry.isFile && entry.name.toLowerCase().endsWith('.log')) {
+					found.push({
+						relativePath: entry.name,
+						fullPath: `${DEVICE_PATHS.base}/${entry.name}`,
+						size: entry.size,
+						mtime: entry.mtime
+					});
+				}
+			}
+		} catch (e) {
+			scanError ??= `Failed to scan ${DEVICE_PATHS.base}: ${formatError(e)}`;
+		}
+
+		// Per-app logs under .userdata/<app>/logs — .userdata itself is absent on a
+		// card NextUI has never booted, which listDirectory reports as a throw.
+		try {
 			const userdataEntries = await listDirectory(adb, DEVICE_PATHS.userdata);
 			const subdirs = userdataEntries.filter((e) => e.isDirectory);
 
@@ -193,13 +215,13 @@
 					// No logs directory in this subdirectory — skip
 				}
 			}
-
-			logFiles = found;
-			if (found.length === 0) {
-				notice = errorMsg('No log files found on device.');
-			}
 		} catch (e) {
-			notice = errorMsg(`Failed to scan for logs: ${formatError(e)}`);
+			scanError ??= `Failed to scan ${DEVICE_PATHS.userdata}: ${formatError(e)}`;
+		}
+
+		logFiles = found;
+		if (found.length === 0) {
+			notice = errorMsg(scanError ?? 'No log files found on device.');
 		}
 		scanning = false;
 	}
@@ -357,7 +379,8 @@
 		{/if}
 
 		<div class="text-xs text-text-muted mb-3">
-			Source: <span class="font-mono">{DEVICE_PATHS.userdata}/*/logs/</span>
+			Sources: <span class="font-mono">{DEVICE_PATHS.base}/*.log</span>,
+			<span class="font-mono">{DEVICE_PATHS.userdata}/*/logs/</span>
 		</div>
 
 		<div class="flex-1 overflow-auto border border-border rounded-lg">
