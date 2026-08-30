@@ -10,6 +10,14 @@
 		confirmLabel?: string;
 		cancelLabel?: string;
 		confirmVariant?: 'primary' | 'danger' | 'warning';
+		/** Adds a "remember my choice" checkbox whose state comes back from showWithRemember() */
+		remember?: { label: string; checked?: boolean };
+	}
+
+	export interface ConfirmResult {
+		confirmed: boolean;
+		/** State of the remember checkbox; always false when `remember` was not requested */
+		remember: boolean;
 	}
 </script>
 
@@ -18,22 +26,32 @@
 	import Modal from './Modal.svelte';
 
 	let options: ConfirmOptions | null = $state.raw(null);
-	let resolver: ((confirmed: boolean) => void) | null = $state.raw(null);
+	let resolver: ((result: ConfirmResult) => void) | null = $state.raw(null);
+	let remember = $state(false);
 
 	/**
 	 * Show the dialog and resolve with the user's choice. Replaces window.confirm,
 	 * whose height the browser caps — long warnings get clipped and scrolled.
 	 */
-	export function show(opts: ConfirmOptions): Promise<boolean> {
+	export async function show(opts: ConfirmOptions): Promise<boolean> {
+		return (await showWithRemember(opts)).confirmed;
+	}
+
+	/** Same dialog, but also reports the `remember` checkbox — only meaningful with `opts.remember` */
+	export function showWithRemember(opts: ConfirmOptions): Promise<ConfirmResult> {
 		return new Promise((resolve) => {
+			// A second dialog replaces the first; settle that one as a cancel so its
+			// caller isn't left awaiting a promise nothing can resolve.
+			resolver?.({ confirmed: false, remember: false });
 			options = opts;
+			remember = opts.remember?.checked ?? false;
 			resolver = resolve;
 		});
 	}
 
 	function resolve(confirmed: boolean) {
 		if (!resolver) return;
-		resolver(confirmed);
+		resolver({ confirmed, remember: options?.remember ? remember : false });
 		resolver = null;
 		options = null;
 	}
@@ -62,13 +80,21 @@
 				<p class="text-xs text-text-muted mb-2">{detail}</p>
 			{/each}
 
-			<div class="flex justify-end gap-2 mt-5">
-				<ActionButton onclick={() => resolve(false)} variant="secondary">
-					{options.cancelLabel ?? 'Cancel'}
-				</ActionButton>
-				<ActionButton onclick={() => resolve(true)} variant={options.confirmVariant ?? 'primary'}>
-					{options.confirmLabel ?? 'Continue'}
-				</ActionButton>
+			<div class="flex items-center justify-between gap-3 mt-5">
+				{#if options.remember}
+					<label class="flex items-center gap-2 text-xs text-text-muted cursor-pointer">
+						<input type="checkbox" bind:checked={remember} class="accent-accent" />
+						{options.remember.label}
+					</label>
+				{/if}
+				<div class="flex justify-end gap-2 ml-auto">
+					<ActionButton onclick={() => resolve(false)} variant="secondary">
+						{options.cancelLabel ?? 'Cancel'}
+					</ActionButton>
+					<ActionButton onclick={() => resolve(true)} variant={options.confirmVariant ?? 'primary'}>
+						{options.confirmLabel ?? 'Continue'}
+					</ActionButton>
+				</div>
 			</div>
 		</div>
 	</Modal>

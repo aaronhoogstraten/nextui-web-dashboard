@@ -2,9 +2,10 @@
 	import { getLogEntries, clearLog, adbLog, type LogLevel } from '$lib/stores/log.svelte.js';
 	import { shell } from '$lib/adb/file-ops.js';
 	import { getConnection, isConnected } from '$lib/stores/connection.svelte.js';
-	import { isFeatureEnabled } from '$lib/stores/features.svelte.js';
+	import { isFeatureEnabled, setFeature } from '$lib/stores/features.svelte.js';
 	import { formatError } from '$lib/utils.js';
 	import ActionButton from './ActionButton.svelte';
+	import ConfirmDialog from './ConfirmDialog.svelte';
 
 	let collapsed = $state(false);
 	let autoScroll = $state(true);
@@ -13,8 +14,9 @@
 	let scrollPending = false;
 	let copyLabel = $state('Copy Logs');
 
-	// ADB Console input (feature-flagged)
-	const consoleEnabled = $derived(isFeatureEnabled('adb-shell') && isConnected());
+	// ADB Console input — off by default, unlocked by the Shell toggle (or `thisisunsafe`)
+	const shellMode = $derived(isFeatureEnabled('adb-shell'));
+	const canRunCommands = $derived(shellMode && isConnected());
 	let currentInput = $state('');
 	let running = $state(false);
 	let commandHistory: string[] = $state(loadHistory());
@@ -23,6 +25,10 @@
 
 	const HISTORY_KEY = 'adbConsoleHistory';
 	const MAX_HISTORY = 100;
+	// Set once the user ticks "Don't ask again" in the shell-mode warning
+	const SHELL_ACK_KEY = 'adbShellWarningAcknowledged';
+
+	let confirmDialog: ConfirmDialog;
 
 	function loadHistory(): string[] {
 		try {
@@ -38,6 +44,57 @@
 			localStorage.setItem(HISTORY_KEY, JSON.stringify(commandHistory.slice(-MAX_HISTORY)));
 		} catch {
 			// localStorage may be unavailable
+		}
+	}
+
+	function shellWarningAcknowledged(): boolean {
+		try {
+			return localStorage.getItem(SHELL_ACK_KEY) === 'true';
+		} catch {
+			return false;
+		}
+	}
+
+	function acknowledgeShellWarning() {
+		try {
+			localStorage.setItem(SHELL_ACK_KEY, 'true');
+		} catch {
+			// localStorage may be unavailable
+		}
+	}
+
+	async function toggleShellMode(e: Event) {
+		const checkbox = e.currentTarget as HTMLInputElement;
+		try {
+			if (shellMode) {
+				setFeature('adb-shell', false);
+				return;
+			}
+			let remembered = shellWarningAcknowledged();
+			if (!remembered) {
+				const { confirmed, remember } = await confirmDialog.showWithRemember({
+					title: 'Enable shell command mode?',
+					summary:
+						'The Console gains an input that runs raw shell commands on the connected device as root.',
+					advice:
+						'There is no undo and no confirmation per command. A typo can delete save files or leave the device unbootable.',
+					details: ['Turn it back off any time with the Shell toggle.'],
+					confirmLabel: 'Enable shell mode',
+					confirmVariant: 'warning',
+					remember: { label: "Don't ask again" }
+				});
+				if (!confirmed) return;
+				if (remember) {
+					acknowledgeShellWarning();
+					remembered = true;
+				}
+			}
+			// Only a remembered choice survives a reload; otherwise the warning has to
+			// get another chance to appear next session.
+			setFeature('adb-shell', true, { persist: remembered });
+		} finally {
+			// The click already flipped the DOM checkbox; resync it with the real state
+			checkbox.checked = shellMode;
 		}
 	}
 
@@ -222,6 +279,20 @@
 		</button>
 		{#if !collapsed}
 			<div class="flex items-center gap-3 text-xs">
+				<label
+					class="flex items-center gap-1 cursor-pointer {shellMode
+						? 'text-warning'
+						: 'text-text-muted'}"
+					title="Run raw ADB shell commands on the device."
+				>
+					<input
+						type="checkbox"
+						checked={shellMode}
+						onchange={toggleShellMode}
+						class={shellMode ? 'accent-warning' : 'accent-accent'}
+					/>
+					Shell
+				</label>
 				<label class="flex items-center gap-1 text-text-muted cursor-pointer">
 					<input type="checkbox" bind:checked={showDebug} class="accent-accent" />
 					Debug
@@ -257,7 +328,7 @@
 		</div>
 	{/if}
 
-	{#if consoleEnabled && !collapsed}
+	{#if shellMode && !collapsed}
 		<div
 			class="flex items-center gap-2 px-2 py-1.5 border-t border-border font-mono text-xs shrink-0"
 		>
@@ -265,9 +336,9 @@
 			<input
 				bind:value={currentInput}
 				onkeydown={handleInputKeyDown}
-				disabled={running}
+				disabled={running || !canRunCommands}
 				class="flex-1 bg-transparent text-text font-mono text-xs focus:outline-none disabled:opacity-50"
-				placeholder="Shell command..."
+				placeholder={canRunCommands ? 'Shell command...' : 'Connect a device to run commands'}
 				spellcheck="false"
 				autocomplete="off"
 			/>
@@ -277,3 +348,5 @@
 		</div>
 	{/if}
 </div>
+
+<ConfirmDialog bind:this={confirmDialog} />
