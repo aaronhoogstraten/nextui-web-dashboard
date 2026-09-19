@@ -360,8 +360,10 @@
 				await trackedPush(adb, joinPath(currentPath, file.name), data);
 				uploaded++;
 			}
-			notice = successMsg(`Uploaded ${uploaded} file(s)`);
 			await navigate(currentPath);
+			// navigate() clears `notice`, and sets one of its own if the listing
+			// failed, so the success message goes after it and defers to that error.
+			if (!notice) notice = successMsg(`Uploaded ${uploaded} file(s)`);
 		} catch (e) {
 			notice = errorMsg(`Upload failed: ${formatError(e)}`);
 		} finally {
@@ -568,8 +570,8 @@
 				await trackedPush(adb, joinPath(currentPath, relativePath), data);
 				uploaded++;
 			}
-			notice = successMsg(`Uploaded ${plural(uploaded, 'file')}`);
 			await navigate(currentPath);
+			if (!notice) notice = successMsg(`Uploaded ${plural(uploaded, 'file')}`);
 		} catch (e) {
 			notice = errorMsg(`Upload failed after ${uploaded} files: ${formatError(e)}`);
 		} finally {
@@ -783,8 +785,8 @@
 				await trackedPush(adb, joinPath(currentPath, relativePath), data);
 				uploaded++;
 			}
-			notice = successMsg(`Uploaded ${plural(uploaded, 'file')}`);
 			await navigate(currentPath);
+			if (!notice) notice = successMsg(`Uploaded ${plural(uploaded, 'file')}`);
 		} catch (err) {
 			notice = errorMsg(`Upload failed after ${uploaded} files: ${formatError(err)}`);
 		} finally {
