@@ -35,6 +35,7 @@
 		pullFile,
 		pushFile,
 		isDirectory,
+		pathExists,
 		searchFiles,
 		walkDirectory,
 		type WalkResult,
@@ -84,6 +85,7 @@
 	let downloadingFolder: string | null = $state(null);
 	let folderProgress: string = $state('');
 	let deletingEntry: string | null = $state(null);
+	let renamingEntry: string | null = $state(null);
 	let searchQuery = $state('');
 	let searchResults: string[] | null = $state(null);
 	let searching = $state(false);
@@ -388,6 +390,130 @@
 			notice = errorMsg(`Failed to create folder: ${formatError(e)}`);
 		}
 		creatingFolder = false;
+	}
+
+	/**
+	 * Run a `mv`, surfacing failure as an exception. The raw shell socket carries
+	 * no exit status, so a failed move (read-only card, name rejected by FAT)
+	 * only shows up as text on stderr.
+	 */
+	async function movePath(from: string, to: string) {
+		const output = (await adbExec(ShellCmd.mv(from, to))).trim();
+		if (output) throw new Error(output);
+	}
+
+	/**
+	 * Rename through a temporary name, for a change of case only. The card is
+	 * vfat — case-insensitive, case-preserving — where `mv -f Readme.txt
+	 * readme.txt` does nothing at all: it exits 0 and prints no error, so
+	 * movePath cannot tell it from a success and we would report a rename that
+	 * never happened. The destination check is no use either, since it matches
+	 * the source itself. Two hops sidestep both, and are harmless on a
+	 * case-sensitive filesystem. Measured on BusyBox v1.36.1 / h700.
+	 */
+	async function renameViaTemp(fromPath: string, toPath: string, newName: string) {
+		const tempPath = joinPath(currentPath, `.rename-${Math.random().toString(36).slice(2, 10)}`);
+		await movePath(fromPath, tempPath);
+		try {
+			// With the source moved aside, anything still at the destination is a
+			// genuinely different file on a case-sensitive filesystem. Never clobber it.
+			if (await pathExists(adb, toPath)) {
+				throw new Error(`"${newName}" already exists here`);
+			}
+			await movePath(tempPath, toPath);
+		} catch (e) {
+			// Put the original name back rather than stranding the item under a
+			// temporary name the user never chose and would not recognise.
+			try {
+				await movePath(tempPath, fromPath);
+			} catch {
+				throw new Error(`${formatError(e)} — could not undo, the item is now named ${tempPath}`);
+			}
+			throw e;
+		}
+	}
+
+	async function renameEntry(entry: DirectoryEntry) {
+		const kind = entry.isDirectory ? 'folder' : 'file';
+		const input = prompt(`Rename ${kind} "${entry.name}" to:`, entry.name);
+		if (input === null) return;
+		const newName = input.trim();
+		if (!newName || newName === entry.name) return;
+		if (newName.includes('/') || newName.includes('\\')) {
+			notice = errorMsg('Name cannot contain slashes');
+			return;
+		}
+		if (newName === '.' || newName === '..') {
+			notice = errorMsg(`"${newName}" is not a valid name`);
+			return;
+		}
+
+		const fromPath = joinPath(currentPath, entry.name);
+		const toPath = joinPath(currentPath, newName);
+		// A change of case alone needs the two-hop path below; vfat silently
+		// ignores a direct mv between two spellings of one name.
+		const caseOnly = newName.toLowerCase() === entry.name.toLowerCase();
+		renamingEntry = entry.name;
+		notice = null;
+		let replacedOpenEditor = false;
+		try {
+			if (caseOnly) {
+				await renameViaTemp(fromPath, toPath, newName);
+			} else {
+				if (await pathExists(adb, toPath)) {
+					const targetKind = (await isDirectory(adb, toPath)) ? 'folder' : 'file';
+					// `mv` onto an existing directory moves the source *into* it rather
+					// than replacing it, and it will not put a folder over a file.
+					// Replacing a whole folder is too destructive to offer either way,
+					// so only file-over-file gets the overwrite prompt below.
+					if (targetKind === 'folder' || entry.isDirectory) {
+						notice = errorMsg(`A ${targetKind} named "${newName}" already exists here`);
+						return;
+					}
+					const overwrite = await confirmDialog.show({
+						title: `Replace "${newName}"?`,
+						summary: `A file named "${newName}" already exists in this folder.`,
+						details: ['Renaming will overwrite it. This cannot be undone.'],
+						confirmLabel: 'Replace',
+						confirmVariant: 'danger'
+					});
+					if (!overwrite) return;
+				}
+				await movePath(fromPath, toPath);
+			}
+
+			// Keep an open editor pointed at the file it is actually editing — the
+			// file itself, or one nested under a renamed folder. Otherwise saving
+			// would recreate the old path.
+			if (editorPath === fromPath) {
+				editorPath = toPath;
+			} else if (editorPath?.startsWith(fromPath + '/')) {
+				editorPath = toPath + editorPath.slice(fromPath.length);
+			} else if (editorPath === toPath) {
+				// The editor's file was just overwritten by the rename. Its buffer is
+				// now a copy of something deleted, and saving would undo the rename,
+				// so drop it rather than let that happen silently.
+				editorPath = null;
+				editorContent = '';
+				editorOriginal = '';
+				editorError = '';
+				replacedOpenEditor = true;
+			}
+
+			await navigate(currentPath, true);
+			// navigate() clears `notice`, and sets one of its own if the listing
+			// failed — reporting success over that would hide a stale table.
+			if (!notice) {
+				notice = successMsg(
+					`Renamed to "${newName}"` +
+						(replacedOpenEditor ? ' — closed the editor, its file was replaced' : '')
+				);
+			}
+		} catch (e) {
+			notice = errorMsg(`Failed to rename: ${formatError(e)}`);
+		} finally {
+			renamingEntry = null;
+		}
 	}
 
 	async function deleteEntry(entry: DirectoryEntry) {
@@ -795,7 +921,7 @@
 								Modified{sortIndicator('mtime')}
 							</button>
 						</th>
-						<th class="py-2 px-3 font-medium text-text-muted w-32"></th>
+						<th class="py-2 px-3 font-medium text-text-muted w-44"></th>
 					</tr>
 				</thead>
 				<tbody>
@@ -920,7 +1046,9 @@
 											{/if}
 											<ActionButton
 												onclick={() => downloadFile(entry)}
-												disabled={downloadingFile !== null || downloadingFolder !== null}
+												disabled={downloadingFile !== null ||
+													downloadingFolder !== null ||
+													renamingEntry !== null}
 												variant="subtle"
 												size="xs"
 											>
@@ -929,7 +1057,9 @@
 										{:else if entry.isDirectory}
 											<ActionButton
 												onclick={() => downloadFolder(entry)}
-												disabled={downloadingFile !== null || downloadingFolder !== null}
+												disabled={downloadingFile !== null ||
+													downloadingFolder !== null ||
+													renamingEntry !== null}
 												variant="subtle"
 												size="xs"
 												title="Download folder as a zip"
@@ -938,8 +1068,17 @@
 											</ActionButton>
 										{/if}
 										<ActionButton
+											onclick={() => renameEntry(entry)}
+											disabled={renamingEntry !== null || deletingEntry !== null}
+											variant="subtle"
+											size="xs"
+											title={entry.isDirectory ? 'Rename folder' : 'Rename file'}
+										>
+											{renamingEntry === entry.name ? '...' : 'Rename'}
+										</ActionButton>
+										<ActionButton
 											onclick={() => deleteEntry(entry)}
-											disabled={deletingEntry !== null}
+											disabled={deletingEntry !== null || renamingEntry !== null}
 											variant="danger"
 											size="xs"
 										>

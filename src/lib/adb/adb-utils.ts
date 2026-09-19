@@ -24,6 +24,20 @@ export class ShellCmd {
 		return new ShellCmd(`mkdir -p ${shellEscape(path)}`);
 	}
 
+	/**
+	 * Move or rename a path, clobbering an existing destination, so callers must
+	 * check the target themselves first. `-f` is not optional: without it BusyBox
+	 * prompts on stdin when the destination is not writable, and the raw shell
+	 * socket gives it a tty nothing on this side can ever answer.
+	 *
+	 * `-f` is the only flag safe to use here: tg5040 ships BusyBox 1.27.2, the
+	 * oldest build we support, whose `mv` is `[-fin]` — no `-T` and no `-t`,
+	 * both of which h700's 1.36.1 does have.
+	 */
+	static mv(from: string, to: string): ShellCmd {
+		return new ShellCmd(`mv -f ${shellEscape(from)} ${shellEscape(to)}`);
+	}
+
 	/** Remove a file. */
 	static rm(path: string): ShellCmd {
 		return new ShellCmd(`rm ${shellEscape(path)}`);
