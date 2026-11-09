@@ -49,11 +49,27 @@ const DASHBOARD_PRESENTER_CMD =
 	` --message "${OVERLAY_MESSAGE}" --message-alignment middle --show-pill --cancel-show --cancel-text "EXIT" --timeout 0`;
 
 /**
- * Regex matching the minui-presenter invocation line in launch.sh.
- * Matches lines like: `    minui-presenter --message "Press B to exit" --timeout 0`
- * Avoids matching `killall minui-presenter`, `command -v minui-presenter`, or `chmod` lines.
+ * Whole lines in launch.sh that run minui-presenter, like
+ * `    minui-presenter --message "Press B to exit" --timeout 0`.
+ * Lines starting `killall minui-presenter`, `command -v minui-presenter` or
+ * `chmod` don't count, since the line has to start with the command.
  */
-const PRESENTER_INVOCATION_RE = /^(\s*)minui-presenter\s+--/m;
+const PRESENTER_LINE_RE = /^(\s*)minui-presenter\s+--.*$/gm;
+
+/**
+ * Swap the pak's own screen for the dashboard's, replacing the whole line so
+ * none of the original arguments are left on the end. Since 0.11.0 the script
+ * also has a `show_message` helper that runs minui-presenter with `"$message"`,
+ * so lines passing shell variables are skipped. Returns null unless exactly one
+ * line qualifies, rather than guess.
+ */
+export function patchLaunchScript(script: string): string | null {
+	const candidates = [...script.matchAll(PRESENTER_LINE_RE)].filter((m) => !m[0].includes('$'));
+	if (candidates.length !== 1) return null;
+	const [line, indent] = candidates[0];
+	// A function replacement, so nothing in the command reads as a `$` pattern
+	return script.replace(line, () => `${indent}${DASHBOARD_PRESENTER_CMD}`);
+}
 
 /** Prefix for platform-specific binaries inside the zip. */
 const BIN_PREFIX = 'bin/';
@@ -117,13 +133,8 @@ export async function installDevPak(adb: Adb): Promise<void> {
 	for (const file of filesToPush) {
 		let data = file.data;
 		if (file.relativePath === 'launch.sh') {
-			const script = new TextDecoder().decode(data);
-			const match = PRESENTER_INVOCATION_RE.exec(script);
-			if (match) {
-				const patched = script.replace(
-					PRESENTER_INVOCATION_RE,
-					`${match[1]}${DASHBOARD_PRESENTER_CMD}`
-				);
+			const patched = patchLaunchScript(new TextDecoder().decode(data));
+			if (patched !== null) {
 				data = new TextEncoder().encode(patched);
 				adbLog.debug('Patched launch.sh with dashboard minui-presenter command');
 			} else {
