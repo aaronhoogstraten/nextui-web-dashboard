@@ -5,9 +5,11 @@
 		ROM_SYSTEMS,
 		ROM_SYSTEM_CODES,
 		buildDeviceDirMap,
+		getRomBaseName,
 		getRomDevicePath,
 		isValidRomExtension,
 		parseRomDirectoryName,
+		isRomEntry,
 		type RomSystem
 	} from '$lib/roms/index.js';
 	import {
@@ -15,7 +17,7 @@
 		saveRomOverview,
 		updateRomOverviewCount
 	} from '$lib/roms/overview-cache.js';
-	import { DEVICE_PATHS, type DirectoryEntry } from '$lib/adb/types.js';
+	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { listDirectory, pathExists, pullFile, pushFile } from '$lib/adb/file-ops.js';
 	import {
 		beginTransfer,
@@ -37,7 +39,9 @@
 		type DroppedFile
 	} from '$lib/utils.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
+	import { applyRenamePlan, planRomRename, type RenamePlan } from '$lib/roms/game-rename.js';
 	import ActionButton from './ActionButton.svelte';
+	import RenamePlanDialog from './RenamePlanDialog.svelte';
 	import ImagePreview from './ImagePreview.svelte';
 	import Modal from './Modal.svelte';
 	import OverwriteDialog from './OverwriteDialog.svelte';
@@ -352,18 +356,6 @@
 		refreshing = false;
 	}
 
-	function getBaseName(filename: string): string {
-		const lastDot = filename.lastIndexOf('.');
-		return lastDot > 0 ? filename.substring(0, lastDot) : filename;
-	}
-
-	/** Whether a folder entry is a ROM, rather than hidden or the display name map. */
-	function isRomEntry(entry: DirectoryEntry): boolean {
-		return (
-			(entry.isFile || entry.isDirectory) && !entry.name.startsWith('.') && entry.name !== 'map.txt'
-		);
-	}
-
 	async function loadRomDetails(state: SystemState) {
 		if (state.romsLoaded || state.loadingRoms) return;
 		state.loadingRoms = true;
@@ -450,7 +442,7 @@
 
 			// Build ROM entries with media matching
 			state.roms = romFiles.map((f) => {
-				const baseName = f.isDirectory ? f.name : getBaseName(f.name);
+				const baseName = f.isDirectory ? f.name : getRomBaseName(f.name);
 				const mediaFileName = `${baseName}.png`;
 				const hasMedia = mediaNames.has(mediaFileName);
 				return {
@@ -477,6 +469,12 @@
 		}
 
 		state.loadingRoms = false;
+		// A file rename rewrote map.txt while this load was reading it
+		if (reloadWhenLoaded.delete(state)) {
+			for (const r of state.roms) if (r.thumbnailUrl) URL.revokeObjectURL(r.thumbnailUrl);
+			state.romsLoaded = false;
+			await loadRomDetails(state);
+		}
 	}
 
 	async function loadThumbnails(state: SystemState) {
@@ -814,7 +812,7 @@
 
 		const hasM3uFile = discFiles.some((f) => f.name.toLowerCase().endsWith('.m3u'));
 		const stripParens = (name: string) =>
-			getBaseName(name)
+			getRomBaseName(name)
 				.replace(/\s*\([^)]*\)/g, '')
 				.trim();
 
@@ -905,8 +903,8 @@
 
 		for (const group of plan.discGroups) {
 			const folderName = group.m3uFile
-				? getBaseName(group.m3uFile.name)
-				: deriveGameFolderName(group.contentFiles.map((f) => getBaseName(f.name)));
+				? getRomBaseName(group.m3uFile.name)
+				: deriveGameFolderName(group.contentFiles.map((f) => getRomBaseName(f.name)));
 			const folderPath = `${state.devicePath}/${folderName}`;
 
 			if (existingDirs?.has(folderName)) {
@@ -1202,6 +1200,89 @@
 	}
 
 	// =============================================
+	// File rename, carrying saves, states, art and references
+
+	interface PendingFileRename {
+		state: SystemState;
+		rom: RomEntry;
+		newName: string;
+		plan: RenamePlan;
+	}
+
+	let pendingFileRename: PendingFileRename | null = $state.raw(null);
+	/** Lists whose load was in flight during a rename, so may hold the old map.txt */
+	const reloadWhenLoaded = new WeakSet<SystemState>();
+	/** ROM whose rename is being planned or applied */
+	let renamingFileFor: string | null = $state(null);
+	let applyingFileRename = $state(false);
+
+	async function startFileRename(state: SystemState, rom: RomEntry) {
+		// Renaming reloads these lists, and the rename rewrites their map.txt files
+		if ([state, ...getSiblingStates(state)].some((s) => s.displayNameDirty)) {
+			state.error = 'Save your display name changes first. Renaming a file reloads the list.';
+			return;
+		}
+		const input = prompt(`Rename file "${rom.name}" to:`, rom.name);
+		if (input === null) return;
+		const newName = input.trim();
+		if (!newName || newName === rom.name) return;
+		if (/[\\/]/.test(newName) || newName.startsWith('.')) {
+			// NextUI hides names starting with a dot
+			state.error = `"${newName}" is not a valid ROM file name`;
+			return;
+		}
+		// Without an extension the system runs, NextUI stops listing the ROM
+		const dot = newName.lastIndexOf('.');
+		const extension = dot > 0 ? newName.slice(dot) : '';
+		if (!isValidRomExtension(extension, state.system)) {
+			const examples = state.system.supportedFormats.slice(0, 3).join(', ');
+			state.error = `"${newName}" needs an extension ${state.system.systemName} runs, such as ${examples}`;
+			return;
+		}
+		renamingFileFor = rom.name;
+		state.error = '';
+		try {
+			const plan = await planRomRename(adb, state.devicePath, rom.name, newName);
+			pendingFileRename = { state, rom, newName, plan };
+		} catch (e) {
+			state.error = `Rename failed: ${formatError(e)}`;
+		} finally {
+			renamingFileFor = null;
+		}
+	}
+
+	async function confirmFileRename() {
+		if (!pendingFileRename) return;
+		const { state, rom, newName, plan } = pendingFileRename;
+		applyingFileRename = true;
+		renamingFileFor = rom.name;
+		try {
+			const result = await applyRenamePlan(adb, plan);
+			if (result.failures.length > 0) {
+				const names = result.failures.map((f) => dirName(f.path));
+				state.error = `Renamed to ${newName}, but ${plural(names.length, 'file')} could not be updated: ${names.join(', ')}`;
+			}
+		} catch (e) {
+			state.error = `Rename failed: ${formatError(e)}`;
+		} finally {
+			applyingFileRename = false;
+			renamingFileFor = null;
+			pendingFileRename = null;
+		}
+		// Reload the list, whose names, art and display names may all have changed.
+		// Sibling folders too: the rename rewrote their map.txt, and saving a stale
+		// copy of it would put the old name back. One still loading may have read
+		// it before the rename, so it loads again when it finishes.
+		const siblings = getSiblingStates(state);
+		for (const s of siblings) if (s.loadingRoms) reloadWhenLoaded.add(s);
+		for (const s of [state, ...siblings.filter((sib) => sib.romsLoaded)]) {
+			for (const r of s.roms) if (r.thumbnailUrl) URL.revokeObjectURL(r.thumbnailUrl);
+			s.romsLoaded = false;
+			await loadRomDetails(s);
+		}
+	}
+
+	// =============================================
 	// Display Name Mapping (map.txt)
 	// =============================================
 
@@ -1403,6 +1484,18 @@
 		};
 	});
 </script>
+
+{#if pendingFileRename}
+	<RenamePlanDialog
+		title={`Rename "${pendingFileRename.rom.name}" to "${pendingFileRename.newName}"?`}
+		plan={pendingFileRename.plan}
+		confirmLabel="Rename"
+		advice="Close the game on the device first if it's running, or NextUI may write its save under the old name when it closes."
+		busy={applyingFileRename}
+		onconfirm={confirmFileRename}
+		oncancel={() => (pendingFileRename = null)}
+	/>
+{/if}
 
 <div class="p-6 flex flex-col h-full">
 	{#if syncActive}
@@ -1653,10 +1746,21 @@
 													onclick={() => renameRom(s, rom)}
 													variant="subtle"
 													size="xs"
-													title="Set display name"
+													title="Set the name NextUI shows, without renaming the file"
 												>
-													Rename
+													Display Name
 												</ActionButton>
+												{#if !rom.isDirectory}
+													<ActionButton
+														onclick={() => startFileRename(s, rom)}
+														disabled={renamingFileFor !== null || removingRom !== null}
+														variant="subtle"
+														size="xs"
+														title="Rename the file, carrying its saves, states, box art and list entries"
+													>
+														{renamingFileFor === rom.name ? 'Checking...' : 'Rename File'}
+													</ActionButton>
+												{/if}
 												{#if (rom.displayName || '') !== (s.displayNameMap.get(rom.name) || '')}
 													<ActionButton
 														onclick={() => saveDisplayNameForRom(s, rom)}

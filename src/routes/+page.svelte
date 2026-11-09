@@ -2,6 +2,7 @@
 	import Sidebar from '../components/Sidebar.svelte';
 	import BiosView from '../components/BiosView.svelte';
 	import RomsView from '../components/RomsView.svelte';
+	import SavesView from '../components/SavesView.svelte';
 	import FileBrowserView from '../components/FileBrowserView.svelte';
 	import OverlaysView from '../components/OverlaysView.svelte';
 	import CheatsView from '../components/CheatsView.svelte';
@@ -70,6 +71,8 @@
 			<BiosView adb={connectedAdb!} />
 		{:else if activeView === 'roms'}
 			<RomsView adb={connectedAdb!} />
+		{:else if activeView === 'saves'}
+			<SavesView adb={connectedAdb!} />
 		{:else if activeView === 'overlays'}
 			<OverlaysView adb={connectedAdb!} />
 		{:else if activeView === 'cheats'}

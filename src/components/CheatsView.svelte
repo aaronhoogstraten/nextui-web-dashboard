@@ -18,6 +18,7 @@
 		pickFiles,
 		errorMsg,
 		successMsg,
+		downloadBlob,
 		type Notification
 	} from '$lib/utils.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
@@ -279,13 +280,7 @@
 		beginTransfer('download', 1);
 		try {
 			const data = await trackedPull(adb, `${CHEATS_PATH}/${sys.systemCode}/${cheat.fileName}`);
-			const blob = new Blob([data]);
-			const url = URL.createObjectURL(blob);
-			const a = document.createElement('a');
-			a.href = url;
-			a.download = cheat.fileName;
-			a.click();
-			URL.revokeObjectURL(url);
+			downloadBlob(new Blob([data]), cheat.fileName);
 		} catch (e) {
 			notice = errorMsg(`Download failed: ${formatError(e)}`);
 		} finally {

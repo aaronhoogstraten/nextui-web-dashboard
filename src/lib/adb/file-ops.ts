@@ -5,7 +5,7 @@ import JSZip from 'jszip';
 import type { DirectoryEntry, FileVersion, StorageInfo } from './types.js';
 import { DEVICE_PATHS } from './types.js';
 import { adbLog } from '$lib/stores/log.svelte.js';
-import { formatError, joinPath } from '$lib/utils.js';
+import { fileName, formatError, joinPath, parentPath } from '$lib/utils.js';
 import { ShellCmd } from './adb-utils.js';
 
 /** Progress callback for file transfers: (bytesTransferred, totalBytes). totalBytes is -1 if unknown. */
@@ -393,6 +393,58 @@ export async function shell(adb: Adb, command: string): Promise<string> {
 		return result;
 	} catch (e) {
 		adbLog.error(`shell ✗ ${command}: ${e}`);
+		throw e;
+	}
+}
+
+/**
+ * Move or rename a path, surfacing failure as an exception. The raw shell socket
+ * carries no exit status, so a failed move (read-only card, name rejected by
+ * FAT) only shows up as text on stderr. Clobbers an existing destination, so
+ * callers check for one first.
+ */
+export async function movePath(adb: Adb, from: string, to: string): Promise<void> {
+	const output = (await shell(adb, ShellCmd.mv(from, to).toString())).trim();
+	if (output) throw new Error(output);
+}
+
+/** A directory that NextUI shows, as hidden names start with a dot. */
+export function isVisibleDirectory(entry: DirectoryEntry): boolean {
+	return entry.isDirectory && !entry.name.startsWith('.');
+}
+
+/** Whether two paths differ only in case, which vfat treats as the same name. */
+export function isCaseOnlyRename(from: string, to: string): boolean {
+	return from !== to && from.toLowerCase() === to.toLowerCase();
+}
+
+/**
+ * Rename through a temporary name, for a change of case only. The card is
+ * vfat — case-insensitive, case-preserving — where `mv -f Readme.txt
+ * readme.txt` does nothing at all: it exits 0 and prints no error, so
+ * movePath cannot tell it from a success and we would report a rename that
+ * never happened. The destination check is no use either, since it matches
+ * the source itself. Two hops sidestep both, and are harmless on a
+ * case-sensitive filesystem. Measured on BusyBox v1.36.1 / h700.
+ */
+export async function movePathViaTemp(adb: Adb, from: string, to: string): Promise<void> {
+	const tempPath = joinPath(parentPath(from), `.rename-${Math.random().toString(36).slice(2, 10)}`);
+	await movePath(adb, from, tempPath);
+	try {
+		// With the source moved aside, anything still at the destination is a
+		// genuinely different file on a case-sensitive filesystem. Never clobber it.
+		if (await pathExists(adb, to)) {
+			throw new Error(`"${fileName(to)}" already exists here`);
+		}
+		await movePath(adb, tempPath, to);
+	} catch (e) {
+		// Put the original name back rather than stranding the item under a
+		// temporary name the user never chose and would not recognise.
+		try {
+			await movePath(adb, tempPath, from);
+		} catch {
+			throw new Error(`${formatError(e)} — could not undo, the item is now named ${tempPath}`);
+		}
 		throw e;
 	}
 }

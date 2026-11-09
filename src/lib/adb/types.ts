@@ -45,7 +45,9 @@ export interface DevicePaths {
 	base: string;
 	bios: string;
 	roms: string;
+	saves: string;
 	userdata: string;
+	sharedUserdata: string;
 	logs: string;
 	system: string;
 	versionFile: string;
@@ -65,7 +67,9 @@ export function buildDevicePaths(basePath: string): DevicePaths {
 		base: basePath,
 		bios: `${basePath}/Bios`,
 		roms: `${basePath}/Roms`,
+		saves: `${basePath}/Saves`,
 		userdata: `${basePath}/.userdata`,
+		sharedUserdata: `${basePath}/.userdata/shared`,
 		logs: `${basePath}/.userdata/logs`,
 		system: `${basePath}/.system`,
 		versionFile: `${basePath}/.system/version.txt`,

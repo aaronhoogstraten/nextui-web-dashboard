@@ -1,6 +1,7 @@
 export type FeatureId =
 	| 'roms'
 	| 'bios'
+	| 'saves'
 	| 'overlays'
 	| 'cheats'
 	| 'collections'
@@ -13,6 +14,7 @@ export type FeatureId =
 export const FEATURE_FLAGS: Record<FeatureId, boolean> = {
 	roms: true,
 	bios: true,
+	saves: true,
 	overlays: true,
 	cheats: true,
 	collections: true,

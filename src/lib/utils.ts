@@ -42,6 +42,26 @@ export function joinPath(base: string, name: string): string {
 	return base === '/' ? '/' + name : base + '/' + name;
 }
 
+/** Hand a blob to the browser as a download named `fileName`. */
+export function downloadBlob(blob: Blob, fileName: string): void {
+	const url = URL.createObjectURL(blob);
+	const a = document.createElement('a');
+	a.href = url;
+	a.download = fileName;
+	a.click();
+	URL.revokeObjectURL(url);
+}
+
+/** The last part of a path: `/a/b/c.txt` → `c.txt`. */
+export function fileName(path: string): string {
+	return path.slice(path.lastIndexOf('/') + 1);
+}
+
+/** The folder holding a path: `/a/b/c.txt` → `/a/b`. */
+export function parentPath(path: string): string {
+	return path.slice(0, path.lastIndexOf('/')) || '/';
+}
+
 /**
  * Locale-aware case-insensitive comparator for sorting objects by `name`.
  */

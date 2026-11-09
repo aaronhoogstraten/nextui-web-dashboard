@@ -304,6 +304,23 @@ export function buildDeviceDirMap(
 	return map;
 }
 
+/** A ROM filename without its last extension. Box art is `.media/<this>.png`. */
+export function getRomBaseName(filename: string): string {
+	const lastDot = filename.lastIndexOf('.');
+	return lastDot > 0 ? filename.substring(0, lastDot) : filename;
+}
+
+/** Whether a ROM folder entry is a ROM, rather than hidden or the display name map. */
+export function isRomEntry(entry: {
+	name: string;
+	isFile: boolean;
+	isDirectory: boolean;
+}): boolean {
+	return (
+		(entry.isFile || entry.isDirectory) && !entry.name.startsWith('.') && entry.name !== 'map.txt'
+	);
+}
+
 /**
  * Parse a ROM directory name into systemName and systemCode.
  * Pattern: "{DisplayName} ({SystemCode})"

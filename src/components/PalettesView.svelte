@@ -6,6 +6,7 @@
 	import { beginTransfer, endTransfer, trackedPush } from '$lib/stores/transfer.svelte.js';
 	import { adbExec } from '$lib/stores/connection.svelte.js';
 	import {
+		downloadBlob,
 		formatError,
 		compareByName,
 		plural,
@@ -240,13 +241,7 @@
 	}
 
 	function downloadPalette(entry: PaletteEntry) {
-		const blob = new Blob([entry.palette.raw], { type: 'text/plain' });
-		const url = URL.createObjectURL(blob);
-		const a = document.createElement('a');
-		a.href = url;
-		a.download = entry.filename;
-		a.click();
-		URL.revokeObjectURL(url);
+		downloadBlob(new Blob([entry.palette.raw], { type: 'text/plain' }), entry.filename);
 	}
 
 	async function removePalette(entry: PaletteEntry) {

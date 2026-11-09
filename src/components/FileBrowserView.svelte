@@ -34,7 +34,10 @@
 		listDirectory,
 		pullFile,
 		pushFile,
+		isCaseOnlyRename,
 		isDirectory,
+		movePath,
+		movePathViaTemp,
 		pathExists,
 		searchFiles,
 		walkDirectory,
@@ -49,6 +52,7 @@
 		skipTransferFile
 	} from '$lib/stores/transfer.svelte.js';
 	import { DEVICE_PATHS, type DirectoryEntry } from '$lib/adb/types.js';
+	import { isRomEntry, parseRomDirectoryName } from '$lib/roms/definitions.js';
 	import { adbExec } from '$lib/stores/connection.svelte.js';
 	import {
 		formatSize,
@@ -61,6 +65,7 @@
 		plural,
 		errorMsg,
 		successMsg,
+		downloadBlob,
 		type Notification
 	} from '$lib/utils.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
@@ -185,14 +190,7 @@
 			const remotePath = joinPath(currentPath, entry.name);
 			const content = await trackedPull(adb, remotePath);
 
-			// Trigger browser download
-			const blob = new Blob([content]);
-			const url = URL.createObjectURL(blob);
-			const a = document.createElement('a');
-			a.href = url;
-			a.download = entry.name;
-			a.click();
-			URL.revokeObjectURL(url);
+			downloadBlob(new Blob([content]), entry.name);
 		} catch (e) {
 			notice = errorMsg(`Download failed: ${formatError(e)}`);
 		} finally {
@@ -318,12 +316,7 @@
 				}
 			);
 
-			const url = URL.createObjectURL(blob);
-			const a = document.createElement('a');
-			a.href = url;
-			a.download = `${entry.name}.zip`;
-			a.click();
-			URL.revokeObjectURL(url);
+			downloadBlob(blob, `${entry.name}.zip`);
 
 			const downloaded = walk.files.length - failed.length;
 			const problems = [
@@ -394,45 +387,12 @@
 		creatingFolder = false;
 	}
 
-	/**
-	 * Run a `mv`, surfacing failure as an exception. The raw shell socket carries
-	 * no exit status, so a failed move (read-only card, name rejected by FAT)
-	 * only shows up as text on stderr.
-	 */
-	async function movePath(from: string, to: string) {
-		const output = (await adbExec(ShellCmd.mv(from, to))).trim();
-		if (output) throw new Error(output);
-	}
-
-	/**
-	 * Rename through a temporary name, for a change of case only. The card is
-	 * vfat — case-insensitive, case-preserving — where `mv -f Readme.txt
-	 * readme.txt` does nothing at all: it exits 0 and prints no error, so
-	 * movePath cannot tell it from a success and we would report a rename that
-	 * never happened. The destination check is no use either, since it matches
-	 * the source itself. Two hops sidestep both, and are harmless on a
-	 * case-sensitive filesystem. Measured on BusyBox v1.36.1 / h700.
-	 */
-	async function renameViaTemp(fromPath: string, toPath: string, newName: string) {
-		const tempPath = joinPath(currentPath, `.rename-${Math.random().toString(36).slice(2, 10)}`);
-		await movePath(fromPath, tempPath);
-		try {
-			// With the source moved aside, anything still at the destination is a
-			// genuinely different file on a case-sensitive filesystem. Never clobber it.
-			if (await pathExists(adb, toPath)) {
-				throw new Error(`"${newName}" already exists here`);
-			}
-			await movePath(tempPath, toPath);
-		} catch (e) {
-			// Put the original name back rather than stranding the item under a
-			// temporary name the user never chose and would not recognise.
-			try {
-				await movePath(tempPath, fromPath);
-			} catch {
-				throw new Error(`${formatError(e)} — could not undo, the item is now named ${tempPath}`);
-			}
-			throw e;
-		}
+	/** Whether the open folder is a system folder directly under Roms. */
+	function inRomFolder(): boolean {
+		const prefix = `${DEVICE_PATHS.roms}/`;
+		if (!currentPath.startsWith(prefix)) return false;
+		const rest = currentPath.slice(prefix.length);
+		return !rest.includes('/') && parseRomDirectoryName(rest) !== null;
 	}
 
 	async function renameEntry(entry: DirectoryEntry) {
@@ -449,18 +409,28 @@
 			notice = errorMsg(`"${newName}" is not a valid name`);
 			return;
 		}
+		if (entry.isFile && isRomEntry(entry) && inRomFolder()) {
+			const proceed = await confirmDialog.show({
+				title: 'Rename this ROM here?',
+				summary: `Renaming here changes only "${entry.name}". Its saves, states, box art, display name and collection entries keep the old name, so NextUI stops finding them.`,
+				advice: 'Use Rename File in the ROMs view instead, which carries them across.',
+				confirmLabel: 'Rename Anyway',
+				confirmVariant: 'warning'
+			});
+			if (!proceed) return;
+		}
 
 		const fromPath = joinPath(currentPath, entry.name);
 		const toPath = joinPath(currentPath, newName);
 		// A change of case alone needs the two-hop path below; vfat silently
 		// ignores a direct mv between two spellings of one name.
-		const caseOnly = newName.toLowerCase() === entry.name.toLowerCase();
+		const caseOnly = isCaseOnlyRename(entry.name, newName);
 		renamingEntry = entry.name;
 		notice = null;
 		let replacedOpenEditor = false;
 		try {
 			if (caseOnly) {
-				await renameViaTemp(fromPath, toPath, newName);
+				await movePathViaTemp(adb, fromPath, toPath);
 			} else {
 				if (await pathExists(adb, toPath)) {
 					const targetKind = (await isDirectory(adb, toPath)) ? 'folder' : 'file';
@@ -481,7 +451,7 @@
 					});
 					if (!overwrite) return;
 				}
-				await movePath(fromPath, toPath);
+				await movePath(adb, fromPath, toPath);
 			}
 
 			// Keep an open editor pointed at the file it is actually editing — the

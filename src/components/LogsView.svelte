@@ -7,6 +7,7 @@
 	import { getNextUIVersion } from '$lib/stores/connection.svelte.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
 	import {
+		downloadBlob,
 		formatSize,
 		formatError,
 		plural,
@@ -253,13 +254,7 @@
 			const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 			const filename = `NextUI_logs_${safeVersion}_${timestamp}.zip`;
 
-			// Trigger browser download
-			const url = URL.createObjectURL(blob);
-			const a = document.createElement('a');
-			a.href = url;
-			a.download = filename;
-			a.click();
-			URL.revokeObjectURL(url);
+			downloadBlob(blob, filename);
 
 			progress = '';
 			notice = successMsg(`Downloaded ${filename} (${logFiles.length} files)`);
@@ -278,14 +273,7 @@
 		beginTransfer('download', 1);
 		try {
 			const data = await trackedPull(adb, file.fullPath);
-			const blob = new Blob([data]);
-			const filename = file.relativePath.replace(/\//g, '_');
-			const url = URL.createObjectURL(blob);
-			const a = document.createElement('a');
-			a.href = url;
-			a.download = filename;
-			a.click();
-			URL.revokeObjectURL(url);
+			downloadBlob(new Blob([data]), file.relativePath.replace(/\//g, '_'));
 		} catch (e) {
 			notice = errorMsg(`Failed to download ${file.relativePath}: ${formatError(e)}`);
 		} finally {

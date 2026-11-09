@@ -6,6 +6,7 @@
 	import { beginTransfer, endTransfer, trackedPull } from '$lib/stores/transfer.svelte.js';
 	import { adbExec } from '$lib/stores/connection.svelte.js';
 	import {
+		downloadBlob,
 		formatSize,
 		formatError,
 		getMimeType,
@@ -225,12 +226,7 @@
 			const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 			const filename = `NextUI_screenshots_${timestamp}.zip`;
 
-			const url = URL.createObjectURL(blob);
-			const a = document.createElement('a');
-			a.href = url;
-			a.download = filename;
-			a.click();
-			URL.revokeObjectURL(url);
+			downloadBlob(blob, filename);
 
 			progress = '';
 			notice = successMsg(`Downloaded ${filename} (${targets.length} files)`);

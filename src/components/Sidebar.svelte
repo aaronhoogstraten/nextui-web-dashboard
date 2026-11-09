@@ -52,6 +52,7 @@
 	const allNavItems: NavItem[] = [
 		{ id: 'roms', label: 'ROMs', icon: '🎮' },
 		{ id: 'bios', label: 'BIOS', icon: '⚙' },
+		{ id: 'saves', label: 'Saves', icon: '💾' },
 		{ id: 'overlays', label: 'Overlays', icon: '🎨' },
 		{ id: 'cheats', label: 'Cheats', icon: '🔑' },
 		{ id: 'collections', label: 'Collections', icon: '⭐' },

@@ -5,8 +5,10 @@ export {
 	buildDeviceDirMap,
 	getRomDevicePath,
 	getRomDirectoryName,
+	getRomBaseName,
 	getRomMediaPath,
 	getRomSystem,
+	isRomEntry,
 	isValidRomExtension,
 	parseRomDirectoryName
 } from './definitions.js';
