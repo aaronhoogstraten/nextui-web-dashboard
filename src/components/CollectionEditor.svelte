@@ -3,7 +3,7 @@
 	import type { Adb } from '@yume-chan/adb';
 	import { DEVICE_PATHS } from '$lib/adb/types.js';
 	import { listDirectory, pushFile, pathExists } from '$lib/adb/file-ops.js';
-	import { parseRomDirectoryName } from '$lib/roms/definitions.js';
+	import { isRomEntry, parseRomDirectoryName } from '$lib/roms/definitions.js';
 	import {
 		formatError,
 		compareByName,
@@ -170,7 +170,7 @@
 				const parsed = parseRomDirectoryName(d.name);
 				try {
 					const sysEntries = await listDirectory(adb, `${DEVICE_PATHS.roms}/${d.name}`);
-					const romFiles = sysEntries.filter((e) => e.isFile && !e.name.startsWith('.'));
+					const romFiles = sysEntries.filter((e) => e.isFile && isRomEntry(e));
 					if (romFiles.length === 0) continue;
 					systems.push({
 						dirName: d.name,
