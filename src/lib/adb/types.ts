@@ -24,6 +24,12 @@ export interface DirectoryEntry {
 	mtime: bigint;
 }
 
+/** Identifies a revision of a file on the device: if either field changes, so may its contents */
+export interface FileVersion {
+	size: bigint;
+	mtime: bigint;
+}
+
 /** Holds the active ADB connection and metadata */
 export interface AdbConnection {
 	adb: Adb;

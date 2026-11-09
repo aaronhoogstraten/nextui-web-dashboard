@@ -10,7 +10,12 @@
 		parseRomDirectoryName,
 		type RomSystem
 	} from '$lib/roms/index.js';
-	import { DEVICE_PATHS } from '$lib/adb/types.js';
+	import {
+		getRomOverview,
+		saveRomOverview,
+		updateRomOverviewCount
+	} from '$lib/roms/overview-cache.js';
+	import { DEVICE_PATHS, type DirectoryEntry } from '$lib/adb/types.js';
 	import { listDirectory, pathExists, pullFile, pushFile } from '$lib/adb/file-ops.js';
 	import {
 		beginTransfer,
@@ -98,34 +103,55 @@
 		return path.substring(path.lastIndexOf('/') + 1);
 	}
 
+	function createSystemState(
+		system: RomSystem,
+		devicePath: string,
+		romCount: number | null = null
+	): SystemState {
+		return {
+			system,
+			devicePath,
+			romCount,
+			mediaCount: 0,
+			loading: false,
+			expanded: false,
+			error: '',
+			roms: [],
+			romsLoaded: false,
+			loadingRoms: false,
+			bgUrl: null,
+			bglistUrl: null,
+			iconUrl: null,
+			iconFileName: `${dirName(devicePath)}.png`,
+			displayNameMap: new Map(),
+			displayNameDirty: false,
+			savingNames: false
+		};
+	}
+
+	// Read before the first render: until a system has a count the "with files
+	// only" filter shows it, so restoring later makes the whole list flash.
+	const savedOverview = untrack(() => getRomOverview(adb));
+
 	let systems: SystemState[] = $state(
-		ROM_SYSTEMS.map((sys) => {
-			const devicePath = getRomDevicePath(sys);
-			return {
-				system: sys,
-				devicePath,
-				romCount: null,
-				mediaCount: 0,
-				loading: false,
-				expanded: false,
-				error: '',
-				roms: [],
-				romsLoaded: false,
-				loadingRoms: false,
-				bgUrl: null,
-				bglistUrl: null,
-				iconUrl: null,
-				iconFileName: `${dirName(devicePath)}.png`,
-				displayNameMap: new Map(),
-				displayNameDirty: false,
-				savingNames: false
-			};
-		})
+		savedOverview
+			? savedOverview.systems.map((entry) => ({
+					...createSystemState(entry.system, entry.devicePath, entry.romCount),
+					error: entry.error
+				}))
+			: ROM_SYSTEMS.map((sys) => createSystemState(sys, getRomDevicePath(sys)))
 	);
 
+	function setRomCount(state: SystemState, romCount: number) {
+		state.romCount = romCount;
+		updateRomOverviewCount(adb, state.devicePath, romCount);
+	}
+
+	/** Identifies the latest scan. Incrementing it stops any scan in progress. */
+	let scanId = 0;
 	let refreshing = $state(false);
 	let hideEmpty = $state(true);
-	let availableEmus = $state(new Set<string>());
+	let availableEmus = $state(savedOverview?.availableEmus ?? new Set<string>());
 	let missingEmuInfo: string | null = $state(null);
 	let uploadingTo: string | null = $state(null);
 	let uploadingBg: string | null = $state(null);
@@ -135,7 +161,7 @@
 	let dragCounter = $state(0);
 	let previewSrc: string | null = $state(null);
 	let previewAlt: string = $state('');
-	let detectedPlatform: string = $state('');
+	let detectedPlatform: string = $state(savedOverview ? getPlatform() : '');
 
 	let overwriteDialog: OverwriteDialog;
 	let largeArtDialog: LargeArtDialog;
@@ -180,17 +206,30 @@
 		return codes;
 	}
 
-	async function refreshAll() {
-		refreshing = true;
+	/**
+	 * Scan the device and update the systems list.
+	 *
+	 * @param quiet Correct a list that's already showing, in place: no loading
+	 * states, and rows and anything the user has expanded stay as they are.
+	 */
+	async function refreshAll(quiet = false) {
+		const scan = ++scanId;
+		if (!quiet) refreshing = true;
+		// Whether every folder known to exist was read, making this scan worth saving
+		let scanComplete = true;
 
 		// Scan available emulators
-		availableEmus = await scanAvailableEmulators();
+		const emus = await scanAvailableEmulators();
+		if (scan !== scanId) return;
+		availableEmus = emus;
 
-		// Remove previously discovered custom systems (they'll be re-discovered)
-		for (const s of systems) {
-			if (s.system.isCustom) cleanupThumbnails(s);
+		if (!quiet) {
+			// Remove previously discovered custom systems (they'll be re-discovered)
+			for (const s of systems) {
+				if (s.system.isCustom) cleanupThumbnails(s);
+			}
+			systems = systems.filter((s) => !s.system.isCustom);
 		}
-		systems = systems.filter((s) => !s.system.isCustom);
 
 		// Map systemCode → actual device directory name to handle
 		// directories with ordering prefixes like "1) Game Boy (GB)"
@@ -210,12 +249,14 @@
 			}
 		} catch {
 			// Roms directory unreadable — skip discovery
+			scanComplete = false;
 		}
+		if (scan !== scanId) return;
 
 		// Check predefined systems, using actual device paths when available
 		for (const s of systems) {
-			s.loading = true;
-			s.error = '';
+			if (scan !== scanId) return;
+			if (!quiet) s.loading = true;
 
 			// If the device has a directory matching this system code (possibly with
 			// an ordering prefix like "1) "), use that path instead of the default.
@@ -232,16 +273,20 @@
 
 			try {
 				const entries = await listDirectory(adb, s.devicePath);
-				s.romCount = entries.filter(
-					(e) => (e.isFile || e.isDirectory) && !e.name.startsWith('.')
-				).length;
+				s.romCount = entries.filter(isRomEntry).length;
+				s.error = '';
 			} catch {
-				s.romCount = 0;
-				s.error = 'Folder not found';
+				// Normal for a system with no folder, but this one was just listed
+				if (actualDir) scanComplete = false;
+				// A failed re-read says nothing about what's in the folder
+				if (!quiet || !actualDir) {
+					s.romCount = 0;
+					s.error = 'Folder not found';
+				}
 			}
 			s.loading = false;
 			// Clear cached ROM details so they reload on next expand
-			if (s.romsLoaded) {
+			if (!quiet && s.romsLoaded) {
 				cleanupThumbnails(s);
 				s.roms = [];
 				s.romsLoaded = false;
@@ -251,40 +296,56 @@
 
 		// Discover custom systems from device (directories with unknown system codes)
 		for (const { dirName: dName, parsed } of unmatchedDirs) {
+			if (scan !== scanId) return;
 			const devicePath = `${DEVICE_PATHS.roms}/${dName}`;
-			let romCount = 0;
+			const existing = quiet ? systems.find((s) => s.devicePath === devicePath) : undefined;
+			let romCount = existing?.romCount ?? 0;
 			try {
 				const entries = await listDirectory(adb, devicePath);
-				romCount = entries.filter(
-					(e) => (e.isFile || e.isDirectory) && !e.name.startsWith('.')
-				).length;
+				romCount = entries.filter(isRomEntry).length;
 			} catch {
-				// ignore
+				scanComplete = false;
 			}
 
-			systems.push({
-				system: {
-					systemName: parsed.systemName,
-					systemCode: parsed.systemCode,
-					supportedFormats: [],
-					isCustom: true
-				},
-				devicePath,
-				romCount,
-				mediaCount: 0,
-				loading: false,
-				expanded: false,
-				error: '',
-				roms: [],
-				romsLoaded: false,
-				loadingRoms: false,
-				bgUrl: null,
-				bglistUrl: null,
-				iconUrl: null,
-				iconFileName: `${dirName(devicePath)}.png`,
-				displayNameMap: new Map(),
-				displayNameDirty: false,
-				savingNames: false
+			if (existing) {
+				existing.romCount = romCount;
+				continue;
+			}
+
+			systems.push(
+				createSystemState(
+					{
+						systemName: parsed.systemName,
+						systemCode: parsed.systemCode,
+						supportedFormats: [],
+						isCustom: true
+					},
+					devicePath,
+					romCount
+				)
+			);
+		}
+
+		if (scan !== scanId) return;
+
+		if (quiet && scanComplete) {
+			// A quiet scan keeps its rows, so drop any custom system that's now gone
+			const found = new Set(unmatchedDirs.map((d) => `${DEVICE_PATHS.roms}/${d.dirName}`));
+			const isGone = (s: SystemState) => s.system.isCustom && !found.has(s.devicePath);
+			systems.filter(isGone).forEach(cleanupThumbnails);
+			systems = systems.filter((s) => !isGone(s));
+		}
+
+		// An incomplete scan leaves the last good one to show next time
+		if (scanComplete) {
+			saveRomOverview(adb, {
+				availableEmus,
+				systems: systems.map((s) => ({
+					system: $state.snapshot(s.system),
+					devicePath: s.devicePath,
+					romCount: s.romCount,
+					error: s.error
+				}))
 			});
 		}
 
@@ -296,6 +357,13 @@
 		return lastDot > 0 ? filename.substring(0, lastDot) : filename;
 	}
 
+	/** Whether a folder entry is a ROM, rather than hidden or the display name map. */
+	function isRomEntry(entry: DirectoryEntry): boolean {
+		return (
+			(entry.isFile || entry.isDirectory) && !entry.name.startsWith('.') && entry.name !== 'map.txt'
+		);
+	}
+
 	async function loadRomDetails(state: SystemState) {
 		if (state.romsLoaded || state.loadingRoms) return;
 		state.loadingRoms = true;
@@ -303,9 +371,7 @@
 		try {
 			// Get ROM files
 			const entries = await listDirectory(adb, state.devicePath);
-			const romFiles = entries
-				.filter((e) => (e.isFile || e.isDirectory) && !e.name.startsWith('.'))
-				.sort(compareByName);
+			const romFiles = entries.filter(isRomEntry).sort(compareByName);
 
 			// Get media files
 			let mediaNames = new Set<string>();
@@ -401,7 +467,7 @@
 			});
 
 			state.mediaCount = state.roms.filter((r) => r.hasMedia).length;
-			state.romCount = state.roms.length;
+			setRomCount(state, state.roms.length);
 			state.romsLoaded = true;
 
 			// Start loading thumbnails
@@ -572,9 +638,7 @@
 		} else {
 			try {
 				const entries = await listDirectory(adb, state.devicePath);
-				state.romCount = entries.filter(
-					(e) => (e.isFile || e.isDirectory) && !e.name.startsWith('.')
-				).length;
+				setRomCount(state, entries.filter(isRomEntry).length);
 			} catch {
 				// ignore
 			}
@@ -1108,7 +1172,7 @@
 
 			// Remove from list
 			state.roms = state.roms.filter((r) => r.name !== rom.name);
-			state.romCount = state.roms.length;
+			setRomCount(state, state.roms.length);
 			state.mediaCount = state.roms.filter((r) => r.hasMedia).length;
 		} catch (e) {
 			state.error = `Delete failed: ${formatError(e)}`;
@@ -1226,10 +1290,14 @@
 	}
 
 	function renameRom(state: SystemState, rom: RomEntry) {
-		const current = rom.displayName || '';
+		// Without a map.txt entry, start from the filename. The launcher shows a
+		// display name verbatim, so the extension is left out.
+		const current = rom.displayName || rom.baseName;
 		const result = prompt('Display name for ' + rom.name + ':', current);
 		if (result === null) return; // cancelled
 		const trimmed = result.trim();
+		// Accepting the prefilled name unchanged must not create a map.txt entry
+		if (trimmed === current) return;
 		rom.displayName = trimmed;
 		// Mark system dirty if any ROM differs from saved map
 		state.displayNameDirty = state.roms.some(
@@ -1323,10 +1391,12 @@
 		hideEmpty ? systems.filter((s) => s.romCount === null || s.romCount > 0) : systems
 	);
 
-	// Refresh on mount + cleanup blob URLs on unmount
+	// Scan on mount, quietly if the last scan is already showing. Stop scanning
+	// on unmount (including when the device is lost) + cleanup blob URLs
 	$effect(() => {
-		untrack(() => refreshAll());
+		untrack(() => refreshAll(savedOverview !== undefined));
 		return () => {
+			scanId++;
 			for (const s of systems) {
 				cleanupThumbnails(s);
 			}
@@ -1349,7 +1419,7 @@
 					<input type="checkbox" bind:checked={hideEmpty} class="accent-accent" />
 					Show systems with files only
 				</label>
-				<ActionButton onclick={refreshAll} disabled={refreshing} variant="secondary">
+				<ActionButton onclick={() => refreshAll()} disabled={refreshing} variant="secondary">
 					{refreshing ? 'Refreshing...' : 'Refresh'}
 				</ActionButton>
 			</div>

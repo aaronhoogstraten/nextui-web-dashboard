@@ -2,9 +2,15 @@
 	import { untrack } from 'svelte';
 	import type { Adb } from '@yume-chan/adb';
 	import { BIOS_SYSTEMS, getBiosDevicePath, type BiosFileDefinition } from '$lib/bios/index.js';
-	import { sha1, validateBiosFile } from '$lib/bios/validation.js';
-	import { DEVICE_PATHS } from '$lib/adb/types.js';
-	import { pathExists, pullFile, listDirectory } from '$lib/adb/file-ops.js';
+	import {
+		cacheBiosHash,
+		forgetBiosHash,
+		getCachedBiosHash,
+		sha1,
+		validateBiosFile
+	} from '$lib/bios/validation.js';
+	import { DEVICE_PATHS, type FileVersion } from '$lib/adb/types.js';
+	import { getFileVersion, pullFile, listDirectory } from '$lib/adb/file-ops.js';
 	import { beginTransfer, endTransfer, trackedPush } from '$lib/stores/transfer.svelte.js';
 	import { adbExec } from '$lib/stores/connection.svelte.js';
 	import { formatError, getDroppedFiles, hasDraggedFiles, plural, pickFile } from '$lib/utils.js';
@@ -13,7 +19,14 @@
 
 	let { adb }: { adb: Adb } = $props();
 
-	type FileStatus = 'unknown' | 'checking' | 'missing' | 'present' | 'valid' | 'invalid';
+	type FileStatus =
+		| 'unknown'
+		| 'checking'
+		| 'missing'
+		| 'present'
+		| 'valid'
+		| 'invalid'
+		| 'unreadable';
 
 	interface BiosFileState {
 		definition: BiosFileDefinition;
@@ -49,6 +62,7 @@
 		}))
 	);
 
+	let scanStopped = false;
 	let checking = $state(false);
 	let hideComplete = $state(false);
 	let uploadingFile: string | null = $state(null);
@@ -108,7 +122,17 @@
 		if (dragCounter <= 0) resetDragTarget();
 	}
 
-	async function checkAllSystems() {
+	/** Hash a device file, pulling it only if it has changed since it was last read. */
+	async function getDeviceFileHash(path: string, version: FileVersion, reverify: boolean) {
+		const cached = reverify ? null : getCachedBiosHash(adb, path, version);
+		if (cached) return cached;
+		const hash = await sha1(await pullFile(adb, path));
+		cacheBiosHash(adb, path, version, hash);
+		return hash;
+	}
+
+	/** @param reverify Pull every file again, ignoring hashes from earlier checks. */
+	async function checkAllSystems(reverify = false) {
 		checking = true;
 
 		// Remove previously discovered custom systems (they'll be re-discovered)
@@ -118,18 +142,17 @@
 		for (const system of systems) {
 			system.notice = null;
 			for (const file of system.files) {
+				if (scanStopped) return;
 				file.status = 'checking';
 				file.detail = '';
 				try {
-					const exists = await pathExists(adb, file.devicePath);
-					if (!exists) {
+					const version = await getFileVersion(adb, file.devicePath);
+					if (!version) {
 						file.status = 'missing';
 						file.detail = 'Not found on device';
 					} else {
-						// Pull and validate hash
-						const content = await pullFile(adb, file.devicePath);
-						const result = await validateBiosFile(content, file.definition);
-						if (result.valid) {
+						const actualSha1 = await getDeviceFileHash(file.devicePath, version, reverify);
+						if (actualSha1 === file.definition.sha1) {
 							file.status = 'valid';
 							file.detail = 'Present, hash OK';
 						} else {
@@ -137,16 +160,21 @@
 							file.detail = hashMismatchDetail(
 								'SHA-1 hash mismatch.',
 								file.definition.sha1,
-								result.actualSha1
+								actualSha1
 							);
 						}
 					}
 				} catch (e) {
-					file.status = 'missing';
-					file.detail = formatError(e);
+					// Only a clean lstat miss means "missing". Reaching here means the
+					// file could not be checked, so say that rather than prompting the
+					// user to re-upload a file that may be fine.
+					file.status = 'unreadable';
+					file.detail = `Could not read file from device: ${formatError(e)}`;
 				}
 			}
 		}
+
+		if (scanStopped) return;
 
 		// Discover custom BIOS systems from device
 		const knownCodes = new Set(
@@ -159,6 +187,7 @@
 		try {
 			const biosDirs = await listDirectory(adb, DEVICE_PATHS.bios);
 			for (const dir of biosDirs) {
+				if (scanStopped) return;
 				if (!dir.isDirectory || dir.name.startsWith('.')) continue;
 				if (knownCodes.has(dir.name)) continue;
 
@@ -240,6 +269,7 @@
 			case 'missing':
 				return 'text-red-500';
 			case 'invalid':
+			case 'unreadable':
 				return 'text-warning';
 			case 'checking':
 				return 'text-text-muted';
@@ -258,6 +288,8 @@
 				return 'Missing';
 			case 'invalid':
 				return 'Bad Hash';
+			case 'unreadable':
+				return 'Read Error';
 			case 'checking':
 				return 'Checking...';
 			default:
@@ -271,6 +303,7 @@
 		data: Uint8Array<ArrayBuffer>,
 		detail: string
 	) {
+		forgetBiosHash(adb, file.devicePath);
 		await trackedPush(adb, file.devicePath, data);
 		file.status = system.isCustom ? 'present' : 'valid';
 		file.detail = detail;
@@ -485,9 +518,13 @@
 		hideComplete ? systems.filter((s) => !isSystemSatisfied(s)) : systems
 	);
 
-	// Check on mount (untrack to prevent reactive loop)
+	// Check on mount (untrack to prevent reactive loop). The view is destroyed
+	// on navigating away or losing the device, so that also stops the scan.
 	$effect(() => {
 		untrack(() => checkAllSystems());
+		return () => {
+			scanStopped = true;
+		};
 	});
 </script>
 
@@ -499,7 +536,12 @@
 				<input type="checkbox" bind:checked={hideComplete} class="accent-accent" />
 				Show missing only
 			</label>
-			<ActionButton onclick={checkAllSystems} disabled={checking} variant="secondary">
+			<ActionButton
+				onclick={() => checkAllSystems(true)}
+				disabled={checking}
+				variant="secondary"
+				title="Read every file from the device and verify it again"
+			>
 				{checking ? 'Checking...' : 'Refresh'}
 			</ActionButton>
 		</div>
@@ -609,7 +651,7 @@
 										<span class="text-sm font-medium {effectiveStatusColor(file, system)}">
 											{effectiveStatusLabel(file, system)}
 										</span>
-										{#if file.status === 'missing' || file.status === 'invalid' || file.status === 'unknown'}
+										{#if file.status === 'missing' || file.status === 'invalid' || file.status === 'unreadable' || file.status === 'unknown'}
 											<ActionButton
 												onclick={() => uploadBiosFile(file, system)}
 												disabled={uploadingFile !== null || removingFile !== null}

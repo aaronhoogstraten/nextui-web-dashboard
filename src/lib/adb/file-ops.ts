@@ -1,8 +1,8 @@
 import type { Adb } from '@yume-chan/adb';
-import { LinuxFileType } from '@yume-chan/adb';
+import { AdbSyncError, AdbSyncStatErrorCode, LinuxFileType } from '@yume-chan/adb';
 import type { MaybeConsumable } from '@yume-chan/stream-extra';
 import JSZip from 'jszip';
-import type { DirectoryEntry, StorageInfo } from './types.js';
+import type { DirectoryEntry, FileVersion, StorageInfo } from './types.js';
 import { DEVICE_PATHS } from './types.js';
 import { adbLog } from '$lib/stores/log.svelte.js';
 import { formatError, joinPath } from '$lib/utils.js';
@@ -78,11 +78,11 @@ export async function pullFile(
 ): Promise<Uint8Array<ArrayBuffer>> {
 	adbLog.info(`sync.read → ${remotePath}`);
 	const sync = await adb.sync();
+	let totalLength = 0;
 	try {
 		const stream = sync.read(remotePath);
 		const reader = stream.getReader();
 		const chunks: Uint8Array[] = [];
-		let totalLength = 0;
 
 		while (true) {
 			const { done, value } = await reader.read();
@@ -103,7 +103,7 @@ export async function pullFile(
 		adbLog.info(`sync.read ✓ ${remotePath} (${totalLength} bytes)`);
 		return result;
 	} catch (e) {
-		adbLog.error(`sync.read ✗ ${remotePath}: ${e}`);
+		adbLog.error(`sync.read ✗ ${remotePath} after ${totalLength} bytes: ${e}`);
 		throw e;
 	} finally {
 		await sync.dispose();
@@ -324,12 +324,36 @@ export async function walkDirectory(
  * @returns true if the path exists
  */
 export async function pathExists(adb: Adb, remotePath: string): Promise<boolean> {
-	const sync = await adb.sync(); // Let transport errors propagate
+	return (await getFileVersion(adb, remotePath)) !== null;
+}
+
+/**
+ * Errors from `sync.lstat` that mean the device answered but couldn't stat the
+ * path, which callers treat as the path not being there. Anything else, such
+ * as losing the connection, says nothing about whether it exists.
+ */
+const LSTAT_DEVICE_ERRORS = new Set([
+	'lstat error', // The original protocol, which has no error codes
+	...Object.keys(AdbSyncStatErrorCode)
+]);
+
+/**
+ * Get the size and modification time of a path on the device.
+ * Uses lstat (works on NextUI devices) instead of stat.
+ *
+ * @returns The file's version, or null if the path does not exist
+ * @throws If the path couldn't be checked, such as when the connection is lost
+ */
+export async function getFileVersion(adb: Adb, remotePath: string): Promise<FileVersion | null> {
+	const sync = await adb.sync();
 	try {
 		const st = await sync.lstat(remotePath);
-		return st.mode !== 0;
-	} catch {
-		return false;
+		return st.mode !== 0 ? { size: st.size, mtime: st.mtime } : null;
+	} catch (e) {
+		if (e instanceof AdbSyncError || (e instanceof Error && LSTAT_DEVICE_ERRORS.has(e.message))) {
+			return null;
+		}
+		throw e;
 	} finally {
 		await sync.dispose();
 	}

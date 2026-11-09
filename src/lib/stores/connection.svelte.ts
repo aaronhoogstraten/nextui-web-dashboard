@@ -344,9 +344,13 @@ export async function connect() {
 		}
 
 		// Listen for unexpected disconnection (e.g. device sleep, USB unplug)
-		const onDisconnect = () => {
+		// `disconnected` resolves when the USB link goes away, and rejects with the
+		// cause on a USB transfer failure or an ADB protocol error.
+		const onDisconnect = (reason?: unknown) => {
 			if (connection === conn) {
-				adbLog.warn('Device disconnected unexpectedly');
+				adbLog.warn(
+					`Device disconnected unexpectedly: ${reason === undefined ? 'USB link closed' : formatError(reason)}`
+				);
 				resetState();
 				error = 'Device disconnected';
 			}
