@@ -408,6 +408,14 @@ export async function movePath(adb: Adb, from: string, to: string): Promise<void
 	if (output) throw new Error(output);
 }
 
+/**
+ * A random name in `dir` for a file in transit. `prefix` starts with a dot, so
+ * NextUI and the dashboard's own lists don't show it.
+ */
+export function hiddenTempPath(dir: string, prefix: string): string {
+	return joinPath(dir, `${prefix}${Math.random().toString(36).slice(2, 10)}`);
+}
+
 /** A directory that NextUI shows, as hidden names start with a dot. */
 export function isVisibleDirectory(entry: DirectoryEntry): boolean {
 	return entry.isDirectory && !entry.name.startsWith('.');
@@ -428,7 +436,7 @@ export function isCaseOnlyRename(from: string, to: string): boolean {
  * case-sensitive filesystem. Measured on BusyBox v1.36.1 / h700.
  */
 export async function movePathViaTemp(adb: Adb, from: string, to: string): Promise<void> {
-	const tempPath = joinPath(parentPath(from), `.rename-${Math.random().toString(36).slice(2, 10)}`);
+	const tempPath = hiddenTempPath(parentPath(from), '.rename-');
 	await movePath(adb, from, tempPath);
 	try {
 		// With the source moved aside, anything still at the destination is a

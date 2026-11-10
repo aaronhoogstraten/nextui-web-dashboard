@@ -39,7 +39,15 @@
 		type DroppedFile
 	} from '$lib/utils.js';
 	import { ShellCmd } from '$lib/adb/adb-utils.js';
-	import { applyRenamePlan, planRomRename, type RenamePlan } from '$lib/roms/game-rename.js';
+	import {
+		applyRenamePlan,
+		applyReplacePlan,
+		planRomRename,
+		removeStaleReplaceUploads,
+		replaceTempPath,
+		type RenamePlan,
+		type RenameResult
+	} from '$lib/roms/game-rename.js';
 	import ActionButton from './ActionButton.svelte';
 	import RenamePlanDialog from './RenamePlanDialog.svelte';
 	import ImagePreview from './ImagePreview.svelte';
@@ -1038,7 +1046,7 @@
 		event.preventDefault();
 		const isActiveTarget = dragTargetPath === state.devicePath;
 		resetDragTarget();
-		if (!isActiveTarget || uploadingTo !== null) return;
+		if (!isActiveTarget || uploadingTo !== null || applyingFileRename) return;
 
 		const droppedFiles = await getDroppedFiles(event);
 		if (droppedFiles.length === 0) return;
@@ -1207,75 +1215,193 @@
 		rom: RomEntry;
 		newName: string;
 		plan: RenamePlan;
+		/** For Replace: the new ROM file, written in place of the old one */
+		upload?: File;
 	}
 
 	let pendingFileRename: PendingFileRename | null = $state.raw(null);
 	/** Lists whose load was in flight during a rename, so may hold the old map.txt */
 	const reloadWhenLoaded = new WeakSet<SystemState>();
-	/** ROM whose rename is being planned or applied */
+	/** ROM whose rename or replace is being planned or applied, and which of the two */
 	let renamingFileFor: string | null = $state(null);
+	let fileAction: 'rename' | 'replace' = $state('rename');
 	let applyingFileRename = $state(false);
 
-	async function startFileRename(state: SystemState, rom: RomEntry) {
-		// Renaming reloads these lists, and the rename rewrites their map.txt files
-		if ([state, ...getSiblingStates(state)].some((s) => s.displayNameDirty)) {
-			state.error = 'Save your display name changes first. Renaming a file reloads the list.';
-			return;
-		}
-		const input = prompt(`Rename file "${rom.name}" to:`, rom.name);
-		if (input === null) return;
-		const newName = input.trim();
-		if (!newName || newName === rom.name) return;
+	/** Renaming reloads these lists and rewrites their map.txt, so unsaved names would be lost. */
+	function hasUnsavedDisplayNames(state: SystemState, action: 'Renaming' | 'Replacing'): boolean {
+		if (![state, ...getSiblingStates(state)].some((s) => s.displayNameDirty)) return false;
+		state.error = `Save your display name changes first. ${action} a file reloads the list.`;
+		return true;
+	}
+
+	function fileExtension(name: string): string {
+		const dot = name.lastIndexOf('.');
+		return dot > 0 ? name.slice(dot) : '';
+	}
+
+	/** Why a ROM can't be called `newName`, or null if it can. */
+	function romNameProblem(state: SystemState, newName: string): string | null {
+		// NextUI hides names starting with a dot
 		if (/[\\/]/.test(newName) || newName.startsWith('.')) {
-			// NextUI hides names starting with a dot
-			state.error = `"${newName}" is not a valid ROM file name`;
-			return;
+			return `"${newName}" is not a valid ROM file name`;
 		}
 		// Without an extension the system runs, NextUI stops listing the ROM
-		const dot = newName.lastIndexOf('.');
-		const extension = dot > 0 ? newName.slice(dot) : '';
+		const extension = fileExtension(newName);
 		if (!isValidRomExtension(extension, state.system)) {
 			const examples = state.system.supportedFormats.slice(0, 3).join(', ');
-			state.error = `"${newName}" needs an extension ${state.system.systemName} runs, such as ${examples}`;
-			return;
+			return `"${newName}" needs an extension ${state.system.systemName} runs, such as ${examples}`;
 		}
+		return null;
+	}
+
+	/** Plan the rename part of a rename or replace; nothing to move when the name stays. */
+	async function planFileRename(state: SystemState, rom: RomEntry, newName: string, upload?: File) {
 		renamingFileFor = rom.name;
+		fileAction = upload ? 'replace' : 'rename';
 		state.error = '';
 		try {
 			const plan = await planRomRename(adb, state.devicePath, rom.name, newName);
-			pendingFileRename = { state, rom, newName, plan };
+			pendingFileRename = { state, rom, newName, plan, upload };
 		} catch (e) {
-			state.error = `Rename failed: ${formatError(e)}`;
+			state.error = `${upload ? 'Replace' : 'Rename'} failed: ${formatError(e)}`;
 		} finally {
 			renamingFileFor = null;
 		}
 	}
 
+	async function startFileRename(state: SystemState, rom: RomEntry) {
+		if (hasUnsavedDisplayNames(state, 'Renaming')) return;
+		const input = prompt(`Rename file "${rom.name}" to:`, rom.name);
+		if (input === null) return;
+		const newName = input.trim();
+		if (!newName || newName === rom.name) return;
+		const problem = romNameProblem(state, newName);
+		if (problem) {
+			state.error = problem;
+			return;
+		}
+		await planFileRename(state, rom, newName);
+	}
+
+	/**
+	 * Replace a ROM with a new file, such as the next version of a hack. The name
+	 * starts as the new file's, so the saves follow it; keeping the old name makes
+	 * it a straight overwrite that leaves everything else as it is.
+	 */
+	/** Another upload shares the transfer progress bar, so they take turns. */
+	const uploadInProgress = () => uploadingTo !== null || uploadingMediaFor !== null;
+
+	async function startReplace(state: SystemState, rom: RomEntry) {
+		if (uploadInProgress() || hasUnsavedDisplayNames(state, 'Replacing')) return;
+		const accept = state.system.isCustom ? undefined : state.system.supportedFormats.join(',');
+		const upload = await pickFile({ accept });
+		if (!upload) return;
+		const input = prompt(`Name for the new ROM replacing "${rom.name}":`, upload.name);
+		if (input === null) return;
+		const newName = input.trim();
+		if (!newName) return;
+		const problem = romNameProblem(state, newName);
+		if (problem) {
+			state.error = problem;
+			return;
+		}
+		// A name doesn't change what's inside: zip data named .gba won't load
+		const uploadExtension = fileExtension(upload.name);
+		if (fileExtension(newName).toLowerCase() !== uploadExtension.toLowerCase()) {
+			state.error = `"${newName}" must keep the new file's extension (${uploadExtension || 'none'}), as renaming doesn't change what's inside it`;
+			return;
+		}
+		await planFileRename(state, rom, newName, upload);
+	}
+
+	function reportFailures(state: SystemState, done: string, result: RenameResult) {
+		if (result.failures.length === 0) return;
+		const names = result.failures.map((f) => `${dirName(f.path)} (${f.error})`);
+		state.error = `${done}, but ${plural(names.length, 'file')} could not be updated: ${names.join(', ')}`;
+	}
+
+	/**
+	 * Upload the new ROM under a hidden temporary name first, so a failed upload
+	 * changes nothing, then let applyReplacePlan put it in place.
+	 * @returns Whether anything on the device changed
+	 */
+	async function applyReplace(pending: PendingFileRename & { upload: File }): Promise<boolean> {
+		const { state, rom, newName, plan, upload } = pending;
+		const nothingChanged = (e: unknown) => {
+			state.error = `Replace failed: ${formatError(e)}. Nothing was changed.`;
+			return false;
+		};
+		try {
+			await removeStaleReplaceUploads(adb, state.devicePath);
+		} catch {
+			// Only tidying up after an earlier interrupted Replace
+		}
+		const tempPath = replaceTempPath(state.devicePath);
+		const discardTemp = () => adbExec(ShellCmd.rmf(tempPath)).catch(() => '');
+
+		beginTransfer('upload', 1, upload.size);
+		try {
+			await trackedPush(adb, tempPath, new Uint8Array(await upload.arrayBuffer()));
+		} catch (e) {
+			await discardTemp();
+			return nothingChanged(e);
+		} finally {
+			endTransfer();
+		}
+
+		try {
+			const result = await applyReplacePlan(
+				adb,
+				plan,
+				state.devicePath,
+				rom.name,
+				newName,
+				tempPath
+			);
+			reportFailures(state, `Replaced with ${newName}`, result);
+			return true;
+		} catch (e) {
+			await discardTemp();
+			return nothingChanged(e);
+		}
+	}
+
 	async function confirmFileRename() {
 		if (!pendingFileRename) return;
-		const { state, rom, newName, plan } = pendingFileRename;
+		const pending = pendingFileRename;
+		const { state, rom, newName, plan, upload } = pending;
 		applyingFileRename = true;
 		renamingFileFor = rom.name;
+		let changed = false;
 		try {
-			const result = await applyRenamePlan(adb, plan);
-			if (result.failures.length > 0) {
-				const names = result.failures.map((f) => dirName(f.path));
-				state.error = `Renamed to ${newName}, but ${plural(names.length, 'file')} could not be updated: ${names.join(', ')}`;
+			if (upload) {
+				changed = await applyReplace({ ...pending, upload });
+			} else {
+				const result = await applyRenamePlan(adb, plan);
+				changed = true;
+				reportFailures(state, `Renamed to ${newName}`, result);
 			}
 		} catch (e) {
-			state.error = `Rename failed: ${formatError(e)}`;
+			// applyRenamePlan only throws before the ROM has moved
+			state.error = `${upload ? 'Replace' : 'Rename'} failed: ${formatError(e)}`;
 		} finally {
 			applyingFileRename = false;
 			renamingFileFor = null;
 			pendingFileRename = null;
 		}
-		// Reload the list, whose names, art and display names may all have changed.
-		// Sibling folders too: the rename rewrote their map.txt, and saving a stale
-		// copy of it would put the old name back. One still loading may have read
-		// it before the rename, so it loads again when it finishes.
-		const siblings = getSiblingStates(state);
-		for (const s of siblings) if (s.loadingRoms) reloadWhenLoaded.add(s);
-		for (const s of [state, ...siblings.filter((sib) => sib.romsLoaded)]) {
+		if (changed) await reloadAfterRename(state, plan.refEdits.length > 0);
+	}
+
+	/**
+	 * Reload the list, whose names, art and display names may all have changed.
+	 * With `siblings`, the sibling folders too: the rename rewrote their map.txt,
+	 * and saving a stale copy of it would put the old name back. One still loading
+	 * may have read it before the rename, so it loads again when it finishes.
+	 */
+	async function reloadAfterRename(state: SystemState, siblings: boolean) {
+		const siblingStates = siblings ? getSiblingStates(state) : [];
+		for (const s of siblingStates) if (s.loadingRoms) reloadWhenLoaded.add(s);
+		for (const s of [state, ...siblingStates.filter((sib) => sib.romsLoaded)]) {
 			for (const r of s.roms) if (r.thumbnailUrl) URL.revokeObjectURL(r.thumbnailUrl);
 			s.romsLoaded = false;
 			await loadRomDetails(s);
@@ -1485,7 +1611,22 @@
 	});
 </script>
 
-{#if pendingFileRename}
+{#if pendingFileRename?.upload}
+	<RenamePlanDialog
+		title={`Replace "${pendingFileRename.rom.name}" with "${pendingFileRename.upload.name}"?`}
+		plan={pendingFileRename.plan}
+		upload={{
+			name: pendingFileRename.upload.name,
+			size: pendingFileRename.upload.size,
+			savedAs: pendingFileRename.newName
+		}}
+		confirmLabel="Replace"
+		advice="Close the game on the device first if it's running. States are snapshots of the old ROM and may not load with the new one, though in-game saves usually carry over."
+		busy={applyingFileRename}
+		onconfirm={confirmFileRename}
+		oncancel={() => (pendingFileRename = null)}
+	/>
+{:else if pendingFileRename}
 	<RenamePlanDialog
 		title={`Rename "${pendingFileRename.rom.name}" to "${pendingFileRename.newName}"?`}
 		plan={pendingFileRename.plan}
@@ -1604,7 +1745,7 @@
 									{/if}
 									<ActionButton
 										onclick={() => uploadRoms(s)}
-										disabled={uploadingTo !== null}
+										disabled={uploadingTo !== null || applyingFileRename}
 										variant="primary"
 									>
 										{uploadingTo === s.system.systemCode ? 'Uploading...' : 'Upload ROMs'}
@@ -1758,7 +1899,26 @@
 														size="xs"
 														title="Rename the file, carrying its saves, states, box art and list entries"
 													>
-														{renamingFileFor === rom.name ? 'Checking...' : 'Rename File'}
+														{renamingFileFor === rom.name && fileAction === 'rename'
+															? applyingFileRename
+																? 'Working...'
+																: 'Checking...'
+															: 'Rename File'}
+													</ActionButton>
+													<ActionButton
+														onclick={() => startReplace(s, rom)}
+														disabled={renamingFileFor !== null ||
+															removingRom !== null ||
+															uploadInProgress()}
+														variant="subtle"
+														size="xs"
+														title="Upload a new version of this ROM, carrying its saves, states, box art and list entries to the new name"
+													>
+														{renamingFileFor === rom.name && fileAction === 'replace'
+															? applyingFileRename
+																? 'Working...'
+																: 'Checking...'
+															: 'Replace...'}
 													</ActionButton>
 												{/if}
 												{#if (rom.displayName || '') !== (s.displayNameMap.get(rom.name) || '')}
@@ -1775,6 +1935,7 @@
 												<ActionButton
 													onclick={() => uploadMedia(s, rom)}
 													disabled={uploadingMediaFor !== null ||
+														applyingFileRename ||
 														removingMediaFor !== null ||
 														removingRom !== null}
 													variant={rom.hasMedia ? 'subtle' : 'primary'}

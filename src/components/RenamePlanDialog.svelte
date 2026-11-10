@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { RenamePlan } from '$lib/roms/game-rename.js';
 	import type { AssetKind } from '$lib/saves/relink.js';
-	import { fileName, parentPath, plural } from '$lib/utils.js';
+	import { fileName, formatSize, parentPath, plural } from '$lib/utils.js';
 	import ActionButton from './ActionButton.svelte';
 	import Modal from './Modal.svelte';
 
@@ -10,6 +10,7 @@
 		plan,
 		confirmLabel,
 		advice,
+		upload,
 		busy = false,
 		onconfirm,
 		oncancel
@@ -18,6 +19,8 @@
 		plan: RenamePlan;
 		confirmLabel: string;
 		advice?: string;
+		/** For Replace: the file going in place of the ROM, and the name it takes */
+		upload?: { name: string; size: number; savedAs: string };
 		busy?: boolean;
 		onconfirm: () => void;
 		oncancel: () => void;
@@ -36,6 +39,8 @@
 	const saveDataMoves = $derived(
 		plan.moves.filter((m) => m.kind === 'save' || m.kind === 'state').length
 	);
+	/** A Replace that keeps the ROM's name, so nothing else needs to move */
+	const overwriteOnly = $derived(upload !== undefined && plan.moves.length === 0);
 </script>
 
 <!-- The preview is the only way to see a save was found before committing to it -->
@@ -61,7 +66,21 @@
 			</p>
 		{/if}
 
-		<p class="text-sm text-text mb-1">Moving {plural(plan.moves.length, 'file')}</p>
+		{#if upload}
+			<p class="text-sm text-text mb-3">
+				New ROM: <span class="font-mono break-all">{upload.name}</span>
+				({formatSize(upload.size)}){#if upload.savedAs !== upload.name}, saved as
+					<span class="font-mono break-all">{upload.savedAs}</span>{/if}
+			</p>
+		{/if}
+
+		{#if overwriteOnly}
+			<p class="text-sm text-text-muted">
+				The ROM keeps its name, so its saves, states, box art and list entries stay as they are.
+			</p>
+		{:else}
+			<p class="text-sm text-text mb-1">Moving {plural(plan.moves.length, 'file')}</p>
+		{/if}
 		{#if plan.moves.length > 0}
 			<div class="max-h-72 overflow-auto border border-border rounded">
 				<table class="w-full text-xs">
@@ -86,7 +105,7 @@
 				</table>
 			</div>
 		{/if}
-		{#if saveDataMoves === 0}
+		{#if saveDataMoves === 0 && !overwriteOnly}
 			<p class="text-xs text-text-muted mt-2">No saves or states found to carry over.</p>
 		{/if}
 
@@ -116,7 +135,7 @@
 			<ActionButton onclick={oncancel} disabled={busy} variant="secondary">Cancel</ActionButton>
 			<ActionButton
 				onclick={onconfirm}
-				disabled={busy || plan.conflicts.length > 0 || plan.moves.length === 0}
+				disabled={busy || plan.conflicts.length > 0 || (plan.moves.length === 0 && !upload)}
 				variant="primary"
 			>
 				{busy ? 'Working...' : confirmLabel}

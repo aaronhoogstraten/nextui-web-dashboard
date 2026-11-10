@@ -6,6 +6,7 @@
 import type { Adb } from '@yume-chan/adb';
 import { DEVICE_PATHS } from '$lib/adb/types.js';
 import {
+	hiddenTempPath,
 	isCaseOnlyRename,
 	isVisibleDirectory,
 	listDirectory,
@@ -270,6 +271,8 @@ export async function planRomRename(
 	if (rom.isDirectory) {
 		throw new Error('Game folders, such as multi-disc games, cannot be renamed yet');
 	}
+	// A Replace that keeps the name: the ROM is checked, and nothing else moves
+	if (newName === oldName) return { moves: [], refEdits: [], kept: [], left: 0, conflicts: [] };
 	const romPath = `${romDir}/${oldName}`;
 	const folderRomNames = romEntries
 		.filter((e) => e.isFile && isRomEntry(e) && e.name !== oldName)
@@ -370,6 +373,14 @@ export async function applyRenamePlan(adb: Adb, plan: RenamePlan): Promise<Renam
 			failures.push({ path: move.from, error: formatError(e) });
 		}
 	}
+	return { moved, refsUpdated: await writeRefEdits(adb, plan, failures), failures };
+}
+
+async function writeRefEdits(
+	adb: Adb,
+	plan: RenamePlan,
+	failures: RenameResult['failures']
+): Promise<number> {
 	let refsUpdated = 0;
 	for (const edit of plan.refEdits) {
 		try {
@@ -379,5 +390,85 @@ export async function applyRenamePlan(adb: Adb, plan: RenamePlan): Promise<Renam
 			failures.push({ path: edit.path, error: formatError(e) });
 		}
 	}
-	return { moved, refsUpdated, failures };
+	return refsUpdated;
+}
+
+/** Hidden name prefix for a Replace's upload while it is in transit. */
+const REPLACE_TEMP_PREFIX = '.replace-';
+
+/** Where a Replace uploads its new ROM before anything else changes. */
+export function replaceTempPath(romDir: string): string {
+	return hiddenTempPath(romDir, REPLACE_TEMP_PREFIX);
+}
+
+/**
+ * Remove uploads a Replace left behind when the tab closed or the device was
+ * unplugged mid-transfer. They are hidden, so nothing else would ever show them.
+ */
+export async function removeStaleReplaceUploads(adb: Adb, romDir: string): Promise<void> {
+	const stale = (await listDirectory(adb, romDir))
+		.filter((e) => e.isFile && e.name.startsWith(REPLACE_TEMP_PREFIX))
+		.map((e) => `${romDir}/${e.name}`);
+	if (stale.length > 0) await shell(adb, ShellCmd.rmMany(stale).toString());
+}
+
+/**
+ * Put a new ROM, already uploaded to `tempPath` in `romDir`, in place of
+ * `oldName`, carrying everything in `plan` across to `newName`.
+ *
+ * The new file moves into place first, onto a name just checked to be free, so
+ * the likeliest failure leaves the card as it was. Saves, art and lists follow,
+ * and the old ROM goes last. A change of case only is one file on vfat, so there
+ * the new file overwrites the old one and the plan then fixes the case.
+ *
+ * @throws When nothing was changed; partial failures are in the result instead
+ */
+export async function applyReplacePlan(
+	adb: Adb,
+	plan: RenamePlan,
+	romDir: string,
+	oldName: string,
+	newName: string,
+	tempPath: string
+): Promise<RenameResult> {
+	const oldPath = `${romDir}/${oldName}`;
+	const newPath = `${romDir}/${newName}`;
+	const conflicts = await findConflicts(adb, plan.moves);
+	if (conflicts.length > 0) {
+		throw new Error(
+			`${conflicts.map(fileName).join(', ')} appeared since the preview, so nothing was changed`
+		);
+	}
+
+	if (newName === oldName || isCaseOnlyRename(oldPath, newPath)) {
+		await movePath(adb, tempPath, oldPath);
+		if (plan.moves.length === 0) return { moved: 0, refsUpdated: 0, failures: [] };
+		try {
+			return await applyRenamePlan(adb, plan);
+		} catch (e) {
+			// The ROM is already the new one, under its old name
+			return { moved: 0, refsUpdated: 0, failures: [{ path: oldPath, error: formatError(e) }] };
+		}
+	}
+
+	await movePath(adb, tempPath, newPath);
+	let result: RenameResult;
+	try {
+		result = await applyRenamePlan(adb, {
+			...plan,
+			moves: plan.moves.filter((m) => m.kind !== 'rom')
+		});
+	} catch (e) {
+		// Nothing carried over, so keep the old ROM that its saves still match
+		const error = `saves not carried over, old ROM kept: ${formatError(e)}`;
+		return { moved: 1, refsUpdated: 0, failures: [{ path: oldPath, error }] };
+	}
+	try {
+		// rm is silent on success, so any output is an error message
+		const output = (await shell(adb, ShellCmd.rm(oldPath).toString())).trim();
+		if (output) throw new Error(output);
+	} catch (e) {
+		result.failures.push({ path: oldPath, error: `old ROM not removed: ${formatError(e)}` });
+	}
+	return result;
 }
